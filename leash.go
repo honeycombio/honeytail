@@ -298,6 +298,7 @@ func sendToLibhoney(toBeSent chan event.Event, toBeResent chan event.Event,
 		default:
 		}
 		// no events at all? chill for a sec until we get the next one
+		fmt.Println("chillin")
 		time.Sleep(100 * time.Millisecond)
 	}
 }

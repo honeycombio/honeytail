@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/honeycombio/mysqltools/query/scan_normalizer"
+	"github.com/honeycombio/mysqltools/query/normalizer"
 )
 
 type slowQueryData struct {
@@ -130,7 +130,7 @@ var sqds = []slowQueryData{
 func TestHandleEvent(t *testing.T) {
 	p := &Parser{
 		nower:      &FakeNower{},
-		normalizer: &scan_normalizer.Normalizer{},
+		normalizer: &normalizer.Scanner{},
 	}
 	for i, sqd := range sqds {
 		res := p.handleEvent(sqd.rawE)
@@ -143,7 +143,7 @@ func TestHandleEvent(t *testing.T) {
 func TestProcessSlowQuery(t *testing.T) {
 	p := &Parser{
 		nower:      &FakeNower{},
-		normalizer: &scan_normalizer.Normalizer{},
+		normalizer: &normalizer.Scanner{},
 	}
 	for i, sqd := range sqds {
 		res, err := p.processSlowQuery(sqd.sq)

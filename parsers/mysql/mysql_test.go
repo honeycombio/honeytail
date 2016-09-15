@@ -4,6 +4,8 @@ import (
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/honeycombio/mysqltools/query/scan_normalizer"
 )
 
 type slowQueryData struct {
@@ -81,10 +83,10 @@ var sqds = []slowQueryData{
 			},
 		},
 		sq: SlowQuery{
-			Timestamp: t2,
-			UnixTime:  1459470669,
-			Query:     "show status like 'Uptime';",
-			//NormalizedQuery: "show status like ?;",
+			Timestamp:       t2,
+			UnixTime:        1459470669,
+			Query:           "show status like 'Uptime';",
+			NormalizedQuery: "show status like ?;",
 		},
 	},
 	{
@@ -96,10 +98,10 @@ var sqds = []slowQueryData{
 			},
 		},
 		sq: SlowQuery{
-			Timestamp: t2,
-			UnixTime:  1459470669,
-			Query:     "SELECT * FROM (SELECT  T1.orderNumber,  STATUS,  SUM(quantityOrdered * priceEach) AS  total FROM orders WHERE total > 1000 AS T1 INNER JOIN orderdetails AS T2 ON T1.orderNumber = T2.orderNumber GROUP BY  orderNumber) T WHERE total > 100;",
-			//NormalizedQuery: "select * from (select t1.ordernumber, status, sum(quantityordered * priceeach) as total from orders where total > ? as t1 inner join orderdetails as t2 on t1.ordernumber = t2.ordernumber group by ordernumber) t where total > ?;",
+			Timestamp:       t2,
+			UnixTime:        1459470669,
+			Query:           "SELECT * FROM (SELECT  T1.orderNumber,  STATUS,  SUM(quantityOrdered * priceEach) AS  total FROM orders WHERE total > 1000 AS T1 INNER JOIN orderdetails AS T2 ON T1.orderNumber = T2.orderNumber GROUP BY  orderNumber) T WHERE total > 100;",
+			NormalizedQuery: "select * from (select t1.ordernumber, status, sum(quantityordered * priceeach) as total from orders where total > ? as t1 inner join orderdetails as t2 on t1.ordernumber = t2.ordernumber group by ordernumber) t where total > ?;",
 		},
 	},
 	{
@@ -127,7 +129,8 @@ var sqds = []slowQueryData{
 
 func TestHandleEvent(t *testing.T) {
 	p := &Parser{
-		nower: &FakeNower{},
+		nower:      &FakeNower{},
+		normalizer: &scan_normalizer.Normalizer{},
 	}
 	for i, sqd := range sqds {
 		res := p.handleEvent(sqd.rawE)
@@ -139,7 +142,8 @@ func TestHandleEvent(t *testing.T) {
 
 func TestProcessSlowQuery(t *testing.T) {
 	p := &Parser{
-		nower: &FakeNower{},
+		nower:      &FakeNower{},
+		normalizer: &scan_normalizer.Normalizer{},
 	}
 	for i, sqd := range sqds {
 		res, err := p.processSlowQuery(sqd.sq)

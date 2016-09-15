@@ -211,7 +211,7 @@ func verifyWritekey(options GlobalOptions) {
 		fmt.Println("Sorry! Please try again.")
 		os.Exit(1)
 	}
-	defer resp.Close()
+	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
 		body, _ := ioutil.ReadAll(resp.Body)
 		fmt.Println("Failed to validate your writekey:")

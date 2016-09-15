@@ -196,7 +196,7 @@ honeytail --help
 `)
 }
 
-// verifyWriekey calls out to api to validate the writekey, so we can exit
+// verifyWritekey calls out to api to validate the writekey, so we can exit
 // immediately instead of happily sending events that are all rejected.
 func verifyWritekey(options GlobalOptions) {
 	url := fmt.Sprintf("%s/1/team_slug", options.APIHost)

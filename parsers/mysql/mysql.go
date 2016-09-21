@@ -355,8 +355,8 @@ func (p *Parser) handleEvent(rawE []string) (SlowQuery, time.Time) {
 			db = strings.Trim(db, "`")
 			sq.DB = db
 			// Use this line as the query/normalized_query unless, if a real query follows it will be replaced.
-			sq.Query = line
-			sq.NormalizedQuery = line
+			sq.Query = strings.TrimRight(line, ";")
+			sq.NormalizedQuery = sq.Query
 		case reSetTime.MatchString(line):
 			query = ""
 			matchGroups := reSetTime.FindStringSubmatchMap(line)
@@ -367,10 +367,13 @@ func (p *Parser) handleEvent(rawE []string) (SlowQuery, time.Time) {
 			if strings.HasSuffix(query, ";") {
 				sq.Query = strings.TrimSuffix(query, ";")
 				sq.NormalizedQuery = p.normalizer.NormalizeQuery(sq.Query)
-				sq.Tables = p.normalizer.LastTables
+				if len(p.normalizer.LastTables) > 0 {
+					sq.Tables = strings.Join(p.normalizer.LastTables, " ")
+				}
 				sq.Statement = p.normalizer.LastStatement
 				query = ""
 			}
+
 		default:
 			// unknown row; log and skip
 			logrus.WithFields(logrus.Fields{
@@ -443,7 +446,7 @@ func (s SlowQuery) mapify() map[string]interface{} {
 	if s.Statement != "" {
 		mapped["statement"] = s.Statement
 	}
-	if len(s.Tables) != 0 {
+	if s.Tables != "" {
 		mapped["tables"] = s.Tables
 	}
 	if s.HostedOn != nil {

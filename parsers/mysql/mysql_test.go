@@ -78,8 +78,6 @@ var sqds = []slowQueryData{
 		},
 		sq: SlowQuery{
 			skipQuery: true,
-			Tables:    []string{},
-			Statement: "",
 		},
 		timestamp:    tUnparseable,
 		psqWillError: true,
@@ -93,10 +91,8 @@ var sqds = []slowQueryData{
 		sq: SlowQuery{
 			Timestamp:       t2,
 			UnixTime:        1459470669,
-			Query:           "show status like 'Uptime';",
-			NormalizedQuery: "show status like ?;",
-			Tables:          []string{},
-			Statement:       "",
+			Query:           "show status like 'Uptime'",
+			NormalizedQuery: "show status like ?",
 		},
 		timestamp: t1.Truncate(time.Second),
 	},
@@ -112,10 +108,8 @@ var sqds = []slowQueryData{
 		sq: SlowQuery{
 			Timestamp:       t2,
 			UnixTime:        1459470669,
-			Query:           "SELECT * FROM (SELECT  T1.orderNumber,  STATUS,  SUM(quantityOrdered * priceEach) AS  total FROM orders WHERE total > 1000 AS T1 INNER JOIN orderdetails AS T2 ON T1.orderNumber = T2.orderNumber GROUP BY  orderNumber) T WHERE total > 100;",
-			NormalizedQuery: "select * from (select t1.ordernumber, status, sum(quantityordered * priceeach) as total from orders where total > ? as t1 inner join orderdetails as t2 on t1.ordernumber = t2.ordernumber group by ordernumber) t where total > ?;",
-			Tables:          []string{},
-			Statement:       "",
+			Query:           "SELECT * FROM (SELECT  T1.orderNumber,  STATUS,  SUM(quantityOrdered * priceEach) AS  total FROM orders WHERE total > 1000 AS T1 INNER JOIN orderdetails AS T2 ON T1.orderNumber = T2.orderNumber GROUP BY  orderNumber) T WHERE total > 100",
+			NormalizedQuery: "select * from (select t1.ordernumber, status, sum(quantityordered * priceeach) as total from orders where total > ? as t1 inner join orderdetails as t2 on t1.ordernumber = t2.ordernumber group by ordernumber) t where total > ?",
 		},
 	},
 	{
@@ -123,7 +117,7 @@ var sqds = []slowQueryData{
 			lines: []string{
 				"# Time: not-a-parsable-time-stampZ",
 				"SET timestamp=1459470669;",
-				"SELECT * FROM orders WHERE total > 1000",
+				"SELECT * FROM orders WHERE total > 1000;",
 			},
 		},
 		sq: SlowQuery{
@@ -131,7 +125,7 @@ var sqds = []slowQueryData{
 			UnixTime:        1459470669,
 			Query:           "SELECT * FROM orders WHERE total > 1000",
 			NormalizedQuery: "select * from orders where total > ?",
-			Tables:          []string{"orders"},
+			Tables:          "orders",
 			Statement:       "select",
 		},
 		timestamp: t1.Truncate(time.Second),
@@ -143,8 +137,9 @@ var sqds = []slowQueryData{
 			"use someDB;",
 		},
 		sq: SlowQuery{
-			DB:    "someDB",
-			Query: "use someDB;",
+			DB:              "someDB",
+			Query:           "use someDB",
+			NormalizedQuery: "use someDB",
 		},
 		timestamp: t1.Truncate(time.Second),
 	},

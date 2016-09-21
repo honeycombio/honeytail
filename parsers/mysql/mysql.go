@@ -312,13 +312,16 @@ func (p *Parser) handleEvent(rawE []string) (SlowQuery, time.Time) {
 	}).Debug("About to parse event")
 	var timeFromComment time.Time
 	var timeFromSet int64
-	for _, line := range rawE {
+	query := ""
+	for _, line := range rawE.lines {
 		// parse each line and populate the SlowQuery object
 		switch {
 		case reTime.MatchString(line):
+			query = ""
 			matchGroups := reTime.FindStringSubmatchMap(line)
 			timeFromComment, _ = time.Parse(timeFormat, matchGroups["time"])
 		case reAdminPing.MatchString(line):
+			query = ""
 			// this evetn is an administrative ping and we should
 			// ignore the entire event
 			logrus.WithFields(logrus.Fields{
@@ -327,12 +330,14 @@ func (p *Parser) handleEvent(rawE []string) (SlowQuery, time.Time) {
 			}).Debug("readmin ping detected; skipping this event")
 			sq.skipQuery = true
 		case reUser.MatchString(line):
+			query = ""
 			matchGroups := reUser.FindStringSubmatchMap(line)
 			sq.User = strings.Split(matchGroups["user"], "[")[0]
 			hostAndIP := strings.Split(matchGroups["host"], " ")
 			sq.Client = hostAndIP[0]
 			sq.ClientIP = hostAndIP[1][1 : len(hostAndIP[1])-1]
 		case reQueryStats.MatchString(line):
+			query = ""
 			matchGroups := reQueryStats.FindStringSubmatchMap(line)
 			if queryTime, err := strconv.ParseFloat(matchGroups["queryTime"], 64); err == nil {
 				sq.QueryTime = &queryTime
@@ -347,21 +352,28 @@ func (p *Parser) handleEvent(rawE []string) (SlowQuery, time.Time) {
 				sq.RowsExamined = &rowsExamined
 			}
 		case reUse.FindString(line) != "":
+			query = ""
 			db := strings.TrimPrefix(line, reUse.FindString(line))
 			db = strings.TrimRight(db, ";")
 			db = strings.Trim(db, "`")
 			sq.DB = db
-			// Use this line as the query unless, if a real query follows it will be replaced.
+			// Use this line as the query/normalized_query unless, if a real query follows it will be replaced.
 			sq.Query = line
+			sq.NormalizedQuery = line
 		case reSetTime.MatchString(line):
+			query = ""
 			matchGroups := reSetTime.FindStringSubmatchMap(line)
 			timeFromSet, _ = strconv.ParseInt(matchGroups["unixTime"], 10, 64)
 		case reQuery.MatchString(line):
 			matchGroups := reQuery.FindStringSubmatchMap(line)
-			sq.Query = matchGroups["query"]
-			sq.NormalizedQuery = p.normalizer.NormalizeQuery(sq.Query)
-			sq.Tables = p.normalizer.LastTables
-			sq.Statement = p.normalizer.LastStatement
+			query = query + matchGroups["query"]
+			if strings.HasSuffix(query, ";") {
+				sq.Query = strings.TrimSuffix(query, ";")
+				sq.NormalizedQuery = p.normalizer.NormalizeQuery(sq.Query)
+				sq.Tables = p.normalizer.LastTables
+				sq.Statement = p.normalizer.LastStatement
+				query = ""
+			}
 		default:
 			// unknown row; log and skip
 			logrus.WithFields(logrus.Fields{

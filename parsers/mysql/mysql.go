@@ -307,9 +307,6 @@ func (p *Parser) handleEvents(rawEvents <-chan []string, send chan<- event.Event
 // available.
 func (p *Parser) handleEvent(rawE []string) (SlowQuery, time.Time) {
 	sq := SlowQuery{}
-	logrus.WithFields(logrus.Fields{
-		"rawE": rawE,
-	}).Debug("About to parse event")
 	var timeFromComment time.Time
 	var timeFromSet int64
 	query := ""

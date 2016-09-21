@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/honeycombio/mysqltools/query/normalizer"
 )
 
 type slowQueryData struct {
@@ -76,6 +78,8 @@ var sqds = []slowQueryData{
 		},
 		sq: SlowQuery{
 			skipQuery: true,
+			Tables:    []string{},
+			Statement: "",
 		},
 		timestamp:    tUnparseable,
 		psqWillError: true,
@@ -87,20 +91,48 @@ var sqds = []slowQueryData{
 			"show status like 'Uptime';",
 		},
 		sq: SlowQuery{
-			Query: "show status like 'Uptime';",
-			//NormalizedQuery: "show status like ?;",
+			Timestamp:       t2,
+			UnixTime:        1459470669,
+			Query:           "show status like 'Uptime';",
+			NormalizedQuery: "show status like ?;",
+			Tables:          []string{},
+			Statement:       "",
 		},
 		timestamp: t1.Truncate(time.Second),
 	},
 	{
-		rawE: []string{
-			"# Time: not-a-parsable-time-stampZ",
-			"SET timestamp=1459470669;",
-			"SELECT * FROM (SELECT  T1.orderNumber,  STATUS,  SUM(quantityOrdered * priceEach) AS  total FROM orders WHERE total > 1000 AS T1 INNER JOIN orderdetails AS T2 ON T1.orderNumber = T2.orderNumber GROUP BY  orderNumber) T WHERE total > 100;",
+		// fails to parse and we fall back to the scan normalizer
+		rawE: rawEvent{
+			lines: []string{
+				"# Time: not-a-parsable-time-stampZ",
+				"SET timestamp=1459470669;",
+				"SELECT * FROM (SELECT  T1.orderNumber,  STATUS,  SUM(quantityOrdered * priceEach) AS  total FROM orders WHERE total > 1000 AS T1 INNER JOIN orderdetails AS T2 ON T1.orderNumber = T2.orderNumber GROUP BY  orderNumber) T WHERE total > 100;",
+			},
 		},
 		sq: SlowQuery{
-			Query: "SELECT * FROM (SELECT  T1.orderNumber,  STATUS,  SUM(quantityOrdered * priceEach) AS  total FROM orders WHERE total > 1000 AS T1 INNER JOIN orderdetails AS T2 ON T1.orderNumber = T2.orderNumber GROUP BY  orderNumber) T WHERE total > 100;",
-			//NormalizedQuery: "select * from (select t1.ordernumber, status, sum(quantityordered * priceeach) as total from orders where total > ? as t1 inner join orderdetails as t2 on t1.ordernumber = t2.ordernumber group by ordernumber) t where total > ?;",
+			Timestamp:       t2,
+			UnixTime:        1459470669,
+			Query:           "SELECT * FROM (SELECT  T1.orderNumber,  STATUS,  SUM(quantityOrdered * priceEach) AS  total FROM orders WHERE total > 1000 AS T1 INNER JOIN orderdetails AS T2 ON T1.orderNumber = T2.orderNumber GROUP BY  orderNumber) T WHERE total > 100;",
+			NormalizedQuery: "select * from (select t1.ordernumber, status, sum(quantityordered * priceeach) as total from orders where total > ? as t1 inner join orderdetails as t2 on t1.ordernumber = t2.ordernumber group by ordernumber) t where total > ?;",
+			Tables:          []string{},
+			Statement:       "",
+		},
+	},
+	{
+		rawE: rawEvent{
+			lines: []string{
+				"# Time: not-a-parsable-time-stampZ",
+				"SET timestamp=1459470669;",
+				"SELECT * FROM orders WHERE total > 1000",
+			},
+		},
+		sq: SlowQuery{
+			Timestamp:       t2,
+			UnixTime:        1459470669,
+			Query:           "SELECT * FROM orders WHERE total > 1000",
+			NormalizedQuery: "select * from orders where total > ?",
+			Tables:          []string{"orders"},
+			Statement:       "select",
 		},
 		timestamp: t1.Truncate(time.Second),
 	},
@@ -124,7 +156,8 @@ var sqds = []slowQueryData{
 
 func TestHandleEvent(t *testing.T) {
 	p := &Parser{
-		nower: &FakeNower{},
+		nower:      &FakeNower{},
+		normalizer: &normalizer.Parser{},
 	}
 	for i, sqd := range sqds {
 		res, timestamp := p.handleEvent(sqd.rawE)
@@ -140,7 +173,8 @@ func TestHandleEvent(t *testing.T) {
 
 func TestProcessSlowQuery(t *testing.T) {
 	p := &Parser{
-		nower: &FakeNower{},
+		nower:      &FakeNower{},
+		normalizer: &normalizer.Parser{},
 	}
 	for i, sqd := range sqds {
 		res, err := p.processSlowQuery(sqd.sq, sqd.timestamp)

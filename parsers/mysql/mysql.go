@@ -12,6 +12,7 @@ import (
 
 	"github.com/Sirupsen/logrus"
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/honeycombio/mysqltools/query/normalizer"
 
 	"github.com/honeycombio/honeytail/event"
 )
@@ -71,6 +72,7 @@ type Parser struct {
 	readOnly   *bool
 	replicaLag *int64
 	role       *string
+	normalizer *normalizer.Parser
 }
 
 type Nower interface {
@@ -99,12 +101,15 @@ type SlowQuery struct {
 	ReplicaLag      *int64   `json:"replica_lag,omitempty"`
 	Role            *string  `json:"role,omitempty"`
 	ClientIP        string   `json:"client_ip,omitempty"`
+	Statement       string   `json:"statement,omitempty"`
+	Tables          []string `json:"tables,omitempty"`
 	skipQuery       bool
 }
 
 func (p *Parser) Init(options interface{}) error {
 	p.conf = *options.(*Options)
 	p.nower = &RealNower{}
+	p.normalizer = &normalizer.Parser{}
 	if p.conf.Host != "" {
 		url := fmt.Sprintf("%s:%s@tcp(%s)/", p.conf.User, p.conf.Pass, p.conf.Host)
 		db, err := sql.Open("mysql", url)
@@ -354,7 +359,9 @@ func (p *Parser) handleEvent(rawE []string) (SlowQuery, time.Time) {
 		case reQuery.MatchString(line):
 			matchGroups := reQuery.FindStringSubmatchMap(line)
 			sq.Query = matchGroups["query"]
-			sq.NormalizedQuery = ""
+			sq.NormalizedQuery = p.normalizer.NormalizeQuery(sq.Query)
+			sq.Tables = p.normalizer.LastTables
+			sq.Statement = p.normalizer.LastStatement
 		default:
 			// unknown row; log and skip
 			logrus.WithFields(logrus.Fields{
@@ -397,7 +404,7 @@ func (e *emptyQueryError) Error() string {
 
 func (p *Parser) processSlowQuery(sq SlowQuery, timestamp time.Time) (event.Event, error) {
 	// if we didn't match any lines at all, skip the query
-	if sq == (SlowQuery{}) {
+	if sq.Query == "" && sq.NormalizedQuery == "" {
 		sq.skipQuery = true
 	}
 
@@ -423,6 +430,12 @@ func (s SlowQuery) mapify() map[string]interface{} {
 		"rows_examined":    s.RowsExamined,
 		"query":            s.Query,
 		"normalized_query": s.NormalizedQuery,
+	}
+	if s.Statement != "" {
+		mapped["statement"] = s.Statement
+	}
+	if len(s.Tables) != 0 {
+		mapped["tables"] = s.Tables
 	}
 	if s.HostedOn != nil {
 		mapped["hosted_on"] = *s.HostedOn

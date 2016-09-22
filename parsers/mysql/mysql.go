@@ -13,6 +13,8 @@ import (
 	"github.com/Sirupsen/logrus"
 	_ "github.com/go-sql-driver/mysql"
 
+	"github.com/honeycombio/mysqltools/query/normalizer"
+
 	"github.com/honeycombio/honeytail/event"
 )
 
@@ -70,6 +72,7 @@ type Parser struct {
 	readOnly   *bool
 	replicaLag *int64
 	role       *string
+	normalizer *normalizer.Scanner
 }
 
 type Nower interface {
@@ -111,6 +114,7 @@ type SlowQuery struct {
 func (p *Parser) Init(options interface{}) error {
 	p.conf = *options.(*Options)
 	p.nower = &RealNower{}
+	p.normalizer = &normalizer.Scanner{}
 	if p.conf.Host != "" {
 		url := fmt.Sprintf("%s:%s@tcp(%s)/", p.conf.User, p.conf.Pass, p.conf.Host)
 		db, err := sql.Open("mysql", url)
@@ -352,7 +356,7 @@ func (p *Parser) handleEvent(rawE rawEvent) SlowQuery {
 		case reQuery.MatchString(line):
 			matchGroups := reQuery.FindStringSubmatchMap(line)
 			sq.Query = matchGroups["query"]
-			sq.NormalizedQuery = ""
+			sq.NormalizedQuery = p.normalizer.NormalizeQuery(sq.Query)
 		default:
 			// unknown row; log and skip
 			logrus.WithFields(logrus.Fields{

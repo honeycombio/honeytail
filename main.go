@@ -38,6 +38,8 @@ var validParsers = []string{
 type GlobalOptions struct {
 	APIHost string `hidden:"true" long:"api_host" description:"Host for the Honeycomb API" default:"https://api.honeycomb.io/"`
 
+	ConfigFile func(s string) error `short:"c" long:"config" description:"config file for honeytail in INI format. This flag should come first on the command line" no-ini:"true"`
+
 	SampleRate     uint `short:"r" long:"samplerate" description:"Only send 1 / N log lines" default:"1"`
 	NumSenders     uint `short:"P" long:"poolsize" description:"Number of concurrent connections to open to Honeycomb" default:"10"`
 	Debug          bool `long:"debug" description:"Print debugging output"`
@@ -70,9 +72,11 @@ type RequiredOptions struct {
 }
 
 type OtherModes struct {
-	Help        bool `short:"h" long:"help" description:"Show this help message"`
-	ListParsers bool `short:"l" long:"list" description:"List available parsers"`
-	Version     bool `short:"V" long:"version" description:"Show version"`
+	Help               bool `short:"h" long:"help" description:"Show this help message"`
+	ListParsers        bool `short:"l" long:"list" description:"List available parsers"`
+	Version            bool `short:"V" long:"version" description:"Show version"`
+	WriteDefaultConfig bool `long:"write_default_config" description:"write a default config file to STDOUT" no-ini:"true"`
+	WriteCurrentConfig bool `long:"write_current_config" description:"write out the current config to STDOUT" no-ini:"true"`
 
 	WriteManPage bool `hidden:"true" long:"write-man-page" description:"Write out a man page"`
 }
@@ -81,6 +85,13 @@ func main() {
 	var options GlobalOptions
 	flagParser := flag.NewParser(&options, flag.PrintErrors)
 	flagParser.Usage = "-p <parser> -k <writekey> -f </path/to/logfile> -d <mydata> [optional arguments]"
+
+	// read the config file if present
+	options.ConfigFile = func(s string) error {
+		ini := flag.NewIniParser(flagParser)
+		return ini.ParseFile(s)
+	}
+
 	if extraArgs, err := flagParser.Parse(); err != nil || len(extraArgs) != 0 {
 		fmt.Println("Error: failed to parse the command line.")
 		if err != nil {
@@ -130,6 +141,16 @@ func handleOtherModes(fp *flag.Parser, options GlobalOptions) {
 	}
 	if options.Modes.WriteManPage {
 		fp.WriteManPage(os.Stdout)
+		os.Exit(0)
+	}
+	if options.Modes.WriteDefaultConfig {
+		ip := flag.NewIniParser(fp)
+		ip.Write(os.Stdout, flag.IniIncludeDefaults|flag.IniCommentDefaults|flag.IniIncludeComments)
+		os.Exit(0)
+	}
+	if options.Modes.WriteCurrentConfig {
+		ip := flag.NewIniParser(fp)
+		ip.Write(os.Stdout, flag.IniIncludeComments)
 		os.Exit(0)
 	}
 

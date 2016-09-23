@@ -86,7 +86,6 @@ func main() {
 	flagParser := flag.NewParser(&options, flag.PrintErrors)
 	flagParser.Usage = "-p <parser> -k <writekey> -f </path/to/logfile> -d <mydata> [optional arguments]"
 
-	// parse flags and check for extra command line args
 	if extraArgs, err := flagParser.Parse(); err != nil || len(extraArgs) != 0 {
 		fmt.Println("Error: failed to parse the command line.")
 		if err != nil {

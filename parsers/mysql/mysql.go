@@ -416,7 +416,7 @@ func (e *emptyQueryError) Error() string {
 
 func (p *Parser) processSlowQuery(sq SlowQuery, timestamp time.Time) (event.Event, error) {
 	// if we didn't match any lines at all, skip the query
-	if sq.Query == "" && sq.NormalizedQuery == "" {
+	if sq == (SlowQuery{}) {
 		sq.skipQuery = true
 	}
 

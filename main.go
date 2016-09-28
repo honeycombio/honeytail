@@ -38,7 +38,7 @@ var validParsers = []string{
 type GlobalOptions struct {
 	APIHost string `hidden:"true" long:"api_host" description:"Host for the Honeycomb API" default:"https://api.honeycomb.io/"`
 
-	ConfigFile string `short:"c" long:"config" description:"config file for honeytail in INI format. This flag should come first on the command line" default:"honeytail.conf" no-ini:"true"`
+	ConfigFile string `short:"c" long:"config" description:"config file for honeytail in INI format." no-ini:"true"`
 
 	SampleRate     uint `short:"r" long:"samplerate" description:"Only send 1 / N log lines" default:"1"`
 	NumSenders     uint `short:"P" long:"poolsize" description:"Number of concurrent connections to open to Honeycomb" default:"10"`
@@ -98,13 +98,15 @@ func main() {
 		os.Exit(1)
 	}
 	// read the config file if present
-	ini := flag.NewIniParser(flagParser)
-	ini.ParseAsDefaults = true
-	if err := ini.ParseFile(options.ConfigFile); err != nil {
-		fmt.Printf("Error: failed to parse the config file %s\n", options.ConfigFile)
-		fmt.Printf("\t%s\n", err)
-		usage()
-		os.Exit(1)
+	if options.ConfigFile != "" {
+		ini := flag.NewIniParser(flagParser)
+		ini.ParseAsDefaults = true
+		if err := ini.ParseFile(options.ConfigFile); err != nil {
+			fmt.Printf("Error: failed to parse the config file %s\n", options.ConfigFile)
+			fmt.Printf("\t%s\n", err)
+			usage()
+			os.Exit(1)
+		}
 	}
 
 	rand.Seed(time.Now().UnixNano())

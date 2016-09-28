@@ -89,40 +89,31 @@ var sqds = []slowQueryData{
 			"show status like 'Uptime';",
 		},
 		sq: SlowQuery{
-			Timestamp:       t2,
-			UnixTime:        1459470669,
 			Query:           "show status like 'Uptime'",
 			NormalizedQuery: "show status like ?",
 		},
 		timestamp: t1.Truncate(time.Second),
 	},
 	{
-		// fails to parse and we fall back to the scan normalizer
-		rawE: rawEvent{
-			lines: []string{
-				"# Time: not-a-parsable-time-stampZ",
-				"SET timestamp=1459470669;",
-				"SELECT * FROM (SELECT  T1.orderNumber,  STATUS,  SUM(quantityOrdered * priceEach) AS  total FROM orders WHERE total > 1000 AS T1 INNER JOIN orderdetails AS T2 ON T1.orderNumber = T2.orderNumber GROUP BY  orderNumber) T WHERE total > 100;",
-			},
+		// fails to parse "Time" but we capture unix time and we fall back to the scan normalizer
+		rawE: []string{
+			"# Time: not-a-parsable-time-stampZ",
+			"SET timestamp=1459470669;",
+			"SELECT * FROM (SELECT  T1.orderNumber,  STATUS,  SUM(quantityOrdered * priceEach) AS  total FROM orders WHERE total > 1000 AS T1 INNER JOIN orderdetails AS T2 ON T1.orderNumber = T2.orderNumber GROUP BY  orderNumber) T WHERE total > 100;",
 		},
 		sq: SlowQuery{
-			Timestamp:       t2,
-			UnixTime:        1459470669,
 			Query:           "SELECT * FROM (SELECT  T1.orderNumber,  STATUS,  SUM(quantityOrdered * priceEach) AS  total FROM orders WHERE total > 1000 AS T1 INNER JOIN orderdetails AS T2 ON T1.orderNumber = T2.orderNumber GROUP BY  orderNumber) T WHERE total > 100",
 			NormalizedQuery: "select * from (select t1.ordernumber, status, sum(quantityordered * priceeach) as total from orders where total > ? as t1 inner join orderdetails as t2 on t1.ordernumber = t2.ordernumber group by ordernumber) t where total > ?",
 		},
+		timestamp: t1.Truncate(time.Second),
 	},
 	{
-		rawE: rawEvent{
-			lines: []string{
-				"# Time: not-a-parsable-time-stampZ",
-				"SET timestamp=1459470669;",
-				"SELECT * FROM orders WHERE total > 1000;",
-			},
+		rawE: []string{
+			"# Time: not-a-parsable-time-stampZ",
+			"SET timestamp=1459470669;",
+			"SELECT * FROM orders WHERE total > 1000;",
 		},
 		sq: SlowQuery{
-			Timestamp:       t2,
-			UnixTime:        1459470669,
 			Query:           "SELECT * FROM orders WHERE total > 1000",
 			NormalizedQuery: "select * from orders where total > ?",
 			Tables:          "orders",

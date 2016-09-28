@@ -102,7 +102,7 @@ type SlowQuery struct {
 	Role            *string  `json:"role,omitempty"`
 	ClientIP        string   `json:"client_ip,omitempty"`
 	Statement       string   `json:"statement,omitempty"`
-	Tables          []string `json:"tables,omitempty"`
+	Tables          string   `json:"tables,omitempty"`
 	skipQuery       bool
 }
 
@@ -310,7 +310,7 @@ func (p *Parser) handleEvent(rawE []string) (SlowQuery, time.Time) {
 	var timeFromComment time.Time
 	var timeFromSet int64
 	query := ""
-	for _, line := range rawE.lines {
+	for _, line := range rawE {
 		// parse each line and populate the SlowQuery object
 		switch {
 		case reTime.MatchString(line):

@@ -40,6 +40,13 @@ import (
 //
 // We should ignore the administrator command entry; the stats it presents (eg rows_sent)
 // are actually for the previous command
+//
+// Sample line from RDS
+// # administrator command: Prepare;
+// # User@Host: root[root] @  [10.0.1.76]  Id: 325920
+// # Query_time: 0.000097  Lock_time: 0.000023 Rows_sent: 1  Rows_examined: 1
+// SET timestamp=1476127288;
+// SELECT * FROM foo WHERE bar=2 AND (baz=104 OR baz=0) ORDER BY baz;
 
 const (
 	rdsStr  = "rds"
@@ -261,19 +268,27 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
 
 	// flag to indicate when we've got a complete event to send
 	var sendEvent bool
+	var foundStatement bool
 	groupedLines := make([]string, 0, 5)
 	for line := range lines {
-		if strings.HasPrefix(line, "# ") && len(groupedLines) > 0 {
+		if foundStatement && strings.HasPrefix(line, "# ") && len(groupedLines) > 0 {
 			// we've started a new event. Send the previous one.
 			sendEvent = true
 		}
 		if sendEvent {
 			sendEvent = false
+			foundStatement = false
 			rawEvents <- groupedLines
 			groupedLines = make([]string, 0, 5)
 		}
+		if !strings.HasPrefix(line, "# ") {
+			// we've finished the comments before the statement and now should slurp
+			// lines until the next comment
+			foundStatement = true
+		}
 		groupedLines = append(groupedLines, line)
 	}
+	// send the last event, if there was one collected
 	if len(groupedLines) != 0 {
 		rawEvents <- groupedLines
 	}

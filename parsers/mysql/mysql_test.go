@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/honeycombio/honeytail/event"
 	"github.com/honeycombio/mysqltools/query/normalizer"
 )
 
@@ -65,6 +66,30 @@ var sqds = []slowQueryData{
 			userKey:     "root",
 			clientKey:   "localhost",
 			clientIPKey: "",
+		},
+		timestamp: tUnparseable,
+	},
+	{
+		// RDS style user host line
+		rawE: []string{
+			"# User@Host: root[root] @  [10.0.1.76]  Id: 325920",
+		},
+		sq: map[string]interface{}{
+			userKey:     "root",
+			clientKey:   "",
+			clientIPKey: "10.0.1.76",
+		},
+		timestamp: tUnparseable,
+	},
+	{
+		// RDS style user host line with hostname
+		rawE: []string{
+			"# User@Host: root[root] @ foobar [10.0.1.76]  Id: 325920",
+		},
+		sq: map[string]interface{}{
+			userKey:     "root",
+			clientKey:   "foobar",
+			clientIPKey: "10.0.1.76",
 		},
 		timestamp: tUnparseable,
 	},
@@ -167,7 +192,7 @@ var sqds = []slowQueryData{
 	},
 	// some tests for corrupted logs
 	{
-		// invalid query + use + query
+		// invalid query + use + query, ignore the invalid query
 		rawE: []string{
 			"# Time: not-a-parsable-time-stampZ",
 			"SET timestamp=1459470669;",
@@ -187,7 +212,7 @@ var sqds = []slowQueryData{
 		timestamp: t1.Truncate(time.Second),
 	},
 	{
-		// invalid query + set time + query
+		// invalid query + set time + query, ignore the invalid query
 		rawE: []string{
 			"# Time: not-a-parsable-time-stampZ",
 			"SET timestamp=1459470669;",
@@ -204,7 +229,7 @@ var sqds = []slowQueryData{
 		timestamp: t2.Truncate(time.Second),
 	},
 	{
-		// query + query_time comment + query
+		// query + query_time comment + query, ignore the first query
 		rawE: []string{
 			"# Time: 2016-04-01T00:31:09.817887Z",
 			"SELECT * FROM orders WHERE total < 1000;",
@@ -224,7 +249,7 @@ var sqds = []slowQueryData{
 		timestamp: t1,
 	},
 	{
-		// invalid query + user@host comment + query
+		// invalid query + user@host comment + query, ignore the invalid query
 		rawE: []string{
 			"# Time: 2016-04-01T00:31:09.817887Z",
 			"SELECT * FROM orders WHERE",
@@ -306,6 +331,77 @@ func TestTimeProcessing(t *testing.T) {
 			t.Errorf("Didn't capture time with MS resolution from lines:\n%+v\n\tExpected: %d, Actual: %d",
 				strings.Join(tt.lines, "\n"), tt.expected.Nanosecond(), timestamp.Nanosecond())
 		}
+	}
+}
+
+// test that ProcessLines correctly splits the mysql slow query log stream into
+// individual events. It should read in alternating sets of commented then
+// uncommented lines and split them at the first comment after an uncommented
+// line.
+func TestProcessLines(t *testing.T) {
+	p := &Parser{
+		nower:      &FakeNower{},
+		normalizer: &normalizer.Parser{},
+	}
+	lines := make(chan string, 10)
+	send := make(chan event.Event, 5)
+	go p.ProcessLines(lines, send)
+	for _, line := range []string{
+		"# administrator command: Prepare;",
+		"# Time: 2016-04-01T00:31:09.817887Z",
+		"# User@Host: someuser @ hostfoo [192.168.2.1]  Id:   666",
+		"# Query_time: 0.000073  Lock_time: 0.000000 Rows_sent: 0  Rows_examined: 0",
+		"SELECT * FROM orders WHERE total > 1000;",
+		"# administrator command: Prepare;",
+		"# Time: 2016-04-01T00:31:09.817887Z",
+		"# User@Host: otheruser @ hostbar [192.168.2.1]  Id:   666",
+		"# Query_time: 0.00457  Lock_time: 0.1 Rows_sent: 5  Rows_examined: 35",
+		"SELECT * FROM",
+		"customers;",
+	} {
+		lines <- line
+	}
+	close(lines)
+	ev1 := <-send
+	ev2 := <-send
+	ts, _ := time.Parse(time.RFC3339Nano, "2016-04-01T00:31:09.817887Z")
+	expectedEv1 := event.Event{
+		Timestamp: ts,
+		Data: map[string]interface{}{
+			"client":           "hostfoo",
+			"client_ip":        "192.168.2.1",
+			"user":             "someuser",
+			"query_time":       0.000073,
+			"lock_time":        0.0,
+			"rows_sent":        0,
+			"rows_examined":    0,
+			"query":            "SELECT * FROM orders WHERE total > 1000",
+			"normalized_query": "select * from orders where total > ?",
+			"tables":           "orders",
+			"statement":        "select",
+		},
+	}
+	expectedEv2 := event.Event{
+		Timestamp: ts,
+		Data: map[string]interface{}{
+			"client":           "hostbar",
+			"client_ip":        "192.168.2.1",
+			"user":             "otheruser",
+			"query_time":       0.00457,
+			"lock_time":        0.1,
+			"rows_sent":        5,
+			"rows_examined":    35,
+			"query":            "SELECT * FROM customers",
+			"normalized_query": "select * from customers",
+			"tables":           "customers",
+			"statement":        "select",
+		},
+	}
+	if !reflect.DeepEqual(ev1, expectedEv1) {
+		t.Errorf("ev1 mismatch. got %+v, expected %+v", ev1, expectedEv1)
+	}
+	if !reflect.DeepEqual(ev2, expectedEv2) {
+		t.Errorf("ev2 mismatch. got %+v, expected %+v", ev2, expectedEv2)
 	}
 }
 

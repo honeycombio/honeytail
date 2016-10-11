@@ -298,6 +298,10 @@ func (p *Parser) handleEvents(rawEvents <-chan []string, send chan<- event.Event
 		if len(sq) == 0 {
 			continue
 		}
+		if _, ok := sq["query"]; !ok {
+			// skip events with no query field
+			continue
+		}
 		if p.hostedOn != "" {
 			sq[hostedOnKey] = p.hostedOn
 		}

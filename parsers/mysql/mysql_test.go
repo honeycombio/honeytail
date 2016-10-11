@@ -339,69 +339,136 @@ func TestTimeProcessing(t *testing.T) {
 // uncommented lines and split them at the first comment after an uncommented
 // line.
 func TestProcessLines(t *testing.T) {
-	p := &Parser{
-		nower:      &FakeNower{},
-		normalizer: &normalizer.Parser{},
-	}
-	lines := make(chan string, 10)
-	send := make(chan event.Event, 5)
-	go p.ProcessLines(lines, send)
-	for _, line := range []string{
-		"# administrator command: Prepare;",
-		"# Time: 2016-04-01T00:31:09.817887Z",
-		"# User@Host: someuser @ hostfoo [192.168.2.1]  Id:   666",
-		"# Query_time: 0.000073  Lock_time: 0.000000 Rows_sent: 0  Rows_examined: 0",
-		"SELECT * FROM orders WHERE total > 1000;",
-		"# administrator command: Prepare;",
-		"# Time: 2016-04-01T00:31:09.817887Z",
-		"# User@Host: otheruser @ hostbar [192.168.2.1]  Id:   666",
-		"# Query_time: 0.00457  Lock_time: 0.1 Rows_sent: 5  Rows_examined: 35",
-		"SELECT * FROM",
-		"customers;",
-	} {
-		lines <- line
-	}
-	close(lines)
-	ev1 := <-send
-	ev2 := <-send
-	ts, _ := time.Parse(time.RFC3339Nano, "2016-04-01T00:31:09.817887Z")
-	expectedEv1 := event.Event{
-		Timestamp: ts,
-		Data: map[string]interface{}{
-			"client":           "hostfoo",
-			"client_ip":        "192.168.2.1",
-			"user":             "someuser",
-			"query_time":       0.000073,
-			"lock_time":        0.0,
-			"rows_sent":        0,
-			"rows_examined":    0,
-			"query":            "SELECT * FROM orders WHERE total > 1000",
-			"normalized_query": "select * from orders where total > ?",
-			"tables":           "orders",
-			"statement":        "select",
+	ts1, _ := time.Parse(time.RFC3339Nano, "2016-04-01T00:31:09.817887Z")
+
+	tsts := []struct {
+		in       []string
+		expected []event.Event
+	}{
+		{
+			[]string{
+				"# administrator command: Prepare;",
+				"# Time: 2016-04-01T00:31:09.817887Z",
+				"# User@Host: someuser @ hostfoo [192.168.2.1]  Id:   666",
+				"# Query_time: 0.000073  Lock_time: 0.000000 Rows_sent: 0  Rows_examined: 0",
+				"SELECT * FROM orders WHERE total > 1000;",
+				"# administrator command: Prepare;",
+				"# Time: 2016-04-01T00:31:09.817887Z",
+				"# User@Host: otheruser @ hostbar [192.168.2.1]  Id:   666",
+				"# Query_time: 0.00457  Lock_time: 0.1 Rows_sent: 5  Rows_examined: 35",
+				"SELECT * FROM",
+				"customers;",
+			},
+			[]event.Event{
+				{
+					Timestamp: ts1,
+					Data: map[string]interface{}{
+						"client":           "hostfoo",
+						"client_ip":        "192.168.2.1",
+						"user":             "someuser",
+						"query_time":       0.000073,
+						"lock_time":        0.0,
+						"rows_sent":        0,
+						"rows_examined":    0,
+						"query":            "SELECT * FROM orders WHERE total > 1000",
+						"normalized_query": "select * from orders where total > ?",
+						"tables":           "orders",
+						"statement":        "select",
+					},
+				},
+				{
+					Timestamp: ts1,
+					Data: map[string]interface{}{
+						"client":           "hostbar",
+						"client_ip":        "192.168.2.1",
+						"user":             "otheruser",
+						"query_time":       0.00457,
+						"lock_time":        0.1,
+						"rows_sent":        5,
+						"rows_examined":    35,
+						"query":            "SELECT * FROM customers",
+						"normalized_query": "select * from customers",
+						"tables":           "customers",
+						"statement":        "select",
+					},
+				},
+			},
+		},
+		{ // missing a # Time: line on the second event
+			[]string{
+				"# Time: 151008  0:31:04",
+				"# User@Host: rails[rails] @  [10.252.9.33]",
+				"# Query_time: 0.030974  Lock_time: 0.000019 Rows_sent: 0  Rows_examined: 30259",
+				"SET timestamp=1444264264;",
+				"SELECT `metadata`.* FROM `metadata` WHERE (`metadata`.app_id = 993089);",
+				"# User@Host: rails[rails] @  [10.252.9.33]",
+				"# Query_time: 0.002280  Lock_time: 0.000023 Rows_sent: 0  Rows_examined: 921",
+				"SET timestamp=1444264264;",
+				"SELECT `certs`.* FROM `certs` WHERE (`certs`.app_id = 993089) LIMIT 1;",
+			},
+			[]event.Event{
+				{
+					Timestamp: time.Unix(1444264264, 0),
+					Data: map[string]interface{}{
+						"client":           "",
+						"client_ip":        "10.252.9.33",
+						"user":             "rails",
+						"query_time":       0.030974,
+						"lock_time":        0.000019,
+						"rows_sent":        0,
+						"rows_examined":    30259,
+						"query":            "SELECT `metadata`.* FROM `metadata` WHERE (`metadata`.app_id = 993089)",
+						"normalized_query": "select `metadata`.* from `metadata` where (`metadata`.app_id = ?)",
+						"tables":           "metadata",
+						"statement":        "select",
+					},
+				},
+				{
+					Timestamp: time.Unix(1444264264, 0), // should pick up the SET timestamp=... cmd
+					Data: map[string]interface{}{
+						"client":           "",
+						"client_ip":        "10.252.9.33",
+						"user":             "rails",
+						"query_time":       0.002280,
+						"lock_time":        0.000023,
+						"rows_sent":        0,
+						"rows_examined":    921,
+						"query":            "SELECT `certs`.* FROM `certs` WHERE (`certs`.app_id = 993089) LIMIT 1",
+						"normalized_query": "select `certs`.* from `certs` where (`certs`.app_id = ?) limit ?",
+						"tables":           "certs",
+						"statement":        "select",
+					},
+				},
+			},
 		},
 	}
-	expectedEv2 := event.Event{
-		Timestamp: ts,
-		Data: map[string]interface{}{
-			"client":           "hostbar",
-			"client_ip":        "192.168.2.1",
-			"user":             "otheruser",
-			"query_time":       0.00457,
-			"lock_time":        0.1,
-			"rows_sent":        5,
-			"rows_examined":    35,
-			"query":            "SELECT * FROM customers",
-			"normalized_query": "select * from customers",
-			"tables":           "customers",
-			"statement":        "select",
-		},
-	}
-	if !reflect.DeepEqual(ev1, expectedEv1) {
-		t.Errorf("ev1 mismatch. got %+v, expected %+v", ev1, expectedEv1)
-	}
-	if !reflect.DeepEqual(ev2, expectedEv2) {
-		t.Errorf("ev2 mismatch. got %+v, expected %+v", ev2, expectedEv2)
+
+	for _, tt := range tsts {
+		p := &Parser{
+			nower:      &FakeNower{},
+			normalizer: &normalizer.Parser{},
+		}
+		lines := make(chan string, 10)
+		send := make(chan event.Event, 5)
+		go p.ProcessLines(lines, send)
+		for _, line := range tt.in {
+			lines <- line
+		}
+		close(lines)
+
+		for _, exp := range tt.expected {
+			ev := <-send
+			if !ev.Timestamp.Equal(exp.Timestamp) {
+				t.Errorf("time parsing mismatch. got %+v, expected %+v", ev.Timestamp, exp.Timestamp)
+			}
+			if !reflect.DeepEqual(ev.Data, exp.Data) {
+				t.Errorf("data parsing mismatch. got %+v, expected %+v", ev.Data, exp.Data)
+			}
+		}
+		close(send)
+		if len(send) > 0 {
+			t.Errorf("unexpected: %d additional events were extracted", len(send))
+		}
 	}
 }
 

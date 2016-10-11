@@ -267,16 +267,11 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
 	go p.handleEvents(rawEvents, send)
 
 	// flag to indicate when we've got a complete event to send
-	var sendEvent bool
 	var foundStatement bool
 	groupedLines := make([]string, 0, 5)
 	for line := range lines {
-		if foundStatement && strings.HasPrefix(line, "# ") && len(groupedLines) > 0 {
+		if foundStatement && len(groupedLines) > 0 && strings.HasPrefix(line, "# ") {
 			// we've started a new event. Send the previous one.
-			sendEvent = true
-		}
-		if sendEvent {
-			sendEvent = false
 			foundStatement = false
 			rawEvents <- groupedLines
 			groupedLines = make([]string, 0, 5)

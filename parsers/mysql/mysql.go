@@ -270,21 +270,23 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
 	var foundStatement bool
 	groupedLines := make([]string, 0, 5)
 	for line := range lines {
-		if foundStatement && len(groupedLines) > 0 && strings.HasPrefix(line, "# ") {
-			// we've started a new event. Send the previous one.
-			foundStatement = false
-			rawEvents <- groupedLines
-			groupedLines = make([]string, 0, 5)
-		}
-		if !strings.HasPrefix(line, "# ") {
+		lineIsComment := strings.HasPrefix(line, "# ")
+		if !lineIsComment {
 			// we've finished the comments before the statement and now should slurp
 			// lines until the next comment
 			foundStatement = true
+		} else {
+			if foundStatement {
+				// we've started a new event. Send the previous one.
+				foundStatement = false
+				rawEvents <- groupedLines
+				groupedLines = make([]string, 0, 5)
+			}
 		}
 		groupedLines = append(groupedLines, line)
 	}
 	// send the last event, if there was one collected
-	if len(groupedLines) != 0 {
+	if foundStatement {
 		rawEvents <- groupedLines
 	}
 	logrus.Debug("lines channel is closed, ending mysql processor")

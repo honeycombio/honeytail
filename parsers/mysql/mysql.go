@@ -61,12 +61,18 @@ const (
 	lockTimeKey        = "lock_time"
 	rowsSentKey        = "rows_sent"
 	rowsExaminedKey    = "rows_examined"
+	rowsAffectedKey    = "rows_affected"
 	databaseKey        = "database"
 	queryKey           = "query"
 	normalizedQueryKey = "normalized_query"
 	statementKey       = "statement"
 	tablesKey          = "tables"
 	commentsKey        = "comments"
+	// InnoDB keys (it seems)
+	bytesSentKey     = "bytes_sent"
+	tmpTablesKey     = "tmp_tables"
+	tmpDiskTablesKey = "tmp_disk_tables"
+	tmpTableSizesKey = "tmp_table_sizes"
 	// Event attributes that apply to the host as a whole
 	hostedOnKey   = "hosted_on"
 	readOnlyKey   = "read_only"
@@ -78,7 +84,8 @@ var (
 	reTime       = myRegexp{regexp.MustCompile("^# Time: (?P<time>[^ ]+)Z *$")}
 	reAdminPing  = myRegexp{regexp.MustCompile("^# administrator command: Ping; *$")}
 	reUser       = myRegexp{regexp.MustCompile("^# User@Host: (?P<user>[^#]+) @ (?P<host>[^#]+).*$")}
-	reQueryStats = myRegexp{regexp.MustCompile("^# Query_time: (?P<queryTime>[0-9.]+) *Lock_time: (?P<lockTime>[0-9.]+) *Rows_sent: (?P<rowsSent>[0-9]+) *Rows_examined: (?P<rowsExamined>[0-9]+).*$")}
+	reQueryStats = myRegexp{regexp.MustCompile("^# Query_time: (?P<queryTime>[0-9.]+) *Lock_time: (?P<lockTime>[0-9.]+) *Rows_sent: (?P<rowsSent>[0-9]+) *Rows_examined: (?P<rowsExamined>[0-9]+)( *Rows_affected: (?P<rowsAffected>[0-9]+))?.*$")}
+	reServStats  = myRegexp{regexp.MustCompile("^# Bytes_sent: (?P<bytesSent>[0-9.]+) *Tmp_tables: (?P<tmpTables>[0-9.]+) *Tmp_disk_tables: (?P<tmpDiskTables>[0-9]+) *Tmp_table_sizes: (?P<tmpTableSizes>[0-9]+).*$")}
 	reSetTime    = myRegexp{regexp.MustCompile("^SET timestamp=(?P<unixTime>[0-9]+);$")}
 	reQuery      = myRegexp{regexp.MustCompile("^(?P<query>[^#]*).*$")}
 	reUse        = myRegexp{regexp.MustCompile("^(?i)use ")}
@@ -364,6 +371,23 @@ func (p *Parser) handleEvent(rawE []string) (map[string]interface{}, time.Time) 
 			}
 			if rowsExamined, err := strconv.Atoi(mg["rowsExamined"]); err == nil {
 				sq[rowsExaminedKey] = rowsExamined
+			}
+			if rowsAffected, err := strconv.Atoi(mg["rowsAffected"]); err == nil {
+				sq[rowsAffectedKey] = rowsAffected
+			}
+		} else if mg := reServStats.FindStringSubmatchMap(line); mg != nil {
+			query = ""
+			if bytesSent, err := strconv.Atoi(mg["bytesSent"]); err == nil {
+				sq[bytesSentKey] = bytesSent
+			}
+			if tmpTables, err := strconv.Atoi(mg["tmpTables"]); err == nil {
+				sq[tmpTablesKey] = tmpTables
+			}
+			if tmpDiskTables, err := strconv.Atoi(mg["tmpDiskTables"]); err == nil {
+				sq[tmpDiskTablesKey] = tmpDiskTables
+			}
+			if tmpTableSizes, err := strconv.Atoi(mg["tmpTableSizes"]); err == nil {
+				sq[tmpTableSizesKey] = tmpTableSizes
 			}
 		} else if match := reUse.FindString(line); match != "" {
 			query = ""

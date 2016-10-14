@@ -299,6 +299,37 @@ var sqds = []slowQueryData{
 		rawE: []string{},
 		sq:   map[string]interface{}{},
 	},
+	{
+		rawE: []string{
+			"# Time: 160907  3:10:22",
+			"# User@Host: rw[rw] @  [10.96.81.110]  Id: 1394495950",
+			"# Schema: our_index  Last_errno: 0  Killed: 0",
+			"# Query_time: 1.294391  Lock_time: 0.000119  Rows_sent: 4049  Rows_examined: 4049  Rows_affected: 0",
+			"# Bytes_sent: 153824  Tmp_tables: 0  Tmp_disk_tables: 0  Tmp_table_sizes: 0",
+			"# InnoDB_trx_id: A569C193C7",
+			"# QC_Hit: No  Full_scan: No  Full_join: No  Tmp_table: No  Tmp_table_on_disk: No",
+			"# Filesort: No  Filesort_on_disk: No  Merge_passes: 0",
+			"#   InnoDB_IO_r_ops: 0  InnoDB_IO_r_bytes: 0  InnoDB_IO_r_wait: 0.000000",
+			"#   InnoDB_rec_lock_wait: 0.000000  InnoDB_queue_wait: 0.000000",
+			"#   InnoDB_pages_distinct: 6756",
+			"SET timestamp=1473217822;",
+			"/* [vW2RgU1vU6FPXHBnW6OU_DalWUR8] [our_index_A] [/dynamic_sitemaps.php] */ SELECT * FROM `cats_index` as `Cat_Cat` WHERE `Cat_Cat`.`cat_id` BETWEEN 9670064 AND 9680063 ORDER BY `Cat_Cat`.`cat_id`;",
+		},
+		sq: map[string]interface{}{
+			userKey:            "rw",
+			clientKey:          "",
+			clientIPKey:        "10.96.81.110",
+			queryTimeKey:       1.294391,
+			lockTimeKey:        0.000119,
+			rowsSentKey:        4049,
+			rowsExaminedKey:    4049,
+			queryKey:           "/* [vW2RgU1vU6FPXHBnW6OU_DalWUR8] [our_index_A] [/dynamic_sitemaps.php] */ SELECT * FROM `cats_index` as `Cat_Cat` WHERE `Cat_Cat`.`cat_id` BETWEEN 9670064 AND 9680063 ORDER BY `Cat_Cat`.`cat_id`",
+			normalizedQueryKey: "select * from `cats_index` as `cat_cat` where `cat_cat`.`cat_id` between ? and ? order by `cat_cat`.`cat_id`",
+			statementKey:       "select",
+			tablesKey:          "cat_cat cats_index",
+		},
+		timestamp: time.Unix(1473217822, 0),
+	},
 }
 
 func TestHandleEvent(t *testing.T) {
@@ -308,8 +339,13 @@ func TestHandleEvent(t *testing.T) {
 	}
 	for i, sqd := range sqds {
 		res, timestamp := p.handleEvent(sqd.rawE)
-		if !reflect.DeepEqual(res, sqd.sq) {
-			t.Errorf("case num %d: expected\n %+v, got\n %+v", i, sqd.sq, res)
+		if len(res) != len(sqd.sq) {
+			t.Errorf("case num %d: expected to parse %d fields, got %d", i, len(sqd.sq), len(res))
+		}
+		for k, v := range sqd.sq {
+			if !reflect.DeepEqual(res[k], v) {
+				t.Errorf("case num %d: expected %+v,\ngot %+v", i, v, res[k])
+			}
 		}
 		if timestamp.UnixNano() != sqd.timestamp.UnixNano() {
 			t.Errorf("case num %d: time parsed incorrectly:\n\tExpected: %+v, Actual: %+v",

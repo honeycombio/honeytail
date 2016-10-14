@@ -356,8 +356,14 @@ func (p *Parser) handleEvent(rawE []string) (map[string]interface{}, time.Time) 
 			query = ""
 			sq[userKey] = strings.Split(mg["user"], "[")[0]
 			hostAndIP := strings.Split(mg["host"], " ")
-			sq[clientKey] = hostAndIP[0]
-			sq[clientIPKey] = hostAndIP[1][1 : len(hostAndIP[1])-1]
+			switch len(hostAndIP) {
+			case 0: // do nothing
+			case 1:
+				sq[clientIPKey] = hostAndIP[0][1 : len(hostAndIP[0])-1]
+			default:
+				sq[clientKey] = hostAndIP[0]
+				sq[clientIPKey] = hostAndIP[1][1 : len(hostAndIP[1])-1]
+			}
 		} else if mg := reQueryStats.FindStringSubmatchMap(line); mg != nil {
 			query = ""
 			if queryTime, err := strconv.ParseFloat(mg["queryTime"], 64); err == nil {

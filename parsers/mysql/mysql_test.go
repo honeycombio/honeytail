@@ -335,6 +335,37 @@ var sqds = []slowQueryData{
 		},
 		timestamp: time.Unix(1473217822, 0),
 	},
+	{
+		rawE: []string{
+			"# User@Host: weaverw[weaverw] @ [10.14.214.13]",
+			"# Thread_id: 78959 Schema: weave3 Last_errno: 0 Killed: 0",
+			"# Query_time: 10.749944 Lock_time: 0.017599 Rows_sent: 0 Rows_examined: 0 Rows_affected: 10 Rows_read: 12",
+			"# Bytes_sent: 51 Tmp_tables: 0 Tmp_disk_tables: 0 Tmp_table_sizes: 0",
+			"# InnoDB_trx_id: 98CF",
+			"use weave3;",
+			"SET timestamp=1364506803;",
+			"SELECT COUNT(*) FROM foo;",
+		},
+		sq: map[string]interface{}{
+			userKey:            "weaverw",
+			clientKey:          nil,
+			clientIPKey:        "10.14.214.13",
+			queryTimeKey:       10.749944,
+			lockTimeKey:        0.017599,
+			rowsSentKey:        0,
+			rowsExaminedKey:    0,
+			rowsAffectedKey:    10,
+			queryKey:           "SELECT COUNT(*) FROM foo",
+			normalizedQueryKey: "select count(*) from foo",
+			statementKey:       "select",
+			tablesKey:          "foo",
+			bytesSentKey:       51,
+			tmpTablesKey:       0,
+			tmpDiskTablesKey:   0,
+			tmpTableSizesKey:   0,
+		},
+		timestamp: time.Unix(1364506803, 0),
+	},
 }
 
 func TestHandleEvent(t *testing.T) {
@@ -349,7 +380,7 @@ func TestHandleEvent(t *testing.T) {
 		}
 		for k, v := range sqd.sq {
 			if !reflect.DeepEqual(res[k], v) {
-				t.Errorf("case num %d:\n\texpected:\t%+v\n\tgot:\t\t%+v", i, v, res[k])
+				t.Errorf("case num %d, key %s:\n\texpected:\t%+v\n\tgot:\t\t%+v", i, k, v, res[k])
 			}
 		}
 		if timestamp.UnixNano() != sqd.timestamp.UnixNano() {

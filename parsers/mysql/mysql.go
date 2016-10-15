@@ -82,6 +82,12 @@ const (
 	fileSortKey       = "filesort"
 	fileSortOnDiskKey = "filesort_on_disk"
 	mergePassesKey    = "merge_passes"
+	ioROpsKey         = "IO_r_ops"
+	ioRBytesKey       = "IO_r_bytes"
+	ioRWaitKey        = "IO_r_wait_sec"
+	recLockWaitKey    = "rec_lock_wait_sec"
+	queueWaitKey      = "queue_wait_sec"
+	pagesDistinctKey  = "pages_distinct"
 	// Event attributes that apply to the host as a whole
 	hostedOnKey   = "hosted_on"
 	readOnlyKey   = "read_only"
@@ -96,8 +102,11 @@ var (
 	reQueryStats       = myRegexp{regexp.MustCompile("^# Query_time: (?P<queryTime>[0-9.]+) *Lock_time: (?P<lockTime>[0-9.]+) *Rows_sent: (?P<rowsSent>[0-9]+) *Rows_examined: (?P<rowsExamined>[0-9]+)( *Rows_affected: (?P<rowsAffected>[0-9]+))?.*$")}
 	reServStats        = myRegexp{regexp.MustCompile("^# Bytes_sent: (?P<bytesSent>[0-9.]+) *Tmp_tables: (?P<tmpTables>[0-9.]+) *Tmp_disk_tables: (?P<tmpDiskTables>[0-9]+) *Tmp_table_sizes: (?P<tmpTableSizes>[0-9]+).*$")}
 	reInnodbTrx        = myRegexp{regexp.MustCompile("^# InnoDB_trx_id: (?P<trxId>[A-F0-9]+) *$")}
-	reInnodbQueryPlan  = myRegexp{regexp.MustCompile("^# QC_Hit: (?P<query_cache_hit>[[:alpha:]]+)  Full_scan: (?P<full_scan>[[:alpha:]]+)  Full_join: (?P<full_join>[[:alpha:]]+)  Tmp_table: (?P<tmp_table>[[:alpha:]]+)  Tmp_table_on_disk: (?P<tmp_table_on_disk>[[:alpha:]]+).*$")}
-	reInnodbQueryPlan2 = myRegexp{regexp.MustCompile("^# Filesort: (?P<filesort>[[:alpha:]]+)  Filesort_on_disk: (?P<filesort_on_disk>[[:alpha:]]+)  Merge_passes: (?P<merge_passes>[0-9]+)")}
+	reInnodbQueryPlan1 = myRegexp{regexp.MustCompile("^# QC_Hit: (?P<query_cache_hit>[[:alpha:]]+)  Full_scan: (?P<full_scan>[[:alpha:]]+)  Full_join: (?P<full_join>[[:alpha:]]+)  Tmp_table: (?P<tmp_table>[[:alpha:]]+)  Tmp_table_on_disk: (?P<tmp_table_on_disk>[[:alpha:]]+).*$")}
+	reInnodbQueryPlan2 = myRegexp{regexp.MustCompile("^# Filesort: (?P<filesort>[[:alpha:]]+)  Filesort_on_disk: (?P<filesort_on_disk>[[:alpha:]]+)  Merge_passes: (?P<merge_passes>[0-9]+).*$")}
+	reInnodbUsage1     = myRegexp{regexp.MustCompile("^# +InnoDB_IO_r_ops: (?P<io_r_ops>[0-9]+)  InnoDB_IO_r_bytes: (?P<io_r_bytes>[0-9]+)  InnoDB_IO_r_wait: (?P<io_r_wait>[0-9.]+).*$")}
+	reInnodbUsage2     = myRegexp{regexp.MustCompile("^# +InnoDB_rec_lock_wait: (?P<rec_lock_wait>[0-9.]+)  InnoDB_queue_wait: (?P<queue_wait>[0-9.]+).*$")}
+	reInnodbUsage3     = myRegexp{regexp.MustCompile("^# +InnoDB_pages_distinct: (?P<pages_distinct>[0-9]+).*")}
 	reSetTime          = myRegexp{regexp.MustCompile("^SET timestamp=(?P<unixTime>[0-9]+);$")}
 	reQuery            = myRegexp{regexp.MustCompile("^(?P<query>[^#]*).*$")}
 	reUse              = myRegexp{regexp.MustCompile("^(?i)use ")}
@@ -407,7 +416,7 @@ func (p *Parser) handleEvent(rawE []string) (map[string]interface{}, time.Time) 
 			if tmpTableSizes, err := strconv.Atoi(mg["tmpTableSizes"]); err == nil {
 				sq[tmpTableSizesKey] = tmpTableSizes
 			}
-		} else if mg := reInnodbQueryPlan.FindStringSubmatchMap(line); mg != nil {
+		} else if mg := reInnodbQueryPlan1.FindStringSubmatchMap(line); mg != nil {
 			sq[queryCacheHitKey] = mg["query_cache_hit"] == "Yes"
 			sq[fullScanKey] = mg["full_scan"] == "Yes"
 			sq[fullJoinKey] = mg["full_join"] == "Yes"
@@ -418,6 +427,27 @@ func (p *Parser) handleEvent(rawE []string) (map[string]interface{}, time.Time) 
 			sq[fileSortOnDiskKey] = mg["filesort_on_disk"] == "Yes"
 			if mergePasses, err := strconv.Atoi(mg["merge_passes"]); err == nil {
 				sq[mergePassesKey] = mergePasses
+			}
+		} else if mg := reInnodbUsage1.FindStringSubmatchMap(line); mg != nil {
+			if ioROps, err := strconv.Atoi(mg["io_r_ops"]); err == nil {
+				sq[ioROpsKey] = ioROps
+			}
+			if ioRBytes, err := strconv.Atoi(mg["io_r_bytes"]); err == nil {
+				sq[ioRBytesKey] = ioRBytes
+			}
+			if ioRWait, err := strconv.ParseFloat(mg["io_r_wait"], 64); err == nil {
+				sq[ioRWaitKey] = ioRWait
+			}
+		} else if mg := reInnodbUsage2.FindStringSubmatchMap(line); mg != nil {
+			if recLockWait, err := strconv.ParseFloat(mg["rec_lock_wait"], 64); err == nil {
+				sq[recLockWaitKey] = recLockWait
+			}
+			if queueWait, err := strconv.ParseFloat(mg["queue_wait"], 64); err == nil {
+				sq[queueWaitKey] = queueWait
+			}
+		} else if mg := reInnodbUsage3.FindStringSubmatchMap(line); mg != nil {
+			if pagesDistinct, err := strconv.Atoi(mg["pages_distinct"]); err == nil {
+				sq[pagesDistinctKey] = pagesDistinct
 			}
 		} else if mg := reInnodbTrx.FindStringSubmatchMap(line); mg != nil {
 			sq[transactionIDKey] = mg["trxId"]

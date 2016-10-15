@@ -69,11 +69,19 @@ const (
 	tablesKey          = "tables"
 	commentsKey        = "comments"
 	// InnoDB keys (it seems)
-	bytesSentKey     = "bytes_sent"
-	tmpTablesKey     = "tmp_tables"
-	tmpDiskTablesKey = "tmp_disk_tables"
-	tmpTableSizesKey = "tmp_table_sizes"
-	transactionIdKey = "transaction_id"
+	bytesSentKey      = "bytes_sent"
+	tmpTablesKey      = "tmp_tables"
+	tmpDiskTablesKey  = "tmp_disk_tables"
+	tmpTableSizesKey  = "tmp_table_sizes"
+	transactionIDKey  = "transaction_id"
+	queryCacheHitKey  = "query_cache_hit"
+	fullScanKey       = "full_scan"
+	fullJoinKey       = "full_join"
+	tmpTableKey       = "tmp_table"
+	tmpTableOnDiskKey = "tmp_table_on_disk"
+	fileSortKey       = "filesort"
+	fileSortOnDiskKey = "filesort_on_disk"
+	mergePassesKey    = "merge_passes"
 	// Event attributes that apply to the host as a whole
 	hostedOnKey   = "hosted_on"
 	readOnlyKey   = "read_only"
@@ -82,15 +90,17 @@ const (
 )
 
 var (
-	reTime       = myRegexp{regexp.MustCompile("^# Time: (?P<time>[^ ]+)Z *$")}
-	reAdminPing  = myRegexp{regexp.MustCompile("^# administrator command: Ping; *$")}
-	reUser       = myRegexp{regexp.MustCompile("^# User@Host: (?P<user>[^#]+) @ (?P<host>[^#]+).*$")}
-	reQueryStats = myRegexp{regexp.MustCompile("^# Query_time: (?P<queryTime>[0-9.]+) *Lock_time: (?P<lockTime>[0-9.]+) *Rows_sent: (?P<rowsSent>[0-9]+) *Rows_examined: (?P<rowsExamined>[0-9]+)( *Rows_affected: (?P<rowsAffected>[0-9]+))?.*$")}
-	reServStats  = myRegexp{regexp.MustCompile("^# Bytes_sent: (?P<bytesSent>[0-9.]+) *Tmp_tables: (?P<tmpTables>[0-9.]+) *Tmp_disk_tables: (?P<tmpDiskTables>[0-9]+) *Tmp_table_sizes: (?P<tmpTableSizes>[0-9]+).*$")}
-	reInnodbTrx  = myRegexp{regexp.MustCompile("^# InnoDB_trx_id: (?P<trxId>[A-F0-9]+) *$")}
-	reSetTime    = myRegexp{regexp.MustCompile("^SET timestamp=(?P<unixTime>[0-9]+);$")}
-	reQuery      = myRegexp{regexp.MustCompile("^(?P<query>[^#]*).*$")}
-	reUse        = myRegexp{regexp.MustCompile("^(?i)use ")}
+	reTime             = myRegexp{regexp.MustCompile("^# Time: (?P<time>[^ ]+)Z *$")}
+	reAdminPing        = myRegexp{regexp.MustCompile("^# administrator command: Ping; *$")}
+	reUser             = myRegexp{regexp.MustCompile("^# User@Host: (?P<user>[^#]+) @ (?P<host>[^#]+).*$")}
+	reQueryStats       = myRegexp{regexp.MustCompile("^# Query_time: (?P<queryTime>[0-9.]+) *Lock_time: (?P<lockTime>[0-9.]+) *Rows_sent: (?P<rowsSent>[0-9]+) *Rows_examined: (?P<rowsExamined>[0-9]+)( *Rows_affected: (?P<rowsAffected>[0-9]+))?.*$")}
+	reServStats        = myRegexp{regexp.MustCompile("^# Bytes_sent: (?P<bytesSent>[0-9.]+) *Tmp_tables: (?P<tmpTables>[0-9.]+) *Tmp_disk_tables: (?P<tmpDiskTables>[0-9]+) *Tmp_table_sizes: (?P<tmpTableSizes>[0-9]+).*$")}
+	reInnodbTrx        = myRegexp{regexp.MustCompile("^# InnoDB_trx_id: (?P<trxId>[A-F0-9]+) *$")}
+	reInnodbQueryPlan  = myRegexp{regexp.MustCompile("^# QC_Hit: (?P<query_cache_hit>[[:alpha:]]+)  Full_scan: (?P<full_scan>[[:alpha:]]+)  Full_join: (?P<full_join>[[:alpha:]]+)  Tmp_table: (?P<tmp_table>[[:alpha:]]+)  Tmp_table_on_disk: (?P<tmp_table_on_disk>[[:alpha:]]+).*$")}
+	reInnodbQueryPlan2 = myRegexp{regexp.MustCompile("^# Filesort: (?P<filesort>[[:alpha:]]+)  Filesort_on_disk: (?P<filesort_on_disk>[[:alpha:]]+)  Merge_passes: (?P<merge_passes>[0-9]+)")}
+	reSetTime          = myRegexp{regexp.MustCompile("^SET timestamp=(?P<unixTime>[0-9]+);$")}
+	reQuery            = myRegexp{regexp.MustCompile("^(?P<query>[^#]*).*$")}
+	reUse              = myRegexp{regexp.MustCompile("^(?i)use ")}
 )
 
 const timeFormat = "2006-01-02T15:04:05.000000"
@@ -397,8 +407,20 @@ func (p *Parser) handleEvent(rawE []string) (map[string]interface{}, time.Time) 
 			if tmpTableSizes, err := strconv.Atoi(mg["tmpTableSizes"]); err == nil {
 				sq[tmpTableSizesKey] = tmpTableSizes
 			}
+		} else if mg := reInnodbQueryPlan.FindStringSubmatchMap(line); mg != nil {
+			sq[queryCacheHitKey] = mg["query_cache_hit"] == "Yes"
+			sq[fullScanKey] = mg["full_scan"] == "Yes"
+			sq[fullJoinKey] = mg["full_join"] == "Yes"
+			sq[tmpTableKey] = mg["tmp_table"] == "Yes"
+			sq[tmpTableOnDiskKey] = mg["tmp_table_on_disk"] == "Yes"
+		} else if mg := reInnodbQueryPlan2.FindStringSubmatchMap(line); mg != nil {
+			sq[fileSortKey] = mg["filesort"] == "Yes"
+			sq[fileSortOnDiskKey] = mg["filesort_on_disk"] == "Yes"
+			if mergePasses, err := strconv.Atoi(mg["merge_passes"]); err == nil {
+				sq[mergePassesKey] = mergePasses
+			}
 		} else if mg := reInnodbTrx.FindStringSubmatchMap(line); mg != nil {
-			sq[transactionIdKey] = mg["trxId"]
+			sq[transactionIDKey] = mg["trxId"]
 		} else if match := reUse.FindString(line); match != "" {
 			query = ""
 			db := strings.TrimPrefix(line, match)

@@ -73,6 +73,7 @@ const (
 	tmpTablesKey     = "tmp_tables"
 	tmpDiskTablesKey = "tmp_disk_tables"
 	tmpTableSizesKey = "tmp_table_sizes"
+	transactionIdKey = "transaction_id"
 	// Event attributes that apply to the host as a whole
 	hostedOnKey   = "hosted_on"
 	readOnlyKey   = "read_only"
@@ -86,6 +87,7 @@ var (
 	reUser       = myRegexp{regexp.MustCompile("^# User@Host: (?P<user>[^#]+) @ (?P<host>[^#]+).*$")}
 	reQueryStats = myRegexp{regexp.MustCompile("^# Query_time: (?P<queryTime>[0-9.]+) *Lock_time: (?P<lockTime>[0-9.]+) *Rows_sent: (?P<rowsSent>[0-9]+) *Rows_examined: (?P<rowsExamined>[0-9]+)( *Rows_affected: (?P<rowsAffected>[0-9]+))?.*$")}
 	reServStats  = myRegexp{regexp.MustCompile("^# Bytes_sent: (?P<bytesSent>[0-9.]+) *Tmp_tables: (?P<tmpTables>[0-9.]+) *Tmp_disk_tables: (?P<tmpDiskTables>[0-9]+) *Tmp_table_sizes: (?P<tmpTableSizes>[0-9]+).*$")}
+	reInnodbTrx  = myRegexp{regexp.MustCompile("^# InnoDB_trx_id: (?P<trxId>[A-F0-9]+) *$")}
 	reSetTime    = myRegexp{regexp.MustCompile("^SET timestamp=(?P<unixTime>[0-9]+);$")}
 	reQuery      = myRegexp{regexp.MustCompile("^(?P<query>[^#]*).*$")}
 	reUse        = myRegexp{regexp.MustCompile("^(?i)use ")}
@@ -395,6 +397,8 @@ func (p *Parser) handleEvent(rawE []string) (map[string]interface{}, time.Time) 
 			if tmpTableSizes, err := strconv.Atoi(mg["tmpTableSizes"]); err == nil {
 				sq[tmpTableSizesKey] = tmpTableSizes
 			}
+		} else if mg := reInnodbTrx.FindStringSubmatchMap(line); mg != nil {
+			sq[transactionIdKey] = mg["trxId"]
 		} else if match := reUse.FindString(line); match != "" {
 			query = ""
 			db := strings.TrimPrefix(line, match)

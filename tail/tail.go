@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
@@ -62,61 +61,13 @@ type State struct {
 	Offset int64
 }
 
-// GetSampledEntries wraps GetEntries and returns a channel that provides
-// sampled entries
-func GetSampledEntries(conf Config, sampleRate int) (chan string, error) {
-	lines, err := GetEntries(conf)
-	if err != nil {
-		return nil, err
-	}
-	if sampleRate == 1 {
-		return lines, nil
-	}
-	sampledLines := make(chan string)
-	go func() {
-		defer close(sampledLines)
-		for line := range lines {
-			if shouldSample(sampleRate) {
-				sampledLines <- line
-			} else {
-				logrus.WithFields(logrus.Fields{
-					"line": line,
-				}).Debug("Sampler says skip this line")
-			}
-		}
-	}()
-	return sampledLines, nil
-}
-
-// shouldSample returns true if the line should be preserved
-// false if it should be skipped
-// if sampleRate is 5,
-// on average one out of every 5 calls should return true
-func shouldSample(sampleRate int) bool {
-	if rand.Intn(sampleRate) == 0 {
-		return true
-	}
-	return false
-}
-
-// GetEntries opens the log file, reading from the end. It sends one line
-// at a time down the returned channel
-func GetEntries(conf Config) (chan string, error) {
+// GetEntries sets up a list of channels that get one line at a time from each
+// file down each channel.
+func GetEntries(conf Config) ([]chan string, error) {
 	if conf.Type != RotateStyleSyslog {
 		return nil, errors.New("Only Syslog style rotation currently supported")
 	}
-	lines := make(chan string)
-	var wg sync.WaitGroup
-	defer func() {
-		go func() {
-			wg.Wait()
-			close(lines)
-		}()
-	}()
-	// handle reading from STDIN
-	if conf.Paths[0] == "-" {
-		return lines, tailStdIn(lines, &wg)
-	}
+	// expand any globs in the list of files so our list all represents real files
 	var filenames []string
 	for _, filePath := range conf.Paths {
 		files, err := filepath.Glob(filePath)
@@ -130,34 +81,58 @@ func GetEntries(conf Config) (chan string, error) {
 		conf.Options.StateFile = ""
 	}
 
-	if conf.ForceSerial {
-		go func() {
-			wg.Add(1)
-			var fileWG sync.WaitGroup
-			for _, file := range filenames {
-				stateFile := getStateFile(conf, file)
-				tailer, err := getTailer(conf, file, stateFile)
-				if err != nil {
-					logrus.WithField("file", file).Fatal("Error occurred while trying to tail logfile")
-				}
-				tailSingleFile(tailer, file, stateFile, lines, &fileWG)
-				fileWG.Wait()
-			}
-			wg.Done()
-		}()
-	} else {
-		for _, file := range filenames {
-			stateFile := getStateFile(conf, file)
-			tailer, err := getTailer(conf, file, stateFile)
-			if err != nil {
-				return nil, err
-			}
-			tailSingleFile(tailer, file, stateFile, lines, &wg)
-		}
-	}
-	// close lines when all processors are done
+	// make our lines channel list; we'll get one channel for each file
+	linesChans := make([]chan string, 0, len(filenames))
+	// REFDONE move this within the for for each created channel
+	// var wg sync.WaitGroup
+	// handle reading from STDIN
+	// REFDONE treat stdin just like any other file - move this check into the for loop
+	// if conf.Paths[0] == "-" {
+	// 	return lines, tailStdIn(lines, &wg)
+	// }
 
-	return lines, nil
+	// REF don't need force serial if we have one parser per channel
+	// if conf.ForceSerial {
+	// 	go func() {
+	// 		wg.Add(1)
+	// 		var fileWG sync.WaitGroup
+	// 		for _, file := range filenames {
+	// 			stateFile := getStateFile(conf, file)
+	// 			tailer, err := getTailer(conf, file, stateFile)
+	// 			if err != nil {
+	// 				logrus.WithField("file", file).Fatal("Error occurred while trying to tail logfile")
+	// 			}
+	// 			tailSingleFile(tailer, file, stateFile, lines, &fileWG)
+	// 			fileWG.Wait()
+	// 		}
+	// 		wg.Done()
+	// 	}()
+	// } else {
+
+	var wg sync.WaitGroup
+	for _, file := range filenames {
+		lines := make(chan string)
+		// make sure to close lines when the tailer is done
+		defer func() {
+			go func() {
+				wg.Wait()
+				close(lines)
+			}()
+		}()
+		linesChans = append(linesChans, lines)
+		if file == "-" {
+			tailStdIn(lines, &wg)
+			continue
+		}
+		stateFile := getStateFile(conf, file)
+		tailer, err := getTailer(conf, file, stateFile)
+		if err != nil {
+			return nil, err
+		}
+		tailSingleFile(tailer, file, stateFile, lines, &wg)
+	}
+
+	return linesChans, nil
 }
 
 func tailSingleFile(tailer *tail.Tail, file string, stateFile string, lines chan string, wg *sync.WaitGroup) error {

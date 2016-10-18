@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Sirupsen/logrus"
@@ -72,7 +73,10 @@ func (g *GonxLineParser) ParseLine(line string) (map[string]string, error) {
 	return gonxEvent.Fields, nil
 }
 
-func (n *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
+func (n *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, parentWG *sync.WaitGroup) {
+	// let the caller know when we're done
+	parentWG.Add(1)
+	defer parentWG.Done()
 	// parse lines one by one
 	for line := range lines {
 		logrus.WithFields(logrus.Fields{

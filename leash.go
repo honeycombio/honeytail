@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Sirupsen/logrus"
@@ -48,7 +49,7 @@ func run(options GlobalOptions) {
 	}
 
 	// get our lines channel from which to read log lines
-	lines, err := tail.GetEntries(tail.Config{
+	linesChans, err := tail.GetEntries(tail.Config{
 		Paths:       options.Reqs.LogFiles,
 		Type:        tail.RotateStyleSyslog,
 		ForceSerial: options.Reqs.ParserName == "mysql",
@@ -57,56 +58,69 @@ func run(options GlobalOptions) {
 		logrus.WithFields(logrus.Fields{"err": err}).Fatal(
 			"Error occurred while trying to tail logfile")
 	}
+	// collect all sending channels so that when they're all done we can close
+	// libhoney
+	toBeSentChans := make([]chan event.Event, 0, len(linesChans))
+	doneSendingChans := make([]chan bool, 0, len(linesChans))
 
-	// get our parser
-	parser, opts := getParserAndOptions(options)
-	if parser == nil {
-		logrus.WithFields(logrus.Fields{"parser": options.Reqs.ParserName}).Fatal(
-			"Parser not found. Use --list to show valid parsers")
-	}
-
-	// and initialize it
-	if err := parser.Init(opts); err != nil {
-		logrus.WithFields(logrus.Fields{"parser": options.Reqs.ParserName, "err": err}).Fatal(
-			"err initializing parser module")
-	}
-
-	// create a channel for sending events into libhoney
-	toBeSent := make(chan event.Event)
-	doneSending := make(chan bool)
-
-	// two channels to handle backing off when rate limited and resending failed
-	// send attempts that are recoverable
-	toBeResent := make(chan event.Event, 2*options.NumSenders)
-	// time in milliseconds to delay the send
-	delaySending := make(chan int, 2*options.NumSenders)
-
-	// apply any filters to the events before they get sent
-	modifiedToBeSent := modifyEventContents(toBeSent, options)
-
-	realToBeSent := make(chan event.Event, 10*options.NumSenders)
-	go func() {
-		for ev := range modifiedToBeSent {
-			realToBeSent <- ev
+	// for each channel we got back from tail.GetEntries, spin up a parser.
+	parsersWG := sync.WaitGroup{}
+	for _, lines := range linesChans {
+		// get our parser
+		parser, opts := getParserAndOptions(options)
+		if parser == nil {
+			logrus.WithFields(logrus.Fields{"parser": options.Reqs.ParserName}).Fatal(
+				"Parser not found. Use --list to show valid parsers")
 		}
-		close(realToBeSent)
-	}()
 
-	// start up the sender
-	go sendToLibhoney(realToBeSent, toBeResent, delaySending, doneSending)
+		// and initialize it
+		if err := parser.Init(opts); err != nil {
+			logrus.WithFields(logrus.Fields{"parser": options.Reqs.ParserName, "err": err}).Fatal(
+				"err initializing parser module")
+		}
 
-	// start a goroutine that reads from responses and logs.
-	responses := libhoney.Responses()
-	go handleResponses(responses, toBeResent, delaySending, options)
+		// create a channel for sending events into libhoney
+		toBeSent := make(chan event.Event)
+		toBeSentChans = append(toBeSentChans, toBeSent)
+		doneSending := make(chan bool)
+		doneSendingChans = append(doneSendingChans, doneSending)
 
-	// ProcessLines won't return until lines is closed
-	parser.ProcessLines(lines, toBeSent)
+		// two channels to handle backing off when rate limited and resending failed
+		// send attempts that are recoverable
+		toBeResent := make(chan event.Event, 2*options.NumSenders)
+		// time in milliseconds to delay the send
+		delaySending := make(chan int, 2*options.NumSenders)
 
-	// trigger the sending goroutine to finish up
-	close(toBeSent)
-	// wait for all the events in toBeSent to be handed to libhoney
-	<-doneSending
+		// apply any filters to the events before they get sent
+		modifiedToBeSent := modifyEventContents(toBeSent, options)
 
+		realToBeSent := make(chan event.Event, 10*options.NumSenders)
+		go func() {
+			for ev := range modifiedToBeSent {
+				realToBeSent <- ev
+			}
+			close(realToBeSent)
+		}()
+
+		// start up the sender
+		go sendToLibhoney(realToBeSent, toBeResent, delaySending, doneSending)
+
+		// start a goroutine that reads from responses and logs.
+		responses := libhoney.Responses()
+		go handleResponses(responses, toBeResent, delaySending, options)
+
+		// ProcessLines won't return until lines is closed
+		go parser.ProcessLines(lines, toBeSent, &parsersWG)
+
+	}
+	// REF won't work this way - ProcessLines needs to be a goroutine that calls done on the waitgroup
+	parsersWG.Wait()
+	for i, _ := range toBeSentChans {
+		// trigger the sending goroutine to finish up
+		close(toBeSentChans[i])
+		// wait for all the events in toBeSent to be handed to libhoney
+		<-doneSendingChans[i]
+	}
 	// tell libhoney to finish up sending events
 	libhoney.Close()
 

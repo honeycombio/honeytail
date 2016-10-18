@@ -5,13 +5,16 @@
 package parsers
 
 import (
+	"sync"
+
 	"github.com/honeycombio/honeytail/event"
 )
 
 type Parser interface {
 	// Init does any initialization necessary for the module
 	Init(options interface{}) error
-	// ProcessLines consumes log lines from the lines channel
-	// and sends log events to the send channel
-	ProcessLines(lines <-chan string, send chan<- event.Event)
+	// ProcessLines consumes log lines from the lines channel and sends log events
+	// to the send channel. It should add itself to the waitgroup and call
+	// wg.Done() when it's finished processing lines
+	ProcessLines(lines <-chan string, send chan<- event.Event, wg *sync.WaitGroup)
 }

@@ -104,13 +104,13 @@ func run(options GlobalOptions) {
 		go handleResponses(responses, toBeResent, delaySending, options)
 
 		parsersWG.Add(1)
-		go func() {
+		go func(plines chan string) {
 			// ProcessLines won't return until lines is closed
-			parser.ProcessLines(lines, toBeSent)
+			parser.ProcessLines(plines, toBeSent)
 			close(toBeSent)
 			<-doneSending
 			parsersWG.Done()
-		}()
+		}(lines)
 	}
 	parsersWG.Wait()
 	// tell libhoney to finish up sending events

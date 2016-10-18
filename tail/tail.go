@@ -12,7 +12,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/Sirupsen/logrus"
@@ -110,32 +109,26 @@ func GetEntries(conf Config) ([]chan string, error) {
 	// } else {
 
 	for _, file := range filenames {
-		lines := make(chan string)
 		// make sure to close lines when the tailer is done; separate wg per file
-		var wg sync.WaitGroup
-		defer func() {
-			go func() {
-				wg.Wait()
-				close(lines)
-			}()
-		}()
-		linesChans = append(linesChans, lines)
+		var lines chan string
 		if file == "-" {
-			tailStdIn(lines, &wg)
-			continue
+			lines = tailStdIn()
+		} else {
+			stateFile := getStateFile(conf, file)
+			tailer, err := getTailer(conf, file, stateFile)
+			if err != nil {
+				return nil, err
+			}
+			lines = tailSingleFile(tailer, file, stateFile)
 		}
-		stateFile := getStateFile(conf, file)
-		tailer, err := getTailer(conf, file, stateFile)
-		if err != nil {
-			return nil, err
-		}
-		tailSingleFile(tailer, file, stateFile, lines, &wg)
+		linesChans = append(linesChans, lines)
 	}
 
 	return linesChans, nil
 }
 
-func tailSingleFile(tailer *tail.Tail, file string, stateFile string, lines chan string, wg *sync.WaitGroup) {
+func tailSingleFile(tailer *tail.Tail, file string, stateFile string) chan string {
+	lines := make(chan string)
 	// TODO report some metric to indicate whether we're keeping up with the
 	// front of the file, of if it's being written faster than we can send
 	// events
@@ -144,7 +137,6 @@ func tailSingleFile(tailer *tail.Tail, file string, stateFile string, lines chan
 	// one last time after stopping reading traffic.
 	go updateStateFile(tailer, stateFile, file)
 
-	wg.Add(1)
 	go func() {
 		for line := range tailer.Lines {
 			if line.Err != nil {
@@ -153,18 +145,17 @@ func tailSingleFile(tailer *tail.Tail, file string, stateFile string, lines chan
 			}
 			lines <- strings.TrimSpace(line.Text)
 		}
-		wg.Done()
+		close(lines)
 	}()
-	return
+	return lines
 }
 
 // tailStdIn is a special case to tail STDIN without any of the
 // fancy stuff that the tail module provides
-func tailStdIn(lines chan string, wg *sync.WaitGroup) error {
+func tailStdIn() chan string {
+	lines := make(chan string)
 	input := bufio.NewReader(os.Stdin)
-	wg.Add(1)
 	go func() {
-		defer wg.Done()
 		for {
 			line, partialLine, err := input.ReadLine()
 			if err != nil {
@@ -180,8 +171,9 @@ func tailStdIn(lines chan string, wg *sync.WaitGroup) error {
 			}
 			lines <- strings.Join(parts, "")
 		}
+		close(lines)
 	}()
-	return nil
+	return lines
 }
 
 // getStartLocation reads the state file and creates an appropriate start

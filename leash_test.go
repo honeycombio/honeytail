@@ -166,6 +166,7 @@ SELECT
 	opts.Reqs.LogFiles = []string{logFile1, logFile2}
 	run(opts)
 	testEquals(t, ts.rsp.reqCounter, 4)
+	// TODO: should actually assert on the contents of the events being logged
 }
 
 func TestSetVersion(t *testing.T) {

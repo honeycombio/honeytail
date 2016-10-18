@@ -58,6 +58,7 @@ func run(options GlobalOptions) {
 		logrus.WithFields(logrus.Fields{"err": err}).Fatal(
 			"Error occurred while trying to tail logfile")
 	}
+	fmt.Printf("lines chans is %d long\n", len(linesChans))
 	// for each channel we got back from tail.GetEntries, spin up a parser.
 	parsersWG := sync.WaitGroup{}
 	for _, lines := range linesChans {
@@ -102,15 +103,14 @@ func run(options GlobalOptions) {
 		responses := libhoney.Responses()
 		go handleResponses(responses, toBeResent, delaySending, options)
 
-		// ProcessLines won't return until lines is closed
+		parsersWG.Add(1)
 		go func() {
-			parsersWG.Add(1)
+			// ProcessLines won't return until lines is closed
 			parser.ProcessLines(lines, toBeSent)
 			close(toBeSent)
 			<-doneSending
 			parsersWG.Done()
 		}()
-
 	}
 	parsersWG.Wait()
 	// tell libhoney to finish up sending events

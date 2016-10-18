@@ -109,10 +109,10 @@ func GetEntries(conf Config) ([]chan string, error) {
 	// 	}()
 	// } else {
 
-	var wg sync.WaitGroup
 	for _, file := range filenames {
 		lines := make(chan string)
-		// make sure to close lines when the tailer is done
+		// make sure to close lines when the tailer is done; separate wg per file
+		var wg sync.WaitGroup
 		defer func() {
 			go func() {
 				wg.Wait()
@@ -135,7 +135,7 @@ func GetEntries(conf Config) ([]chan string, error) {
 	return linesChans, nil
 }
 
-func tailSingleFile(tailer *tail.Tail, file string, stateFile string, lines chan string, wg *sync.WaitGroup) error {
+func tailSingleFile(tailer *tail.Tail, file string, stateFile string, lines chan string, wg *sync.WaitGroup) {
 	// TODO report some metric to indicate whether we're keeping up with the
 	// front of the file, of if it's being written faster than we can send
 	// events
@@ -155,7 +155,7 @@ func tailSingleFile(tailer *tail.Tail, file string, stateFile string, lines chan
 		}
 		wg.Done()
 	}()
-	return nil
+	return
 }
 
 // tailStdIn is a special case to tail STDIN without any of the

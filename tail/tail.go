@@ -82,34 +82,7 @@ func GetEntries(conf Config) ([]chan string, error) {
 
 	// make our lines channel list; we'll get one channel for each file
 	linesChans := make([]chan string, 0, len(filenames))
-	// REFDONE move this within the for for each created channel
-	// var wg sync.WaitGroup
-	// handle reading from STDIN
-	// REFDONE treat stdin just like any other file - move this check into the for loop
-	// if conf.Paths[0] == "-" {
-	// 	return lines, tailStdIn(lines, &wg)
-	// }
-
-	// REF don't need force serial if we have one parser per channel
-	// if conf.ForceSerial {
-	// 	go func() {
-	// 		wg.Add(1)
-	// 		var fileWG sync.WaitGroup
-	// 		for _, file := range filenames {
-	// 			stateFile := getStateFile(conf, file)
-	// 			tailer, err := getTailer(conf, file, stateFile)
-	// 			if err != nil {
-	// 				logrus.WithField("file", file).Fatal("Error occurred while trying to tail logfile")
-	// 			}
-	// 			tailSingleFile(tailer, file, stateFile, lines, &fileWG)
-	// 			fileWG.Wait()
-	// 		}
-	// 		wg.Done()
-	// 	}()
-	// } else {
-
 	for _, file := range filenames {
-		// make sure to close lines when the tailer is done; separate wg per file
 		var lines chan string
 		if file == "-" {
 			lines = tailStdIn()

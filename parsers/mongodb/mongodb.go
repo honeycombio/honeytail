@@ -4,7 +4,6 @@ package mongodb
 import (
 	"errors"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/Sirupsen/logrus"
@@ -66,10 +65,7 @@ func (p *Parser) Init(options interface{}) error {
 	return nil
 }
 
-func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, parentWG *sync.WaitGroup) {
-	// let the caller know when we're done
-	parentWG.Add(1)
-	defer parentWG.Done()
+func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
 	for line := range lines {
 		values, err := p.lineParser.ParseLogLine(line)
 		// we get a bunch of errors from the parser on mongo logs, skip em

@@ -58,11 +58,6 @@ func run(options GlobalOptions) {
 		logrus.WithFields(logrus.Fields{"err": err}).Fatal(
 			"Error occurred while trying to tail logfile")
 	}
-	// collect all sending channels so that when they're all done we can close
-	// libhoney
-	toBeSentChans := make([]chan event.Event, 0, len(linesChans))
-	doneSendingChans := make([]chan bool, 0, len(linesChans))
-
 	// for each channel we got back from tail.GetEntries, spin up a parser.
 	parsersWG := sync.WaitGroup{}
 	for _, lines := range linesChans {
@@ -81,9 +76,7 @@ func run(options GlobalOptions) {
 
 		// create a channel for sending events into libhoney
 		toBeSent := make(chan event.Event)
-		toBeSentChans = append(toBeSentChans, toBeSent)
 		doneSending := make(chan bool)
-		doneSendingChans = append(doneSendingChans, doneSending)
 
 		// two channels to handle backing off when rate limited and resending failed
 		// send attempts that are recoverable
@@ -110,17 +103,16 @@ func run(options GlobalOptions) {
 		go handleResponses(responses, toBeResent, delaySending, options)
 
 		// ProcessLines won't return until lines is closed
-		go parser.ProcessLines(lines, toBeSent, &parsersWG)
+		go func() {
+			parsersWG.Add(1)
+			parser.ProcessLines(lines, toBeSent)
+			close(toBeSent)
+			<-doneSending
+			parsersWG.Done()
+		}()
 
 	}
-	// REF won't work this way - ProcessLines needs to be a goroutine that calls done on the waitgroup
 	parsersWG.Wait()
-	for i, _ := range toBeSentChans {
-		// trigger the sending goroutine to finish up
-		close(toBeSentChans[i])
-		// wait for all the events in toBeSent to be handed to libhoney
-		<-doneSendingChans[i]
-	}
 	// tell libhoney to finish up sending events
 	libhoney.Close()
 

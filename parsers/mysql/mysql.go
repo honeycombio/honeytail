@@ -286,10 +286,7 @@ func getRole(db *sql.DB) (*string, error) {
 	return &res, nil
 }
 
-func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, parentWG *sync.WaitGroup) {
-	// let the caller know when we're done
-	parentWG.Add(1)
-	defer parentWG.Done()
+func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
 	// start up a goroutine to handle grouped sets of lines
 	rawEvents := make(chan []string)
 	var wg sync.WaitGroup

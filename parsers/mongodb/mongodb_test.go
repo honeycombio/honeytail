@@ -2,6 +2,7 @@ package mongodb
 
 import (
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
@@ -287,7 +288,8 @@ func TestProcessLines(t *testing.T) {
 		close(lines)
 	}()
 	// spin up the processor to process our test lines
-	go m.ProcessLines(lines, send)
+	wg := sync.WaitGroup{}
+	go m.ProcessLines(lines, send, &wg)
 	for _, pair := range tlm {
 		ev := <-send
 
@@ -315,6 +317,7 @@ func TestProcessLines(t *testing.T) {
 			}
 		}
 	}
+	wg.Wait()
 }
 
 type FakeNower struct{}

@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/Sirupsen/logrus"
@@ -81,10 +80,7 @@ func (j *JSONLineParser) ParseLine(line string) (map[string]interface{}, error) 
 	return processed, err
 }
 
-func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, parentWG *sync.WaitGroup) {
-	// let the caller know when we're done
-	parentWG.Add(1)
-	defer parentWG.Done()
+func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
 	for line := range lines {
 		logrus.WithFields(logrus.Fields{
 			"line": line,

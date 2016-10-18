@@ -47,9 +47,6 @@ type Config struct {
 	Paths []string
 	// Type of log rotation we expect on this file
 	Type RotateStyle
-	// Force serial processing of log files (necessary for multi-line logs like
-	// MySQL)
-	ForceSerial bool
 	// Tail specific options
 	Options TailOptions
 }

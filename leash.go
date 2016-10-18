@@ -50,10 +50,9 @@ func run(options GlobalOptions) {
 
 	// get our lines channel from which to read log lines
 	linesChans, err := tail.GetEntries(tail.Config{
-		Paths:       options.Reqs.LogFiles,
-		Type:        tail.RotateStyleSyslog,
-		ForceSerial: options.Reqs.ParserName == "mysql",
-		Options:     options.Tail})
+		Paths:   options.Reqs.LogFiles,
+		Type:    tail.RotateStyleSyslog,
+		Options: options.Tail})
 	if err != nil {
 		logrus.WithFields(logrus.Fields{"err": err}).Fatal(
 			"Error occurred while trying to tail logfile")
@@ -107,7 +106,9 @@ func run(options GlobalOptions) {
 		go func(plines chan string) {
 			// ProcessLines won't return until lines is closed
 			parser.ProcessLines(plines, toBeSent)
+			// trigger the sending goroutine to finish up
 			close(toBeSent)
+			// wait for all the events in toBeSent to be handed to libhoney
 			<-doneSending
 			parsersWG.Done()
 		}(lines)

@@ -80,8 +80,35 @@ func TestBasicSend(t *testing.T) {
 	testEquals(t, ts.rsp.reqBody, `{"format":"json"}`)
 	teamID := ts.rsp.req.Header.Get("X-Honeycomb-Team")
 	testEquals(t, teamID, "abcabc123123")
-	request_url := ts.rsp.req.URL.Path
-	testEquals(t, request_url, "/1/events/pika")
+	requestURL := ts.rsp.req.URL.Path
+	testEquals(t, requestURL, "/1/events/pika")
+	sampleRate := ts.rsp.req.Header.Get("X-Honeycomb-Samplerate")
+	testEquals(t, sampleRate, "1")
+}
+
+func TestMultipleFiles(t *testing.T) {
+	opts := defaultOptions
+	ts := &testSetup{}
+	ts.start(t, &opts)
+	defer ts.close()
+	logFile1 := ts.tmpdir + "/first.log"
+	fh1, err := os.Create(logFile1)
+	logFile2 := ts.tmpdir + "/second.log"
+	fh2, err := os.Create(logFile2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer fh1.Close()
+	fmt.Fprintf(fh1, `{"key1":"val1"}`)
+	defer fh2.Close()
+	fmt.Fprintf(fh2, `{"key2":"val2"}`)
+	opts.Reqs.LogFiles = []string{logFile1, logFile2}
+	run(opts)
+	testEquals(t, ts.rsp.reqCounter, 2)
+	teamID := ts.rsp.req.Header.Get("X-Honeycomb-Team")
+	testEquals(t, teamID, "abcabc123123")
+	requestURL := ts.rsp.req.URL.Path
+	testEquals(t, requestURL, "/1/events/pika")
 	sampleRate := ts.rsp.req.Header.Get("X-Honeycomb-Samplerate")
 	testEquals(t, sampleRate, "1")
 }
@@ -246,22 +273,22 @@ func TestSampleRate(t *testing.T) {
 	sampleLogFile := ts.tmpdir + "/sample.log"
 	logfh, _ := os.Create(sampleLogFile)
 	defer logfh.Close()
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < 100; i++ {
 		fmt.Fprintf(logfh, `{"format":"json%d"}`+"\n", i)
 	}
 	opts.Reqs.LogFiles = []string{sampleLogFile}
 	run(opts)
 	// with no sampling, 1000 lines -> 1000 requests
-	testEquals(t, ts.rsp.reqCounter, 1000)
-	testEquals(t, ts.rsp.reqBody, `{"format":"json999"}`)
+	testEquals(t, ts.rsp.reqCounter, 100)
+	testEquals(t, ts.rsp.reqBody, `{"format":"json99"}`)
 	sampleRate := ts.rsp.req.Header.Get("X-Honeycomb-Samplerate")
 	testEquals(t, sampleRate, "1")
 	opts.SampleRate = 20
 	ts.rsp.reset()
 	run(opts)
 	// setting a sample rate of 20 and a rand seed of 1, 49 requests.
-	testEquals(t, ts.rsp.reqCounter, 55)
-	testEquals(t, ts.rsp.reqBody, `{"format":"json978"}`)
+	testEquals(t, ts.rsp.reqCounter, 7)
+	testEquals(t, ts.rsp.reqBody, `{"format":"json98"}`)
 	sampleRate = ts.rsp.req.Header.Get("X-Honeycomb-Samplerate")
 	testEquals(t, sampleRate, "20")
 }

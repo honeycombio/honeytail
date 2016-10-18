@@ -49,9 +49,10 @@ func run(options GlobalOptions) {
 
 	// get our lines channel from which to read log lines
 	lines, err := tail.GetEntries(tail.Config{
-		Paths:   options.Reqs.LogFiles,
-		Type:    tail.RotateStyleSyslog,
-		Options: options.Tail})
+		Paths:       options.Reqs.LogFiles,
+		Type:        tail.RotateStyleSyslog,
+		ForceSerial: options.Reqs.ParserName == "mysql",
+		Options:     options.Tail})
 	if err != nil {
 		logrus.WithFields(logrus.Fields{"err": err}).Fatal(
 			"Error occurred while trying to tail logfile")

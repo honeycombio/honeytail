@@ -49,6 +49,9 @@ type Config struct {
 	Paths []string
 	// Type of log rotation we expect on this file
 	Type RotateStyle
+	// Force serial processing of log files (necessary for multi-line logs like
+	// MySQL)
+	ForceSerial bool
 	// Tail specific options
 	Options TailOptions
 }
@@ -114,9 +117,42 @@ func GetEntries(conf Config) (chan string, error) {
 	if conf.Paths[0] == "-" {
 		return lines, tailStdIn(lines, &wg)
 	}
+	var filenames []string
 	for _, filePath := range conf.Paths {
-		if err := tailMultipleFiles(conf, filePath, lines, &wg); err != nil {
+		files, err := filepath.Glob(filePath)
+		if err != nil {
 			return nil, err
+		}
+		filenames = append(filenames, files...)
+	}
+	if len(filenames) > 1 {
+		// when tailing multiple files, force the default statefile use
+		conf.Options.StateFile = ""
+	}
+
+	if conf.ForceSerial {
+		go func() {
+			wg.Add(1)
+			var fileWG sync.WaitGroup
+			for _, file := range filenames {
+				stateFile := getStateFile(conf, file)
+				tailer, err := getTailer(conf, file, stateFile)
+				if err != nil {
+					logrus.WithField("file", file).Fatal("Error occurred while trying to tail logfile")
+				}
+				tailSingleFile(tailer, file, stateFile, lines, &fileWG)
+				fileWG.Wait()
+			}
+			wg.Done()
+		}()
+	} else {
+		for _, file := range filenames {
+			stateFile := getStateFile(conf, file)
+			tailer, err := getTailer(conf, file, stateFile)
+			if err != nil {
+				return nil, err
+			}
+			tailSingleFile(tailer, file, stateFile, lines, &wg)
 		}
 	}
 	// close lines when all processors are done
@@ -124,82 +160,18 @@ func GetEntries(conf Config) (chan string, error) {
 	return lines, nil
 }
 
-func tailMultipleFiles(conf Config, filePath string, lines chan string, wg *sync.WaitGroup) error {
-	files, err := filepath.Glob(filePath)
-	if err != nil {
-		return err
-	}
-	if len(files) > 1 {
-		// when tailing multiple files, force the default statefile use
-		conf.Options.StateFile = ""
-	}
-	for _, file := range files {
-		var realStateFile string
-		if conf.Options.StateFile == "" {
-			baseName := strings.TrimSuffix(file, ".log")
-			realStateFile = baseName + ".leash.state"
-		} else {
-			realStateFile = conf.Options.StateFile
-		}
-		if err := tailSingleFile(conf, file, realStateFile, lines, wg); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func tailSingleFile(conf Config, file string, stateFile string, lines chan string, wg *sync.WaitGroup) error {
+func tailSingleFile(tailer *tail.Tail, file string, stateFile string, lines chan string, wg *sync.WaitGroup) error {
 	// TODO report some metric to indicate whether we're keeping up with the
 	// front of the file, of if it's being written faster than we can send
 	// events
 
-	// tail a real file
-	var loc *tail.SeekInfo // 0 value means start at beginning
-	var reOpen, follow bool = true, true
-	switch conf.Options.ReadFrom {
-	case "start", "beginning":
-		// 0 value for tail.SeekInfo means start at beginning
-	case "end":
-		loc = &tail.SeekInfo{
-			Offset: 0,
-			Whence: 2,
-		}
-	case "last":
-		loc = getStartLocation(stateFile, file)
-	default:
-		errMsg := fmt.Sprintf("unknown option to --read_from: %s",
-			conf.Options.ReadFrom)
-		return errors.New(errMsg)
-	}
-	if conf.Options.Stop {
-		reOpen = false
-		follow = false
-	}
-	tailConf := tail.Config{
-		Location:  loc,
-		ReOpen:    reOpen, // keep reading on rotation, aka tail -F
-		MustExist: true,   // fail if log file doesn't exist
-		Follow:    follow, // don't stop at EOF, aka tail -f
-		Logger:    tail.DiscardingLogger,
-		Poll:      conf.Options.Poll, // use poll instead of inotify
-	}
-	logrus.WithFields(logrus.Fields{
-		"tailConf":  tailConf,
-		"conf":      conf,
-		"statefile": stateFile,
-		"location":  loc,
-	}).Debug("about to call tail.TailFile")
-	t, err := tail.TailFile(file, tailConf)
-	logrus.WithFields(logrus.Fields{"tail": t}).Debug("finished call to TailFile")
-	if err != nil {
-		return err
-	}
 	// TODO this only updates once/sec. On clean shutdown, make sure we write
 	// one last time after stopping reading traffic.
-	go updateStateFile(t, stateFile, file)
+	go updateStateFile(tailer, stateFile, file)
+
 	wg.Add(1)
 	go func() {
-		for line := range t.Lines {
+		for line := range tailer.Lines {
 			if line.Err != nil {
 				// skip errored lines
 				continue
@@ -292,6 +264,57 @@ func getStartLocation(stateFile string, logfile string) *tail.SeekInfo {
 		Offset: state.Offset,
 		Whence: 0,
 	}
+}
+
+// getTailer configures the *tail.Tail correctly to begin actually tailing the
+// specified file.
+func getTailer(conf Config, file string, stateFile string) (*tail.Tail, error) {
+	// tail a real file
+	var loc *tail.SeekInfo // 0 value means start at beginning
+	var reOpen, follow bool = true, true
+	switch conf.Options.ReadFrom {
+	case "start", "beginning":
+		// 0 value for tail.SeekInfo means start at beginning
+	case "end":
+		loc = &tail.SeekInfo{
+			Offset: 0,
+			Whence: 2,
+		}
+	case "last":
+		loc = getStartLocation(stateFile, file)
+	default:
+		errMsg := fmt.Sprintf("unknown option to --read_from: %s",
+			conf.Options.ReadFrom)
+		return nil, errors.New(errMsg)
+	}
+	if conf.Options.Stop {
+		reOpen = false
+		follow = false
+	}
+	tailConf := tail.Config{
+		Location:  loc,
+		ReOpen:    reOpen, // keep reading on rotation, aka tail -F
+		MustExist: true,   // fail if log file doesn't exist
+		Follow:    follow, // don't stop at EOF, aka tail -f
+		Logger:    tail.DiscardingLogger,
+		Poll:      conf.Options.Poll, // use poll instead of inotify
+	}
+	logrus.WithFields(logrus.Fields{
+		"tailConf":  tailConf,
+		"conf":      conf,
+		"statefile": stateFile,
+		"location":  loc,
+	}).Debug("about to call tail.TailFile")
+	return tail.TailFile(file, tailConf)
+}
+
+// getStateFile returns the filename to use to track honeytail state. If
+// provided in the Config, uses the provided value instead.
+func getStateFile(conf Config, filename string) string {
+	if conf.Options.StateFile != "" {
+		return conf.Options.StateFile
+	}
+	return strings.TrimSuffix(filename, ".log") + ".leash.state"
 }
 
 // updateStateFile updates the state file once per second with the current

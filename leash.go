@@ -58,7 +58,7 @@ func run(options GlobalOptions) {
 		logrus.WithFields(logrus.Fields{"err": err}).Fatal(
 			"Error occurred while trying to tail logfile")
 	}
-	fmt.Printf("lines chans is %d long\n", len(linesChans))
+
 	// for each channel we got back from tail.GetEntries, spin up a parser.
 	parsersWG := sync.WaitGroup{}
 	for _, lines := range linesChans {

@@ -110,6 +110,10 @@ var (
 	reSetTime          = myRegexp{regexp.MustCompile("^SET timestamp=(?P<unixTime>[0-9]+);$")}
 	reQuery            = myRegexp{regexp.MustCompile("^(?P<query>[^#]*).*$")}
 	reUse              = myRegexp{regexp.MustCompile("^(?i)use ")}
+
+	reMySQLVersion       = myRegexp{regexp.MustCompile(".*, Version: .* .*MySQL Community Server.*")}
+	reMySQLPortSock      = myRegexp{regexp.MustCompile("Tcp port:.* Unix socket:.*")}
+	reMySQLColumnHeaders = myRegexp{regexp.MustCompile("Time.*Id.*Command.*Argument.*")}
 )
 
 const timeFormat = "2006-01-02T15:04:05.000000"
@@ -286,6 +290,12 @@ func getRole(db *sql.DB) (*string, error) {
 	return &res, nil
 }
 
+func isMySQLHeaderLine(line string) bool {
+	return reMySQLVersion.MatchString(line) ||
+		reMySQLPortSock.MatchString(line) ||
+		reMySQLColumnHeaders.MatchString(line)
+}
+
 func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
 	// start up a goroutine to handle grouped sets of lines
 	rawEvents := make(chan []string)
@@ -300,7 +310,7 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
 	groupedLines := make([]string, 0, 5)
 	for line := range lines {
 		lineIsComment := strings.HasPrefix(line, "# ")
-		if !lineIsComment {
+		if !lineIsComment && !isMySQLHeaderLine(line) {
 			// we've finished the comments before the statement and now should slurp
 			// lines until the next comment
 			foundStatement = true
@@ -463,6 +473,8 @@ func (p *Parser) handleEvent(rawE []string) (map[string]interface{}, time.Time) 
 		} else if mg := reSetTime.FindStringSubmatchMap(line); mg != nil {
 			query = ""
 			timeFromSet, _ = strconv.ParseInt(mg["unixTime"], 10, 64)
+		} else if isMySQLHeaderLine(line) {
+			// ignore and skip the header lines
 		} else if mg := reQuery.FindStringSubmatchMap(line); mg != nil {
 			query = query + " " + mg["query"]
 			if strings.HasSuffix(query, ";") {

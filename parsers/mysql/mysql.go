@@ -111,7 +111,11 @@ var (
 	reQuery            = myRegexp{regexp.MustCompile("^(?P<query>[^#]*).*$")}
 	reUse              = myRegexp{regexp.MustCompile("^(?i)use ")}
 
-	reMySQLVersion       = myRegexp{regexp.MustCompile(".*, Version: .* .*MySQL Community Server.*")}
+	// if 'flush logs' is run at the mysql prompt (which rds commonly does, apparently) the following shows up in slow query log:
+	//   /usr/local/Cellar/mysql/5.7.12/bin/mysqld, Version: 5.7.12 (Homebrew). started with:
+	//   Tcp port: 3306  Unix socket: /tmp/mysql.sock
+	//   Time                 Id Command    Argument
+	reMySQLVersion       = myRegexp{regexp.MustCompile("/.*, Version: .* .*MySQL Community Server.*")}
 	reMySQLPortSock      = myRegexp{regexp.MustCompile("Tcp port:.* Unix socket:.*")}
 	reMySQLColumnHeaders = myRegexp{regexp.MustCompile("Time.*Id.*Command.*Argument.*")}
 )
@@ -291,9 +295,10 @@ func getRole(db *sql.DB) (*string, error) {
 }
 
 func isMySQLHeaderLine(line string) bool {
-	return reMySQLVersion.MatchString(line) ||
-		reMySQLPortSock.MatchString(line) ||
-		reMySQLColumnHeaders.MatchString(line)
+	first := line[0]
+	return (first == '/' && reMySQLVersion.MatchString(line)) ||
+		(first == 'T' && reMySQLPortSock.MatchString(line)) ||
+		(first == 'T' && reMySQLColumnHeaders.MatchString(line))
 }
 
 func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {

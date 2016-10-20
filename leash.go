@@ -242,6 +242,18 @@ func requestShape(field string, toBeSent chan event.Event, options GlobalOptions
 		}
 		pr.Patterns = append(pr.Patterns, &pat)
 	}
+	// define local inclusion test so options are in scope
+	shouldIncludeQueryKey := func(key string) bool {
+		if options.RequestParseQuery == "all" {
+			return true
+		}
+		for _, whiteKey := range options.RequestQueryKeys {
+			if key == whiteKey {
+				return true
+			}
+		}
+		return false
+	}
 	go func() {
 		for ev := range toBeSent {
 			if val, ok := ev.Data[field]; ok {
@@ -268,14 +280,14 @@ func requestShape(field string, toBeSent chan event.Event, options GlobalOptions
 				ev.Data[prefix+field+"_path"] = res.Path
 				ev.Data[prefix+field+"_query"] = res.Query
 				for k, v := range res.QueryFields {
-					if len(v) == 0 {
-						ev.Data[prefix+field+"_query_"+k] = ""
-					} else if len(v) == 1 {
-						ev.Data[prefix+field+"_query_"+k] = v[0]
-					} else {
-						sort.Strings(v)
-						ev.Data[prefix+field+"_query_"+k] = strings.Join(v, ", ")
+					// only include the keys we want
+					if !shouldIncludeQueryKey(k) {
+						continue
 					}
+					if len(v) > 1 {
+						sort.Strings(v)
+					}
+					ev.Data[prefix+field+"_query_"+k] = strings.Join(v, ", ")
 				}
 				for k, v := range res.PathFields {
 					ev.Data[prefix+field+"_path_"+k] = v[0]

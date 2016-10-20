@@ -242,18 +242,6 @@ func requestShape(field string, toBeSent chan event.Event, options GlobalOptions
 		}
 		pr.Patterns = append(pr.Patterns, &pat)
 	}
-	// define local inclusion test so options are in scope
-	shouldIncludeQueryKey := func(key string) bool {
-		if options.RequestParseQuery == "all" {
-			return true
-		}
-		for _, whiteKey := range options.RequestQueryKeys {
-			if key == whiteKey {
-				return true
-			}
-		}
-		return false
-	}
 	go func() {
 		for ev := range toBeSent {
 			if val, ok := ev.Data[field]; ok {
@@ -281,13 +269,13 @@ func requestShape(field string, toBeSent chan event.Event, options GlobalOptions
 				ev.Data[prefix+field+"_query"] = res.Query
 				for k, v := range res.QueryFields {
 					// only include the keys we want
-					if !shouldIncludeQueryKey(k) {
-						continue
+					if options.RequestParseQuery == "all" ||
+						whitelistKey(options.RequestQueryKeys, k) {
+						if len(v) > 1 {
+							sort.Strings(v)
+						}
+						ev.Data[prefix+field+"_query_"+k] = strings.Join(v, ", ")
 					}
-					if len(v) > 1 {
-						sort.Strings(v)
-					}
-					ev.Data[prefix+field+"_query_"+k] = strings.Join(v, ", ")
 				}
 				for k, v := range res.PathFields {
 					ev.Data[prefix+field+"_path_"+k] = v[0]
@@ -299,6 +287,16 @@ func requestShape(field string, toBeSent chan event.Event, options GlobalOptions
 		close(newSent)
 	}()
 	return newSent
+}
+
+// return true if the key is in the whitelist
+func whitelistKey(whiteKeys []string, key string) bool {
+	for _, whiteKey := range whiteKeys {
+		if key == whiteKey {
+			return true
+		}
+	}
+	return false
 }
 
 // sendToLibhoney reads from the toBeSent channel and shoves the events into

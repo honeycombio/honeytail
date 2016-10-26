@@ -38,11 +38,11 @@ var (
 	OSX_3_2_9_AGGREGATE_TIME, _    = time.Parse(iso8601LocalTimeFormat, "2016-09-14T14:46:13.879-0700")
 	NESTED_QUOTES_TIME, _          = time.Parse(iso8601LocalTimeFormat, "2016-09-20T14:55:06.189-0400")
 	UBUNTU_3_0_KILLCURSORS_TIME, _ = time.Parse(iso8601LocalTimeFormat, "2016-09-20T14:55:06.189-0400")
-	MONGO_3_4_QUERY_TIME, _        = time.Parse(iso8601LocalTimeFormat, "2016-10-20T22:27:54.585+0000")
+	MONGO_3_4_QUERY_TIME, _        = time.Parse(iso8601LocalTimeFormat, "2016-10-20T22:27:54.580+0000")
 	MONGO_3_4_GETMORE_TIME, _      = time.Parse(iso8601LocalTimeFormat, "2016-10-20T22:28:01.785+0000")
-	MONGO_3_4_INIT_TIME, _         = time.Parse(iso8601LocalTimeFormat, "2016-10-20T21:13:03.297+0000")
-	MONGO_3_4_INDEX_TIME, _        = time.Parse(iso8601LocalTimeFormat, "2016-10-20T22:27:59.510+0000")
-	MONGO_3_4_SHARDING_TIME, _     = time.Parse(iso8601LocalTimeFormat, "2016-10-20T22:27:59.525+0000")
+	MONGO_3_4_INIT_TIME, _         = time.Parse(iso8601LocalTimeFormat, "2016-10-20T21:13:03.294+0000")
+	MONGO_3_4_INDEX_TIME, _        = time.Parse(iso8601LocalTimeFormat, "2016-10-20T22:27:59.508+0000")
+	MONGO_3_4_SHARDING_TIME, _     = time.Parse(iso8601LocalTimeFormat, "2016-10-20T22:27:59.516+0000")
 )
 
 type processed struct {
@@ -302,6 +302,7 @@ func TestProcessLines(t *testing.T) {
 				includeData: map[string]interface{}{
 					"duration_ms":  1061.0,
 					"component":    "COMMAND",
+					"command_type": "findAndModify",
 					"keysInserted": 3.0,
 				},
 				excludeKeys: []string{},
@@ -314,7 +315,7 @@ func TestProcessLines(t *testing.T) {
 				includeData: map[string]interface{}{
 					"duration_ms":  120.0,
 					"component":    "COMMAND",
-					"command":      "getMore",
+					"command_type": "getMore",
 					"collection":   "TestColl",
 					"docsExamined": 59899.0,
 				},
@@ -347,12 +348,15 @@ func TestProcessLines(t *testing.T) {
 			expected: processed{
 				time: MONGO_3_4_SHARDING_TIME,
 				includeData: map[string]interface{}{
-					"component":  "SHARDING",
-					"context":    "conn1",
-					"namespace":  "TestDB.TestColl",
-					"database":   "TestDB",
-					"collection": "TestColl",
-					"primary":    "shard0000:ip-10-69-189-27:23760",
+					"component":           "SHARDING",
+					"context":             "conn1",
+					"namespace":           "TestDB.TestColl",
+					"database":            "TestDB",
+					"collection":          "TestColl",
+					"sharding_collection": "changelog",
+					"changelog_primary":   "shard0000:ip-10-69-189-27:23760",
+					"changelog_what":      "shardCollection.start",
+					"changelog_changeid":  "ip-10-69-189-27-2016-10-20T22:27:59.516+0000-580944efeaec999c2d8e0d58",
 				},
 				excludeKeys: []string{},
 			},

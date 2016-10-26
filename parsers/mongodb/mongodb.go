@@ -26,6 +26,15 @@ const (
 	collectionFieldName  = "collection"
 	locksFieldName       = "locks"
 	locksMicrosFieldName = "locks(micros)"
+
+	shardingChangelogFieldName   = "sharding_changelog"
+	changelogWhatFieldName       = "changelog_what"
+	changelogChangeIDFieldName   = "changelog_changeid"
+	changelogPrimaryFieldName    = "changelog_primary"
+	changelogServerFieldName     = "changelog_server"
+	changelogClientAddrFieldName = "changelog_client_addr"
+	changelogTimeFieldName       = "changelog_time"
+	changelogDetailsFieldName    = "changelog_details"
 )
 
 var timestampFormats = []string{
@@ -73,6 +82,10 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
 			timestamp, err := p.parseTimestamp(values)
 			if err != nil {
 				logFailure(line, err, "couldn't parse logline timestamp, skipping")
+				continue
+			}
+			if err = p.decomposeSharding(values); err != nil {
+				logFailure(line, err, "couldn't decompose sharding changelog, skipping")
 				continue
 			}
 			if err = p.decomposeNamespace(values); err != nil {
@@ -158,6 +171,45 @@ func (p *Parser) parseTimestamp(values map[string]interface{}) (time.Time, error
 	}
 
 	return time.Time{}, errors.New("timestamp missing from logline")
+}
+
+func (p *Parser) decomposeSharding(values map[string]interface{}) error {
+	clValue, ok := values[shardingChangelogFieldName]
+	if !ok {
+		return nil
+	}
+	clMap, ok := clValue.(map[string]interface{})
+	if !ok {
+		return nil
+	}
+
+	var val interface{}
+	if val, ok = clMap["ns"]; ok {
+		values[namespaceFieldName] = val
+	}
+	if val, ok = clMap["_id"]; ok {
+		values[changelogChangeIDFieldName] = val
+	}
+	if val, ok = clMap["server"]; ok {
+		values[changelogServerFieldName] = val
+	}
+	if val, ok = clMap["clientAddr"]; ok {
+		values[changelogClientAddrFieldName] = val
+	}
+	if val, ok = clMap["time"]; ok {
+		values[changelogTimeFieldName] = val
+	}
+	if val, ok = clMap["what"]; ok {
+		values[changelogWhatFieldName] = val
+	}
+	detailsMap, ok := clMap["details"].(map[string]interface{})
+	if ok {
+		values[changelogDetailsFieldName] = detailsMap
+		values[changelogPrimaryFieldName] = detailsMap["primary"]
+	}
+
+	delete(values, shardingChangelogFieldName)
+	return nil
 }
 
 func (p *Parser) decomposeNamespace(values map[string]interface{}) error {

@@ -300,10 +300,11 @@ func TestProcessLines(t *testing.T) {
 			expected: processed{
 				time: MONGO_3_4_QUERY_TIME,
 				includeData: map[string]interface{}{
-					"duration_ms":  1061.0,
-					"component":    "COMMAND",
-					"command_type": "findAndModify",
-					"keysInserted": 3.0,
+					"duration_ms":      1061.0,
+					"component":        "COMMAND",
+					"command_type":     "findAndModify",
+					"keysInserted":     3.0,
+					"normalized_query": `{ "_id": 1, "state": 1 }`,
 				},
 				excludeKeys: []string{},
 			},

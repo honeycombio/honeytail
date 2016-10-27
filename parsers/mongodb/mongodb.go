@@ -101,6 +101,8 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
 				continue
 			}
 
+			p.getCommandQuery(values)
+
 			if q, ok := values["query"].(map[string]interface{}); ok {
 				if _, ok = values["normalized_query"]; !ok {
 					// also calculate the query_shape if we can
@@ -295,6 +297,32 @@ func (p *Parser) decomposeLocksMicros(values map[string]interface{}) error {
 	}
 	delete(values, locksMicrosFieldName)
 	return nil
+}
+
+func (p *Parser) getCommandQuery(values map[string]interface{}) {
+	if commandType, ok := values["command_type"]; ok {
+		if cmd, ok := values["command"].(map[string]interface{}); ok {
+			switch commandType {
+			// XXX 'delete' and 'update' both have queries, but they can have many.
+			case "find":
+				q, ok := cmd["filter"].(map[string]interface{})
+				if ok {
+					// skip the $where queries, since those are
+					// strings with embedded javascript expressions
+					if _, ok = q["$where"]; !ok {
+						values["query"] = q
+					}
+				}
+				break
+			case "findAndModify":
+				q, ok := cmd["query"]
+				if ok {
+					values["query"] = q
+				}
+				break
+			}
+		}
+	}
 }
 
 func logFailure(line string, err error, msg string) {

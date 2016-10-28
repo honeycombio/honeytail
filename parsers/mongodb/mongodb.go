@@ -303,7 +303,6 @@ func (p *Parser) getCommandQuery(values map[string]interface{}) {
 	if commandType, ok := values["command_type"]; ok {
 		if cmd, ok := values["command"].(map[string]interface{}); ok {
 			switch commandType {
-			// XXX 'delete' and 'update' both have queries, but they can have many.
 			case "find":
 				q, ok := cmd["filter"].(map[string]interface{})
 				if ok {
@@ -320,7 +319,65 @@ func (p *Parser) getCommandQuery(values map[string]interface{}) {
 					values["query"] = q
 				}
 				break
+			case "update":
+				// update is special in that each update log can contain multiple update statements.
+				// we build up a synthetic query that includes the entirety of the update list (with
+				// modifications so that the normalizer will include more info.)
+				updates, ok := cmd["updates"].([]interface{})
+				if ok {
+					fakeQuery := make(map[string]interface{})
+					var newUpdates []interface{}
+					for _, _update := range updates {
+						update, ok := _update.(map[string]interface{})
+						if !ok {
+							continue
+						}
+
+						newU := make(map[string]interface{})
+						if q, ok := update["q"]; ok {
+							newU["$query"] = q
+						}
+						if u, ok := update["u"]; ok {
+							newU["$update"] = u
+						}
+						if setOnInsert, ok := update["$setOnInsert"]; ok {
+							newU["$setOnInsert"] = setOnInsert
+						}
+
+						newUpdates = append(newUpdates, newU)
+					}
+					fakeQuery["updates"] = newUpdates
+					values["query"] = fakeQuery
+				}
+				break
+			case "delete":
+				// same treatment as with update above
+				deletes, ok := cmd["deletes"].([]interface{})
+				if ok {
+					fakeQuery := make(map[string]interface{})
+					var newDeletes []interface{}
+					for _, _del := range deletes {
+						del, ok := _del.(map[string]interface{})
+						if !ok {
+							continue
+						}
+
+						newD := make(map[string]interface{})
+						if q, ok := del["q"]; ok {
+							newD["$query"] = q
+						}
+						if lim, ok := del["limit"]; ok {
+							newD["$limit"] = lim
+						}
+
+						newDeletes = append(newDeletes, newD)
+					}
+					fakeQuery["deletes"] = newDeletes
+					values["query"] = fakeQuery
+				}
+				break
 			}
+
 		}
 	}
 }

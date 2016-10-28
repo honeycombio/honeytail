@@ -25,7 +25,9 @@ const (
 	MONGO_3_4_INIT         = `2016-10-20T21:13:03.294+0000 I CONTROL [initandlisten] options: { net: { port: 23511 }, nopreallocj: true, replication: { oplogSizeMB: 40, replSet: "test-configRS" }, setParameter: { enableTestCommands: "1", logComponentVerbosity: "{tracking:1}", numInitialSyncAttempts: "1", numInitialSyncConnectAttempts: "60", writePeriodicNoops: "false" }, sharding: { clusterRole: "configsvr" }, storage: { dbPath: "/data/db/job14/mongorunner/test-configRS-0", engine: "wiredTiger", journal: { enabled: true }, mmapv1: { preallocDataFiles: false, smallFiles: true }, wiredTiger: { engineConfig: { cacheSizeGB: 1.0 } } }}`
 	MONGO_3_4_INDEX        = `2016-10-20T22:27:59.508+0000 I INDEX    [conn5] build index on: TestDB.TestColl properties: { v: 2, key: { Counter: 1.0 }, name: "Counter_1", ns: "TestDB.TestColl" }`
 	MONGO_3_4_SHARDING     = `2016-10-20T22:27:59.516+0000 I SHARDING [conn1] about to log metadata event into changelog: { _id: "ip-10-69-189-27-2016-10-20T22:27:59.516+0000-580944efeaec999c2d8e0d58", server: "ip-10-69-189-27", clientAddr: "127.0.0.1:35756", time: new Date(1477002479516), what: "shardCollection.start", ns: "TestDB.TestColl", details: { shardKey: { Counter: 1.0 }, collection: "TestDB.TestColl", primary: "shard0000:ip-10-69-189-27:23760", initShards: [], numChunks: 1 } }`
+	UPDATE_SIMPLE_COMMAND  = `Tue Sep 13 21:10:33.961 I COMMAND  [conn11896572] command data.$cmd command: update { update: "currentMood", updates: [ { q: { mood: "bright" }, u: { $set: { mood: "dark" } } } ], writeConcern: { getLastError: 1, w: 1 }, ordered: true } keyUpdates:0 writeConflicts:0 numYields:0 reslen:95 locks:{ Global: { acquireCount: { r: 1, w: 1 } }, Database: { acquireCount: { w: 1 } }, Collection: { acquireCount: { w: 1 } } } user_key_comparison_count:466 block_cache_hit_count:10 block_read_count:0 block_read_byte:0 internal_key_skipped_count:17 internal_delete_skipped_count:0 get_from_memtable_count:0 seek_on_memtable_count:2 seek_child_seek_count:12 0ms`
 	UPDATE_COMMAND         = `Tue Sep 13 21:10:33.961 I COMMAND  [conn11896572] command data.$cmd command: update { update: "avengers", updates: [ { q: { hulkForm: "Bruce Banner" }, u: { $set: { hulkForm: "Big Green" }, $setOnInsert: { hulkForm: "Big Green" } }, upsert: true } ], writeConcern: { getLastError: 1, w: 1 }, ordered: true } keyUpdates:0 writeConflicts:0 numYields:0 reslen:95 locks:{ Global: { acquireCount: { r: 1, w: 1 } }, Database: { acquireCount: { w: 1 } }, Collection: { acquireCount: { w: 1 } } } user_key_comparison_count:466 block_cache_hit_count:10 block_read_count:0 block_read_byte:0 internal_key_skipped_count:17 internal_delete_skipped_count:0 get_from_memtable_count:0 seek_on_memtable_count:2 seek_child_seek_count:12 0ms`
+	DELETE_SIMPLE_COMMAND  = `Tue Sep 13 21:10:33.961 I COMMAND  [conn11974626] command appdata387.$cmd command: delete { delete: "currentMood", deletes: [ { q: { mood: "bright" } } ], writeConcern: { getLastError: 1, w: 1 } } keyUpdates:0 writeConflicts:0 numYields:0 reslen:80 locks:{ Global: { acquireCount: { r: 1, w: 1 } }, Database: { acquireCount: { w: 1 } }, Collection: { acquireCount: { w: 1 } } } user_key_comparison_count:392 block_cache_hit_count:10 block_read_count:0 block_read_byte:0 internal_key_skipped_count:0 internal_delete_skipped_count:0 get_from_memtable_count:0 seek_on_memtable_count:2 seek_child_seek_count:12 0ms`
 	DELETE_COMMAND         = `Tue Sep 13 21:10:33.961 I COMMAND  [conn11974626] command appdata387.$cmd command: delete { delete: "avengerMembers", deletes: [ { q: { hulkForm: "Big Green", issue: { $ne: 4 } }, limit: 1 } ], writeConcern: { getLastError: 1, w: 1 } } keyUpdates:0 writeConflicts:0 numYields:0 reslen:80 locks:{ Global: { acquireCount: { r: 1, w: 1 } }, Database: { acquireCount: { w: 1 } }, Collection: { acquireCount: { w: 1 } } } user_key_comparison_count:392 block_cache_hit_count:10 block_read_count:0 block_read_byte:0 internal_key_skipped_count:0 internal_delete_skipped_count:0 get_from_memtable_count:0 seek_on_memtable_count:2 seek_child_seek_count:12 0ms`
 )
 
@@ -367,11 +369,31 @@ func TestProcessLines(t *testing.T) {
 			},
 		},
 		{
+			line: UPDATE_SIMPLE_COMMAND,
+			expected: processed{
+				time: UPDATE_COMMAND_TIME.AddDate(nower.Now().Year(), 0, 0),
+				includeData: map[string]interface{}{
+					"normalized_query": `{ "updates": [ { "$query": { "mood": 1 }, "$update": { "$set": { "mood": 1 } } } ] }`,
+				},
+				excludeKeys: []string{},
+			},
+		},
+		{
 			line: UPDATE_COMMAND,
 			expected: processed{
 				time: UPDATE_COMMAND_TIME.AddDate(nower.Now().Year(), 0, 0),
 				includeData: map[string]interface{}{
 					"normalized_query": `{ "updates": [ { "$query": { "hulkForm": 1 }, "$update": { "$set": { "hulkForm": 1 }, "$setOnInsert": { "hulkForm": 1 } } } ] }`,
+				},
+				excludeKeys: []string{},
+			},
+		},
+		{
+			line: DELETE_SIMPLE_COMMAND,
+			expected: processed{
+				time: DELETE_COMMAND_TIME.AddDate(nower.Now().Year(), 0, 0),
+				includeData: map[string]interface{}{
+					"normalized_query": `{ "deletes": [ { "$query": { "mood": 1 } } ] }`,
 				},
 				excludeKeys: []string{},
 			},

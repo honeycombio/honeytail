@@ -6,7 +6,6 @@ import (
 	"strings"
 	"strconv"
 	"time"
-	"fmt"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/honeycombio/honeytail/event"
@@ -93,7 +92,6 @@ func (m *ArangoLineParser) ParseLogLine(line string) (values map[string]interfac
 	// there are two types, one is a DEBUG line (could be switched off) containing
 	// the request body, the other is the INFO line marking the end of the 
 	// request.
-	fmt.Printf("Parser called with line:%s\n", line)
 	var v = make(map[string]interface{})
 	err = errors.New("Line is not a request log line.")
 	var abort bool
@@ -135,7 +133,6 @@ func (m *ArangoLineParser) ParseLogLine(line string) (values map[string]interfac
 		v[fullURLFieldName] = removeQuotes(fields[8])
 		v[totalTimeFieldName], _ = strconv.ParseFloat(fields[9], 64)
   }
-	fmt.Print("Parser done:", v)
   return v, nil
 }
 

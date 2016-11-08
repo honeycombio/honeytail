@@ -24,6 +24,8 @@ import (
 // hny is a logfile / tailer / parser combo for concentrating stats info into
 // one place
 type hny struct {
+	parser parsers.Parser
+	tailer *tail.Tailer
 	rStats *responseStats
 }
 
@@ -55,7 +57,7 @@ func run(options GlobalOptions) {
 	}
 
 	// get our lines channel from which to read log lines
-	linesChans, err := tail.GetEntries(tail.Config{
+	tailers, err := tail.GetEntries(tail.Config{
 		Paths:   options.Reqs.LogFiles,
 		Type:    tail.RotateStyleSyslog,
 		Options: options.Tail})
@@ -63,11 +65,11 @@ func run(options GlobalOptions) {
 		logrus.WithFields(logrus.Fields{"err": err}).Fatal(
 			"Error occurred while trying to tail logfile")
 	}
-	hnys := make([]*hny, 0, len(linesChans))
+	hnys := make([]*hny, 0, len(tailers))
 
 	// for each channel we got back from tail.GetEntries, spin up a parser.
 	parsersWG := sync.WaitGroup{}
-	for _, lines := range linesChans {
+	for _, tailer := range tailers {
 		// get our parser
 		parser, opts := getParserAndOptions(options)
 		if parser == nil {
@@ -109,22 +111,24 @@ func run(options GlobalOptions) {
 		responses := libhoney.Responses()
 		stats := newResponseStats()
 		go handleResponses(responses, toBeResent, delaySending, stats, options)
-		go logStats(stats, options.StatusInterval)
 
 		parsersWG.Add(1)
-		go func(plines chan string) {
+		go func(pTailer *tail.Tailer) {
 			// ProcessLines won't return until lines is closed
-			parser.ProcessLines(plines, toBeSent)
+			parser.ProcessLines(pTailer.Lines, toBeSent)
 			// trigger the sending goroutine to finish up
 			close(toBeSent)
 			// wait for all the events in toBeSent to be handed to libhoney
 			<-doneSending
 			parsersWG.Done()
-		}(lines)
+		}(tailer)
 		hny := &hny{
+			parser: parser,
+			tailer: tailer,
 			rStats: stats,
 		}
 		hnys = append(hnys, hny)
+		go logStats(hny, options.StatusInterval)
 	}
 	parsersWG.Wait()
 	// tell libhoney to finish up sending events
@@ -133,6 +137,7 @@ func run(options GlobalOptions) {
 	// print one last set of stats for good measure. especially useful for clarity
 	// when exiting early
 	for _, hny := range hnys {
+		hny.tailer.LogStats()
 		hny.rStats.logAndReset()
 	}
 
@@ -401,7 +406,8 @@ func handleResponses(responses chan libhoney.Response,
 }
 
 // logStats dumps and resets the stats once every minute
-func logStats(stats *responseStats, interval uint) {
+// func logStats(stats *responseStats, interval uint) {
+func logStats(hny *hny, interval uint) {
 	logrus.Debugf("Initializing stats reporting. Will print stats once/%d seconds", interval)
 	if interval == 0 {
 		// interval of 0 means don't print summary status
@@ -409,6 +415,7 @@ func logStats(stats *responseStats, interval uint) {
 	}
 	ticker := time.NewTicker(time.Second * time.Duration(interval))
 	for range ticker.C {
-		stats.logAndReset()
+		hny.tailer.LogStats()
+		hny.rStats.logAndReset()
 	}
 }

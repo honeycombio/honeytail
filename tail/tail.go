@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Sirupsen/logrus"
@@ -53,13 +54,43 @@ type Config struct {
 
 // State is what's stored in a statefile
 type State struct {
-	INode  uint64 // the inode
-	Offset int64
+	LogfileName   string
+	StatefileName string
+	INode         uint64 // the inode
+	Offset        int64
+	Stat          unix.Stat_t `json:"-"`
+}
+
+type Tailer struct {
+	Lines        chan string
+	state        State
+	linesRead    int
+	linesErrored int
+	statsLock    *sync.Mutex
+}
+
+func (t *Tailer) LogStats() {
+	logrus.WithFields(logrus.Fields{
+		"logfile":       t.state.LogfileName,
+		"inode":         t.state.INode,
+		"offset":        t.state.Offset,
+		"length":        t.state.Stat.Size,
+		"lines_read":    t.linesRead,
+		"lines_errored": t.linesErrored,
+	}).Info("Logfile Tail Status")
+	t.resetStats()
+}
+
+func (t *Tailer) resetStats() {
+	t.statsLock.Lock()
+	defer t.statsLock.Unlock()
+	t.linesRead = 0
+	t.linesErrored = 0
 }
 
 // GetEntries sets up a list of channels that get one line at a time from each
 // file down each channel.
-func GetEntries(conf Config) ([]chan string, error) {
+func GetEntries(conf Config) ([]*Tailer, error) {
 	if conf.Type != RotateStyleSyslog {
 		return nil, errors.New("Only Syslog style rotation currently supported")
 	}
@@ -86,23 +117,31 @@ func GetEntries(conf Config) ([]chan string, error) {
 	}
 
 	// make our lines channel list; we'll get one channel for each file
-	linesChans := make([]chan string, 0, len(filenames))
+	tailers := make([]*Tailer, 0, len(filenames))
 	for _, file := range filenames {
+		tailer := &Tailer{
+			statsLock: &sync.Mutex{},
+			state:     State{},
+		}
 		var lines chan string
 		if file == "-" {
+			tailer.state.LogfileName = "STDIN"
 			lines = tailStdIn()
 		} else {
+			tailer.state.LogfileName = file
 			stateFile := getStateFile(conf, file)
-			tailer, err := getTailer(conf, file, stateFile)
+			tailer.state.StatefileName = stateFile
+			fileTailer, err := tailer.getTailer(conf)
 			if err != nil {
 				return nil, err
 			}
-			lines = tailSingleFile(tailer, file, stateFile)
+			lines = tailer.tailSingleFile(fileTailer)
 		}
-		linesChans = append(linesChans, lines)
+		tailer.Lines = lines
+		tailers = append(tailers, tailer)
 	}
 
-	return linesChans, nil
+	return tailers, nil
 }
 
 // removeStateFiles goes through the list of files and removes any that appear
@@ -129,20 +168,25 @@ func removeStateFiles(files []string, conf Config) []string {
 	return newFiles
 }
 
-func tailSingleFile(tailer *tail.Tail, file string, stateFile string) chan string {
+// func tailSingleFile(tailer *tail.Tail, file string, stateFile string) chan string {
+func (t *Tailer) tailSingleFile(fileTailer *tail.Tail) chan string {
 	lines := make(chan string)
 	// TODO report some metric to indicate whether we're keeping up with the
 	// front of the file, of if it's being written faster than we can send
 	// events
 
+	// initializet the tailer stats
+	t.updateStats(fileTailer)
 	// TODO this only updates once/sec. On clean shutdown, make sure we write
 	// one last time after stopping reading traffic.
-	go updateStateFile(tailer, stateFile, file)
+	go t.updateStateFile(fileTailer)
 
 	go func() {
-		for line := range tailer.Lines {
+		for line := range fileTailer.Lines {
+			t.linesRead++
 			if line.Err != nil {
-				// skip errored lines
+				// count and skip errored lines
+				t.linesErrored++
 				continue
 			}
 			lines <- strings.TrimSpace(line.Text)
@@ -237,7 +281,8 @@ func getStartLocation(stateFile string, logfile string) *tail.SeekInfo {
 
 // getTailer configures the *tail.Tail correctly to begin actually tailing the
 // specified file.
-func getTailer(conf Config, file string, stateFile string) (*tail.Tail, error) {
+// func getTailer(conf Config, file string, stateFile string) (*tail.Tail, error) {
+func (t *Tailer) getTailer(conf Config) (*tail.Tail, error) {
 	// tail a real file
 	var loc *tail.SeekInfo // 0 value means start at beginning
 	var reOpen, follow bool = true, true
@@ -250,7 +295,7 @@ func getTailer(conf Config, file string, stateFile string) (*tail.Tail, error) {
 			Whence: 2,
 		}
 	case "last":
-		loc = getStartLocation(stateFile, file)
+		loc = getStartLocation(t.state.StatefileName, t.state.LogfileName)
 	default:
 		errMsg := fmt.Sprintf("unknown option to --read_from: %s",
 			conf.Options.ReadFrom)
@@ -271,10 +316,10 @@ func getTailer(conf Config, file string, stateFile string) (*tail.Tail, error) {
 	logrus.WithFields(logrus.Fields{
 		"tailConf":  tailConf,
 		"conf":      conf,
-		"statefile": stateFile,
+		"statefile": t.state.StatefileName,
 		"location":  loc,
 	}).Debug("about to call tail.TailFile")
-	return tail.TailFile(file, tailConf)
+	return tail.TailFile(t.state.LogfileName, tailConf)
 }
 
 // getStateFile returns the filename to use to track honeytail state. If
@@ -288,27 +333,21 @@ func getStateFile(conf Config, filename string) string {
 
 // updateStateFile updates the state file once per second with the current
 // values for the logfile's inode number and offset
-func updateStateFile(t *tail.Tail, stateFile string, file string) {
-	statefh, err := os.OpenFile(stateFile, os.O_RDWR|os.O_CREATE, 0644)
+func (t *Tailer) updateStateFile(fileTailer *tail.Tail) {
+	statefh, err := os.OpenFile(t.state.StatefileName, os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
 		logrus.WithFields(logrus.Fields{
-			"logfile":   file,
-			"statefile": stateFile,
+			"logfile":   t.state.LogfileName,
+			"statefile": t.state.StatefileName,
 		}).Warn("Failed to open statefile for writing. File location will not be saved.")
 		return
 	}
 	ticker := time.NewTicker(time.Second)
-	state := State{}
 	for _ = range ticker.C {
-		logStat := unix.Stat_t{}
-		unix.Stat(file, &logStat)
-		currentPos, err := t.Tell()
-		if err != nil {
+		if err := t.updateStats(fileTailer); err != nil {
 			continue
 		}
-		state.INode = logStat.Ino
-		state.Offset = currentPos
-		out, err := json.Marshal(state)
+		out, err := json.Marshal(t.state)
 		if err != nil {
 			continue
 		}
@@ -317,4 +356,20 @@ func updateStateFile(t *tail.Tail, stateFile string, file string) {
 		statefh.WriteAt(out, 0)
 		statefh.Sync()
 	}
+}
+
+func (t *Tailer) updateStats(fileTailer *tail.Tail) error {
+	logStat := unix.Stat_t{}
+	unix.Stat(t.state.LogfileName, &logStat)
+	t.state.Stat = logStat
+	t.state.INode = logStat.Ino
+	if fileTailer == nil {
+		return nil
+	}
+	currentPos, err := fileTailer.Tell()
+	if err != nil {
+		return err
+	}
+	t.state.Offset = currentPos
+	return nil
 }

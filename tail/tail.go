@@ -77,22 +77,19 @@ func GetEntries(conf Config) ([]chan string, error) {
 			filenames = append(filenames, files...)
 		}
 	}
-	if len(filenames) > 1 {
-		// when tailing multiple files, force the default statefile use
-		conf.Options.StateFile = ""
-	}
 	if len(filenames) == 0 {
 		return nil, errors.New("After removing missing files and state files from the list, there are no files left to tail")
 	}
 
 	// make our lines channel list; we'll get one channel for each file
 	linesChans := make([]chan string, 0, len(filenames))
+	numFiles := len(filenames)
 	for _, file := range filenames {
 		var lines chan string
 		if file == "-" {
 			lines = tailStdIn()
 		} else {
-			stateFile := getStateFile(conf, file)
+			stateFile := getStateFile(conf, file, numFiles)
 			tailer, err := getTailer(conf, file, stateFile)
 			if err != nil {
 				return nil, err
@@ -294,13 +291,20 @@ func getTailer(conf Config, file string, stateFile string) (*tail.Tail, error) {
 
 // getStateFile returns the filename to use to track honeytail state. If
 // provided in the Config, uses the provided value instead.
-func getStateFile(conf Config, filename string) string {
+func getStateFile(conf Config, filename string, numFiles int) string {
+	confStateFile := os.TempDir()
 	if conf.Options.StateFile != "" {
-		return conf.Options.StateFile
+		info, err := os.Stat(conf.Options.StateFile)
+		if numFiles == 1 && (err != nil || !info.IsDir()) {
+			return conf.Options.StateFile
+		} else if err == nil && info.IsDir() {
+			confStateFile = conf.Options.StateFile
+		}
+		// else, providing a single statefile for multiple input files; we ignore the Options.StateFile
 	}
 
 	stateFileName := strings.TrimSuffix(filepath.Base(filename), ".log") + ".leash.state"
-	return filepath.Join(os.TempDir(), stateFileName)
+	return filepath.Join(confStateFile, stateFileName)
 }
 
 // updateStateFile updates the state file once per second with the current

@@ -4,6 +4,7 @@ package mongodb
 import (
 	"errors"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Sirupsen/logrus"
@@ -48,10 +49,19 @@ type Options struct {
 	LogPartials bool `long:"log_partials" description:"Send what was successfully parsed from a line (only if the error occured in the log line's message)."`
 }
 
+type parserStats struct {
+	LinesEncountered int
+	LinesErrored     int
+	EventsParsed     int
+
+	lock sync.Mutex
+}
+
 type Parser struct {
 	conf       Options
 	lineParser LineParser
 	nower      Nower
+	stats      parserStats
 
 	currentReplicaSet string
 }
@@ -74,8 +84,26 @@ func (p *Parser) Init(options interface{}) error {
 	return nil
 }
 
+func (p *Parser) LogStats() {
+	logrus.WithFields(logrus.Fields{
+		"lines_encountered": p.stats.LinesEncountered,
+		"lines_errored":     p.stats.LinesErrored,
+		"events_parsed":     p.stats.EventsParsed,
+	}).Info("mongo parser stats")
+	p.resetStats()
+}
+
+func (p *Parser) resetStats() {
+	p.stats.lock.Lock()
+	defer p.stats.lock.Unlock()
+	p.stats.LinesEncountered = 0
+	p.stats.LinesErrored = 0
+	p.stats.EventsParsed = 0
+}
+
 func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
 	for line := range lines {
+		p.stats.LinesEncountered++
 		values, err := p.lineParser.ParseLogLine(line)
 		// we get a bunch of errors from the parser on mongo logs, skip em
 		if err == nil || (p.conf.LogPartials && logparser.IsPartialLogLine(err)) {
@@ -124,6 +152,7 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
 				values["replica_set"] = p.currentReplicaSet
 			}
 
+			p.stats.EventsParsed++
 			logrus.WithFields(logrus.Fields{
 				"line":   line,
 				"values": values,

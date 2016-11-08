@@ -29,11 +29,17 @@ func TestTailSingleFile(t *testing.T) {
 	conf := Config{
 		Options: tailOpts,
 	}
-	tailer, err := getTailer(conf, filename, statefilename)
+	tailer := &Tailer{
+		state: State{
+			LogfileName:   filename,
+			StatefileName: statefilename,
+		},
+	}
+	fileTailer, err := tailer.getTailer(conf)
 	if err != nil {
 		t.Fatal(err)
 	}
-	lines := tailSingleFile(tailer, filename, statefilename)
+	lines := tailer.tailSingleFile(fileTailer)
 	checkLinesChan(t, lines, jsonLines)
 }
 
@@ -46,14 +52,13 @@ func TestTailSTDIN(t *testing.T) {
 		Paths:   make([]string, 1),
 	}
 	conf.Paths[0] = "-"
-	lineChans, err := GetEntries(conf)
+	tailers, err := GetEntries(conf)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(lineChans) != 1 {
-		t.Errorf("lines chans should have had one channel; instead was length %d", len(lineChans))
+	if len(tailers) != 1 {
+		t.Errorf("tailers should have had one tailer; instead was length %d", len(tailers))
 	}
-
 }
 
 func TestGetEntries(t *testing.T) {
@@ -79,12 +84,12 @@ func TestGetEntries(t *testing.T) {
 		ts.writeFile(t, filename, strings.Join(jsonLines[i], "\n"))
 	}
 
-	chanArr, err := GetEntries(conf)
+	tailers, err := GetEntries(conf)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for i, ch := range chanArr {
-		checkLinesChan(t, ch, jsonLines[i])
+	for i, tailer := range tailers {
+		checkLinesChan(t, tailer.Lines, jsonLines[i])
 	}
 
 	// test that if all statefile-like filenames and missing files are removed
@@ -99,9 +104,9 @@ func TestGetEntries(t *testing.T) {
 			StateFile: fn1,
 		},
 	}
-	nilChan, err := GetEntries(conf)
-	if nilChan != nil {
-		t.Error("errored getEntries was supposed to respond with a nil channel list")
+	nilSlice, err := GetEntries(conf)
+	if nilSlice != nil {
+		t.Error("errored getEntries was supposed to respond with a nil Tailer list")
 	}
 	if err == nil {
 		t.Error("expected error from GetEntries; got nil instead.")

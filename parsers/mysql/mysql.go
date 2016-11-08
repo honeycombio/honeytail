@@ -129,6 +129,17 @@ type Options struct {
 	QueryInterval uint   `long:"interval" description:"interval for querying the MySQL DB in seconds" default:"30"`
 }
 
+type parserStats struct {
+	LinesEncountered  int
+	LinesErrored      int
+	EventsParsed      int
+	EventsSent        int
+	EventMissingQuery int
+	EventSkipped      int
+
+	lock sync.Mutex
+}
+
 type Parser struct {
 	conf       Options
 	wg         sync.WaitGroup
@@ -138,6 +149,7 @@ type Parser struct {
 	replicaLag *int64
 	role       *string
 	normalizer *normalizer.Parser
+	stats      parserStats
 }
 
 type Nower interface {
@@ -194,6 +206,29 @@ func (p *Parser) Init(options interface{}) error {
 		}()
 	}
 	return nil
+}
+
+func (p *Parser) LogStats() {
+	logrus.WithFields(logrus.Fields{
+		"lines_encountered":    p.stats.LinesEncountered,
+		"lines_errored":        p.stats.LinesErrored,
+		"events_parsed":        p.stats.EventsParsed,
+		"events_sent":          p.stats.EventsSent,
+		"events_missing_query": p.stats.EventMissingQuery,
+		"events_skipped":       p.stats.EventSkipped,
+	}).Info("mysql parser stats")
+	p.resetStats()
+}
+
+func (p *Parser) resetStats() {
+	p.stats.lock.Lock()
+	defer p.stats.lock.Unlock()
+	p.stats.LinesEncountered = 0
+	p.stats.LinesErrored = 0
+	p.stats.EventsParsed = 0
+	p.stats.EventsSent = 0
+	p.stats.EventMissingQuery = 0
+	p.stats.EventSkipped = 0
 }
 
 func getReadOnly(db *sql.DB) (*bool, error) {
@@ -314,6 +349,7 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
 	var foundStatement bool
 	groupedLines := make([]string, 0, 5)
 	for line := range lines {
+		p.stats.LinesEncountered++
 		lineIsComment := strings.HasPrefix(line, "# ")
 		if !lineIsComment && !isMySQLHeaderLine(line) {
 			// we've finished the comments before the statement and now should slurp
@@ -331,6 +367,7 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
 	}
 	// send the last event, if there was one collected
 	if foundStatement {
+		p.stats.EventsParsed++
 		rawEvents <- groupedLines
 	}
 	logrus.Debug("lines channel is closed, ending mysql processor")
@@ -342,10 +379,12 @@ func (p *Parser) handleEvents(rawEvents <-chan []string, send chan<- event.Event
 	for rawE := range rawEvents {
 		sq, timestamp := p.handleEvent(rawE)
 		if len(sq) == 0 {
+			p.stats.EventSkipped++
 			continue
 		}
 		if q, ok := sq["query"]; !ok || q == "" {
-			// skip events with no query field
+			// count and skip events with no query field
+			p.stats.EventMissingQuery++
 			continue
 		}
 		if p.hostedOn != "" {
@@ -360,6 +399,7 @@ func (p *Parser) handleEvents(rawEvents <-chan []string, send chan<- event.Event
 		if p.role != nil {
 			sq[roleKey] = *p.role
 		}
+		p.stats.EventsSent++
 		send <- event.Event{
 			Timestamp: timestamp,
 			Data:      sq,

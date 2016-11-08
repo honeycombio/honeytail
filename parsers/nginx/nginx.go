@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Sirupsen/logrus"
@@ -24,10 +25,18 @@ type Options struct {
 	LogFormatName string        `long:"format" description:"Log format name to look for in the Nginx config file"`
 }
 
+type parserStats struct {
+	LinesEncountered int
+	LinesErrored     int
+	EventsParsed     int
+	lock             sync.Mutex
+}
+
 type Parser struct {
 	conf       Options
 	lineParser LineParser
 	nower      Nower
+	stats      parserStats
 }
 
 func (n *Parser) Init(options interface{}) error {
@@ -75,16 +84,19 @@ func (g *GonxLineParser) ParseLine(line string) (map[string]string, error) {
 func (n *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
 	// parse lines one by one
 	for line := range lines {
+		n.stats.LinesEncountered++
 		logrus.WithFields(logrus.Fields{
 			"line": line,
 		}).Debug("Attempting to process nginx log line")
 		parsedLine, err := n.lineParser.ParseLine(line)
 		if err != nil {
+			n.stats.LinesErrored++
 			continue
 		}
 		// typedEvent, err := typeifyEvent(nginxEvent)
 		typedEvent, err := typeifyParsedLine(parsedLine)
 		if err != nil {
+			n.stats.LinesErrored++
 			logrus.WithFields(logrus.Fields{
 				"line":  line,
 				"event": parsedLine,
@@ -92,6 +104,7 @@ func (n *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
 			continue
 		}
 		timestamp := getTimestamp(n.nower, typedEvent)
+		n.stats.EventsParsed++
 
 		e := event.Event{
 			Timestamp: timestamp,
@@ -100,6 +113,23 @@ func (n *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
 		send <- e
 	}
 	logrus.Debug("lines channel is closed, ending nginx processor")
+}
+
+func (n *Parser) LogStats() {
+	logrus.WithFields(logrus.Fields{
+		"lines_encountered": n.stats.LinesEncountered,
+		"lines_errored":     n.stats.LinesErrored,
+		"events_parsed":     n.stats.EventsParsed,
+	}).Info("nginx parser stats")
+	n.resetStats()
+}
+
+func (n *Parser) resetStats() {
+	n.stats.lock.Lock()
+	defer n.stats.lock.Unlock()
+	n.stats.LinesEncountered = 0
+	n.stats.LinesErrored = 0
+	n.stats.EventsParsed = 0
 }
 
 // typeifyParsedLine attempts to cast numbers in the event to floats or ints

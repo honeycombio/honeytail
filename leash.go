@@ -138,6 +138,7 @@ func run(options GlobalOptions) {
 	// when exiting early
 	for _, hny := range hnys {
 		hny.tailer.LogStats()
+		hny.parser.LogStats()
 		hny.rStats.logAndReset()
 	}
 
@@ -416,6 +417,7 @@ func logStats(hny *hny, interval uint) {
 	ticker := time.NewTicker(time.Second * time.Duration(interval))
 	for range ticker.C {
 		hny.tailer.LogStats()
+		hny.parser.LogStats()
 		hny.rStats.logAndReset()
 	}
 }

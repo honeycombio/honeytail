@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Sirupsen/logrus"
@@ -25,10 +26,18 @@ type Options struct {
 	Format        string `long:"format" description:"Format of the timestamp found in timefield (supports strftime and Golang time formats)"`
 }
 
+type parserStats struct {
+	LinesEncountered int
+	LinesErrored     int
+	EventsParsed     int
+	lock             sync.Mutex
+}
+
 type Parser struct {
 	conf       Options
 	lineParser LineParser
 	nower      Nower
+	stats      parserStats
 }
 
 type Nower interface {
@@ -82,18 +91,21 @@ func (j *JSONLineParser) ParseLine(line string) (map[string]interface{}, error) 
 
 func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
 	for line := range lines {
+		p.stats.LinesEncountered++
 		logrus.WithFields(logrus.Fields{
 			"line": line,
 		}).Debug("Attempting to process json log line")
 		parsedLine, err := p.lineParser.ParseLine(line)
 		if err != nil {
-			// skip lines that won't parse
+			// count and skip lines that won't parse
+			p.stats.LinesErrored++
 			logrus.WithFields(logrus.Fields{
 				"line": line,
 			}).Debug("skipping line; failed to parse.")
 			continue
 		}
 		timestamp := p.getTimestamp(parsedLine)
+		p.stats.EventsParsed++
 
 		// send an event to Transmission
 		e := event.Event{
@@ -149,6 +161,23 @@ func (p *Parser) getTimestamp(m map[string]interface{}) time.Time {
 		ts = p.nower.Now()
 	}
 	return ts
+}
+
+func (p *Parser) LogStats() {
+	logrus.WithFields(logrus.Fields{
+		"lines_encountered": p.stats.LinesEncountered,
+		"lines_errored":     p.stats.LinesErrored,
+		"events_parsed":     p.stats.EventsParsed,
+	}).Info("json parser stats")
+	p.resetStats()
+}
+
+func (p *Parser) resetStats() {
+	p.stats.lock.Lock()
+	defer p.stats.lock.Unlock()
+	p.stats.LinesEncountered = 0
+	p.stats.LinesErrored = 0
+	p.stats.EventsParsed = 0
 }
 
 func (p *Parser) tryTimeFormats(t string) time.Time {

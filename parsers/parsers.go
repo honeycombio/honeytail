@@ -12,4 +12,6 @@ type Parser interface {
 	// ProcessLines consumes log lines from the lines channel and sends log events
 	// to the send channel.
 	ProcessLines(lines <-chan string, send chan<- event.Event)
+	// log something about the parser's statistics (eg num events parsed)
+	LogStats()
 }

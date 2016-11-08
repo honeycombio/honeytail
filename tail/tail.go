@@ -59,6 +59,7 @@ type State struct {
 	INode         uint64 // the inode
 	Offset        int64
 	Stat          unix.Stat_t `json:"-"`
+	TrailingBy    int64       `json:"-"`
 }
 
 type Tailer struct {
@@ -77,6 +78,7 @@ func (t *Tailer) LogStats() {
 		"length":        t.state.Stat.Size,
 		"lines_read":    t.linesRead,
 		"lines_errored": t.linesErrored,
+		"bytes_behind":  t.state.TrailingBy,
 	}).Info("Logfile Tail Status")
 	t.resetStats()
 }
@@ -371,5 +373,6 @@ func (t *Tailer) updateStats(fileTailer *tail.Tail) error {
 		return err
 	}
 	t.state.Offset = currentPos
+	t.state.TrailingBy = t.state.Stat.Size - currentPos
 	return nil
 }

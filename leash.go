@@ -21,6 +21,12 @@ import (
 	"github.com/honeycombio/honeytail/tail"
 )
 
+// hny is a logfile / tailer / parser combo for concentrating stats info into
+// one place
+type hny struct {
+	rStats *responseStats
+}
+
 // actually go and be leashy
 func run(options GlobalOptions) {
 	logrus.Info("Starting honeytail")
@@ -57,6 +63,7 @@ func run(options GlobalOptions) {
 		logrus.WithFields(logrus.Fields{"err": err}).Fatal(
 			"Error occurred while trying to tail logfile")
 	}
+	hnys := make([]*hny, 0, len(linesChans))
 
 	// for each channel we got back from tail.GetEntries, spin up a parser.
 	parsersWG := sync.WaitGroup{}
@@ -100,7 +107,9 @@ func run(options GlobalOptions) {
 
 		// start a goroutine that reads from responses and logs.
 		responses := libhoney.Responses()
-		go handleResponses(responses, toBeResent, delaySending, options)
+		stats := newResponseStats()
+		go handleResponses(responses, toBeResent, delaySending, stats, options)
+		go logStats(stats, options.StatusInterval)
 
 		parsersWG.Add(1)
 		go func(plines chan string) {
@@ -112,10 +121,20 @@ func run(options GlobalOptions) {
 			<-doneSending
 			parsersWG.Done()
 		}(lines)
+		hny := &hny{
+			rStats: stats,
+		}
+		hnys = append(hnys, hny)
 	}
 	parsersWG.Wait()
 	// tell libhoney to finish up sending events
 	libhoney.Close()
+
+	// print one last set of stats for good measure. especially useful for clarity
+	// when exiting early
+	for _, hny := range hnys {
+		hny.rStats.logAndReset()
+	}
 
 	// Nothing bad happened, yay
 	logrus.Info("Honeytail is all done, goodbye!")
@@ -358,12 +377,10 @@ func sendEvent(ev event.Event) {
 // re-enqueues any events that failed to send in a retryable way
 func handleResponses(responses chan libhoney.Response,
 	toBeResent chan event.Event, delaySending chan int,
-	options GlobalOptions) {
-	stats := newResponseStats()
-	go logStats(stats, options.StatusInterval)
+	responseStats *responseStats, options GlobalOptions) {
 
 	for rsp := range responses {
-		stats.update(rsp)
+		responseStats.update(rsp)
 		logfields := logrus.Fields{
 			"status_code": rsp.StatusCode,
 			"body":        strings.TrimSpace(string(rsp.Body)),

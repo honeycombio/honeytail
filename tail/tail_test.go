@@ -53,7 +53,6 @@ func TestTailSTDIN(t *testing.T) {
 	if len(lineChans) != 1 {
 		t.Errorf("lines chans should have had one channel; instead was length %d", len(lineChans))
 	}
-
 }
 
 func TestGetEntries(t *testing.T) {

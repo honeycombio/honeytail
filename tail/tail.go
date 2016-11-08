@@ -135,9 +135,21 @@ func tailSingleFile(tailer *tail.Tail, file string, stateFile string) chan strin
 	// front of the file, of if it's being written faster than we can send
 	// events
 
-	// TODO this only updates once/sec. On clean shutdown, make sure we write
-	// one last time after stopping reading traffic.
-	go updateStateFile(tailer, stateFile, file)
+	stateFh, err := os.OpenFile(stateFile, os.O_RDWR|os.O_CREATE, 0644)
+	if err != nil {
+		logrus.WithFields(logrus.Fields{
+			"logfile":   file,
+			"statefile": stateFile,
+		}).Warn("Failed to open statefile for writing. File location will not be saved.")
+	}
+
+	ticker := time.NewTimer(time.Second)
+	state := State{}
+	go func() {
+		for range ticker.C {
+			updateStateFile(&state, tailer, file, stateFh)
+		}
+	}()
 
 	go func() {
 		for line := range tailer.Lines {
@@ -148,6 +160,9 @@ func tailSingleFile(tailer *tail.Tail, file string, stateFile string) chan strin
 			lines <- strings.TrimSpace(line.Text)
 		}
 		close(lines)
+		ticker.Stop()
+		updateStateFile(&state, tailer, file, stateFh)
+		stateFh.Close()
 	}()
 	return lines
 }
@@ -283,38 +298,28 @@ func getStateFile(conf Config, filename string) string {
 	if conf.Options.StateFile != "" {
 		return conf.Options.StateFile
 	}
-	return strings.TrimSuffix(filename, ".log") + ".leash.state"
+
+	stateFileName := strings.TrimSuffix(filepath.Base(filename), ".log") + ".leash.state"
+	return filepath.Join(os.TempDir(), stateFileName)
 }
 
 // updateStateFile updates the state file once per second with the current
 // values for the logfile's inode number and offset
-func updateStateFile(t *tail.Tail, stateFile string, file string) {
-	statefh, err := os.OpenFile(stateFile, os.O_RDWR|os.O_CREATE, 0644)
+func updateStateFile(state *State, t *tail.Tail, file string, stateFh *os.File) {
+	logStat := unix.Stat_t{}
+	unix.Stat(file, &logStat)
+	currentPos, err := t.Tell()
 	if err != nil {
-		logrus.WithFields(logrus.Fields{
-			"logfile":   file,
-			"statefile": stateFile,
-		}).Warn("Failed to open statefile for writing. File location will not be saved.")
 		return
 	}
-	ticker := time.NewTicker(time.Second)
-	state := State{}
-	for _ = range ticker.C {
-		logStat := unix.Stat_t{}
-		unix.Stat(file, &logStat)
-		currentPos, err := t.Tell()
-		if err != nil {
-			continue
-		}
-		state.INode = logStat.Ino
-		state.Offset = currentPos
-		out, err := json.Marshal(state)
-		if err != nil {
-			continue
-		}
-		statefh.Truncate(0)
-		out = append(out, '\n')
-		statefh.WriteAt(out, 0)
-		statefh.Sync()
+	state.INode = logStat.Ino
+	state.Offset = currentPos
+	out, err := json.Marshal(state)
+	if err != nil {
+		return
 	}
+	stateFh.Truncate(0)
+	out = append(out, '\n')
+	stateFh.WriteAt(out, 0)
+	stateFh.Sync()
 }

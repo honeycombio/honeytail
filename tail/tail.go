@@ -78,7 +78,8 @@ func GetSampledEntries(conf Config, sampleRate uint) ([]chan string, error) {
 			for line := range pLines {
 				if shouldDrop(sampleRate) {
 					logrus.WithFields(logrus.Fields{
-						"line": line,
+						"line":       line,
+						"samplerate": sampleRate,
 					}).Debug("Sampler says skip this line")
 				} else {
 					sampledLines <- line

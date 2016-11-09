@@ -36,7 +36,8 @@ var validParsers = []string{
 
 // GlobalOptions has all the top level CLI flags that honeytail supports
 type GlobalOptions struct {
-	APIHost string `hidden:"true" long:"api_host" description:"Host for the Honeycomb API" default:"https://api.honeycomb.io/"`
+	APIHost    string `hidden:"true" long:"api_host" description:"Host for the Honeycomb API" default:"https://api.honeycomb.io/"`
+	TailSample bool   `hidden:"true" long:"tail_sample" description:"When true, sample while tailing. When false, sample post-parser events"`
 
 	ConfigFile string `short:"c" long:"config" description:"Config file for honeytail in INI format." no-ini:"true"`
 
@@ -184,6 +185,13 @@ func addParserDefaultOptions(options *GlobalOptions) {
 	case options.Reqs.ParserName == "nginx":
 		// automatically normalize the request when using the nginx parser
 		options.RequestShape = append(options.RequestShape, "request")
+	}
+	if options.Reqs.ParserName != "mysql" {
+		// mysql is the only parser that requires post-parsed sampling.
+		// Sample all other parser when tailing to conserve CPU
+		options.TailSample = true
+	} else {
+		options.TailSample = false
 	}
 }
 

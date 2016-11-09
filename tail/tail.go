@@ -289,18 +289,36 @@ func getTailer(conf Config, file string, stateFile string) (*tail.Tail, error) {
 	return tail.TailFile(file, tailConf)
 }
 
-// getStateFile returns the filename to use to track honeytail state. If
-// provided in the Config, uses the provided value instead.
+// getStateFile returns the filename to use to track honeytail state.
+//
+// If a --tail.statefile parameter is provided, we try to respect it.
+// It might describe an existing file, an existing directory, or a new path.
+//
+// If tailing a single logfile, we will use the specified --tail.statefile:
+// - if it points to an existing file, that statefile will be used directly
+// - if it points to a new path, that path will be written to directly
+// - if it points to an existing directory, the statefile will be placed inside
+//   the directory (and the statefile's name will be derived from the logfile).
+//
+// If honeytail is asked to tail multiple files, we will only respect the
+// third case, where --tail.statefile describes an existing directory.
+//
+// The default behavior (or if --tail.statefile isn't respected) will be to
+// write to the system's $TMPDIR/ and write to a statefile (where the name will
+// be derived from the logfile).
 func getStateFile(conf Config, filename string, numFiles int) string {
 	confStateFile := os.TempDir()
 	if conf.Options.StateFile != "" {
 		info, err := os.Stat(conf.Options.StateFile)
-		if numFiles == 1 && (err != nil || !info.IsDir()) {
+		if numFiles == 1 && (os.IsNotExist(err) || (err == nil && !info.IsDir())) {
 			return conf.Options.StateFile
 		} else if err == nil && info.IsDir() {
+			// If the --tail.statefile is a directory, write statefile inside the specified directory
 			confStateFile = conf.Options.StateFile
+		} else {
+			logrus.Debugf("Couldn't write to --tail.statefile=%s, writing honeytail state for %s to $TMPDIR (%s) instead.",
+				conf.Options.StateFile, filename, confStateFile)
 		}
-		// else, providing a single statefile for multiple input files; we ignore the Options.StateFile
 	}
 
 	stateFileName := strings.TrimSuffix(filepath.Base(filename), ".log") + ".leash.state"

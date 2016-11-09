@@ -35,18 +35,22 @@ var timestampFormats = []string{
 	iso8601LocalTimeFormat,
 }
 
+// Options type for line parser, so far there are none.
 type Options struct {
 }
 
+// Parser for log lines.
 type Parser struct {
 	conf       Options
 	lineParser LineParser
 }
 
+// LineParser interface to parse a line of a log file.
 type LineParser interface {
 	ParseLogLine(line string) (map[string]interface{}, error)
 }
 
+// ArangoLineParser is a LineParser for ArangoDB log files.
 type ArangoLineParser struct {
 }
 
@@ -62,7 +66,7 @@ func firstWord(line *string) (word string, abort bool) {
 }
 
 func removeBrackets(word string) string {
-	var l int = len(word)
+	var l = len(word)
 	if l < 2 {
 		return word
 	}
@@ -91,6 +95,7 @@ func removeQuotes(word string) string {
 	return word
 }
 
+// ParseLogLine method for an ArangoLineParser implementing LineParser.
 func (m *ArangoLineParser) ParseLogLine(line string) (values map[string]interface{}, err error) {
 	// Do the actual work here, we look for log lines in the log topic "requests",
 	// there are two types, one is a DEBUG line (could be switched off) containing
@@ -127,7 +132,7 @@ func (m *ArangoLineParser) ParseLogLine(line string) (values map[string]interfac
 		return
 	}
 
-	var fields []string = strings.Split(line, ",")
+	var fields = strings.Split(line, ",")
 	if v[logLevelFieldName] == "DEBUG" {
 		if len(fields) != 6 {
 			return
@@ -154,12 +159,14 @@ func (m *ArangoLineParser) ParseLogLine(line string) (values map[string]interfac
 	return v, nil
 }
 
+// Init method for parser object.
 func (p *Parser) Init(options interface{}) error {
 	p.conf = *options.(*Options)
 	p.lineParser = &ArangoLineParser{}
 	return nil
 }
 
+// ProcessLines method for Parser.
 func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
 	for line := range lines {
 		values, err := p.lineParser.ParseLogLine(line)
@@ -192,12 +199,12 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
 }
 
 func (p *Parser) parseTimestamp(values map[string]interface{}) (time.Time, error) {
-	timestamp_value, ok := values[timestampFieldName].(string)
+	timestampValue, ok := values[timestampFieldName].(string)
 	if ok {
 		var err error
 		for _, f := range timestampFormats {
 			var timestamp time.Time
-			timestamp, err = time.Parse(f, timestamp_value)
+			timestamp, err = time.Parse(f, timestampValue)
 			if err == nil {
 				return timestamp, nil
 			}

@@ -213,6 +213,10 @@ func sanityCheckOptions(options *GlobalOptions) {
 		fmt.Println("Dataset name required.")
 		usage()
 		os.Exit(1)
+	case options.SampleRate == 0:
+		fmt.Println("Sample rate must be an integer >= 1")
+		usage()
+		os.Exit(1)
 	case options.Tail.ReadFrom == "end" && options.Tail.Stop:
 		fmt.Println("Reading from the end and stopping when we get there. Zero lines to process. Ok, all done! ;)")
 		usage()

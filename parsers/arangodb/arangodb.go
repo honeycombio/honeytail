@@ -96,7 +96,7 @@ func removeQuotes(word string) string {
 }
 
 // ParseLogLine method for an ArangoLineParser implementing LineParser.
-func (m *ArangoLineParser) ParseLogLine(line string) (values map[string]interface{}, err error) {
+func (m *ArangoLineParser) ParseLogLine(line string) (_ map[string]interface{}, err error) {
 	// Do the actual work here, we look for log lines in the log topic "requests",
 	// there are two types, one is a DEBUG line (could be switched off) containing
 	// the request body, the other is the INFO line marking the end of the
@@ -174,7 +174,7 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
 		if err == nil {
 			timestamp, err := p.parseTimestamp(values)
 			if err != nil {
-				logFailure(line, err, "couldn't parse logline timestamp, skipping")
+				logSkipped(line, "couldn't parse logline timestamp, skipping")
 				continue
 			}
 
@@ -192,7 +192,7 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
 				Data:      values,
 			}
 		} else {
-			logFailure(line, err, "logline didn't parse, skipping.")
+			logSkipped(line, "logline didn't parse, skipping.")
 		}
 	}
 	logrus.Debug("lines channel is closed, ending arangodb processor")
@@ -215,6 +215,6 @@ func (p *Parser) parseTimestamp(values map[string]interface{}) (time.Time, error
 	return time.Time{}, errors.New("timestamp missing from logline")
 }
 
-func logFailure(line string, err error, msg string) {
-	logrus.WithFields(logrus.Fields{"line": line}).WithError(err).Debugln(msg)
+func logSkipped(line string, msg string) {
+	logrus.WithFields(logrus.Fields{"line": line}).Debugln(msg)
 }

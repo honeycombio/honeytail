@@ -9,7 +9,7 @@ import (
 )
 
 const (
-  DEBUGLINE = `2016-10-31T16:03:02Z [6402] DEBUG {requests} "http-request-begin","0x7f87ba86b290","127.0.0.1","GET","HTTP/1.1",/_api/version`
+	DEBUGLINE = `2016-10-31T16:03:02Z [6402] DEBUG {requests} "http-request-begin","0x7f87ba86b290","127.0.0.1","GET","HTTP/1.1",/_api/version`
 
 	INFOLINE = `2016-10-31T16:03:02Z [6402] INFO {requests} "http-request-end","0x7f87ba86b290","127.0.0.1","GET","HTTP/1.1",200,0,64,"/_api/version",0.000139`
 
@@ -36,13 +36,13 @@ func TestProcessLines(t *testing.T) {
 			expected: processed{
 				time: T1,
 				includeData: map[string]interface{}{
-          "pid"      : "6402",
-          "logLevel" : "DEBUG",
-          "id"       : "0x7f87ba86b290",
-					"sourceIP" : "127.0.0.1",
-					"method"   : "GET",
-					"protocol" : "HTTP/1.1",
-					"fullURL"  : "/_api/version",
+					"pid":      "6402",
+					"logLevel": "DEBUG",
+					"id":       "0x7f87ba86b290",
+					"sourceIP": "127.0.0.1",
+					"method":   "GET",
+					"protocol": "HTTP/1.1",
+					"fullURL":  "/_api/version",
 				},
 			},
 		},
@@ -52,21 +52,20 @@ func TestProcessLines(t *testing.T) {
 			expected: processed{
 				time: T1,
 				includeData: map[string]interface{}{
-          "pid"          : "6402",
-          "logLevel"     : "INFO",
-          "id"           : "0x7f87ba86b290",
-					"sourceIP"     : "127.0.0.1",
-					"method"       : "GET",
-					"protocol"     : "HTTP/1.1",
-					"responseCode" : int64(200),
-					"reqBodyLen"   : int64(0),
-					"resBodyLen"   : int64(64),
-					"fullURL"      : "/_api/version",
-					"totalTime"    : 0.000139,
+					"pid":          "6402",
+					"logLevel":     "INFO",
+					"id":           "0x7f87ba86b290",
+					"sourceIP":     "127.0.0.1",
+					"method":       "GET",
+					"protocol":     "HTTP/1.1",
+					"responseCode": int64(200),
+					"reqBodyLen":   int64(0),
+					"resBodyLen":   int64(64),
+					"fullURL":      "/_api/version",
+					"totalTime":    0.000139,
 				},
 			},
 		},
-
 	}
 	m := &Parser{
 		conf:       Options{},

@@ -3,8 +3,8 @@ package arangodb
 
 import (
 	"errors"
-	"strings"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Sirupsen/logrus"
@@ -15,19 +15,19 @@ const (
 	iso8601UTCTimeFormat   = "2006-01-02T15:04:05Z"
 	iso8601LocalTimeFormat = "2006-01-02T15:04:05"
 
-	timestampFieldName   = "timestamp"
-	pidFieldName         = "pid"
-	logLevelFieldName    = "logLevel"
-	logTopicFieldName    = "logTopic"
-	idFieldName          = "id"
-	sourceIPFieldName    = "sourceIP"
-	methodFieldName      = "method"
-	protocolFieldName    = "protocol"
-	resCodeFieldName     = "responseCode"
-  reqBodyLenFieldName  = "reqBodyLen"
-	resBodyLenFieldName  = "resBodyLen"
-	fullURLFieldName     = "fullURL"
-	totalTimeFieldName   = "totalTime"
+	timestampFieldName  = "timestamp"
+	pidFieldName        = "pid"
+	logLevelFieldName   = "logLevel"
+	logTopicFieldName   = "logTopic"
+	idFieldName         = "id"
+	sourceIPFieldName   = "sourceIP"
+	methodFieldName     = "method"
+	protocolFieldName   = "protocol"
+	resCodeFieldName    = "responseCode"
+	reqBodyLenFieldName = "reqBodyLen"
+	resBodyLenFieldName = "resBodyLen"
+	fullURLFieldName    = "fullURL"
+	totalTimeFieldName  = "totalTime"
 )
 
 var timestampFormats = []string{
@@ -52,7 +52,7 @@ type ArangoLineParser struct {
 
 func firstWord(line *string) (word string, abort bool) {
 	var pos = strings.IndexByte(*line, ' ')
-	if (pos < 0) {
+	if pos < 0 {
 		return "", true
 	}
 	word = (*line)[:pos]
@@ -63,24 +63,28 @@ func firstWord(line *string) (word string, abort bool) {
 
 func removeBrackets(word string) string {
 	var l int = len(word)
-  if l < 2 { return word }
+	if l < 2 {
+		return word
+	}
 	if word[0] == '(' && word[l-1] == ')' {
-		return word[1:l-1]
+		return word[1 : l-1]
 	}
 	if word[0] == '[' && word[l-1] == ']' {
-		return word[1:l-1]
+		return word[1 : l-1]
 	}
 	if word[0] == '{' && word[l-1] == '}' {
-		return word[1:l-1]
+		return word[1 : l-1]
 	}
 	return word
 }
 
 func removeQuotes(word string) string {
-	if len(word) == 0 { return word }
+	if len(word) == 0 {
+		return word
+	}
 	if word[0] == '"' {
 		word = word[1:]
-  }
+	}
 	if len(word) > 0 && word[len(word)-1] == '"' {
 		word = word[:len(word)-1]
 	}
@@ -90,7 +94,7 @@ func removeQuotes(word string) string {
 func (m *ArangoLineParser) ParseLogLine(line string) (values map[string]interface{}, err error) {
 	// Do the actual work here, we look for log lines in the log topic "requests",
 	// there are two types, one is a DEBUG line (could be switched off) containing
-	// the request body, the other is the INFO line marking the end of the 
+	// the request body, the other is the INFO line marking the end of the
 	// request.
 	var v = make(map[string]interface{})
 	err = errors.New("Line is not a request log line.")
@@ -98,31 +102,45 @@ func (m *ArangoLineParser) ParseLogLine(line string) (values map[string]interfac
 	var s string
 
 	v[timestampFieldName], abort = firstWord(&line)
-	if abort { return }
+	if abort {
+		return
+	}
 
 	s, abort = firstWord(&line)
-	if abort { return }
+	if abort {
+		return
+	}
 	v[pidFieldName] = removeBrackets(s)
 
 	v[logLevelFieldName], abort = firstWord(&line)
-	if abort { return }
+	if abort {
+		return
+	}
 
-  s, abort = firstWord(&line)
-	if abort { return }
+	s, abort = firstWord(&line)
+	if abort {
+		return
+	}
 	v[logTopicFieldName] = s
 
-	if s != "{requests}" { return }
+	if s != "{requests}" {
+		return
+	}
 
 	var fields []string = strings.Split(line, ",")
 	if v[logLevelFieldName] == "DEBUG" {
-		if len(fields) != 6 { return }
+		if len(fields) != 6 {
+			return
+		}
 		v[idFieldName] = removeQuotes(fields[1])
 		v[sourceIPFieldName] = removeQuotes(fields[2])
 		v[methodFieldName] = removeQuotes(fields[3])
 		v[protocolFieldName] = removeQuotes(fields[4])
 		v[fullURLFieldName] = removeQuotes(fields[5])
 	} else {
-		if len(fields) != 10 { return }
+		if len(fields) != 10 {
+			return
+		}
 		v[idFieldName] = removeQuotes(fields[1])
 		v[sourceIPFieldName] = removeQuotes(fields[2])
 		v[methodFieldName] = removeQuotes(fields[3])
@@ -132,8 +150,8 @@ func (m *ArangoLineParser) ParseLogLine(line string) (values map[string]interfac
 		v[resBodyLenFieldName], _ = strconv.ParseInt(fields[7], 10, 64)
 		v[fullURLFieldName] = removeQuotes(fields[8])
 		v[totalTimeFieldName], _ = strconv.ParseFloat(fields[9], 64)
-  }
-  return v, nil
+	}
+	return v, nil
 }
 
 func (p *Parser) Init(options interface{}) error {
@@ -193,4 +211,3 @@ func (p *Parser) parseTimestamp(values map[string]interface{}) (time.Time, error
 func logFailure(line string, err error, msg string) {
 	logrus.WithFields(logrus.Fields{"line": line}).WithError(err).Debugln(msg)
 }
-

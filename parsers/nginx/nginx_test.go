@@ -93,6 +93,65 @@ func TestProcessLines(t *testing.T) {
 		}
 	}
 }
+func TestProcessLinesNoPreReg(t *testing.T) {
+	t1, _ := time.Parse(commonLogFormatTimeLayout, "08/Oct/2015:00:26:26 +0000")
+	tlm := []testLineMaps{
+		{
+			line:        "https - 10.252.4.24 - - [08/Oct/2015:00:26:26 +0000] 200 174 0.099",
+			trimmedLine: "https - 10.252.4.24 - - [08/Oct/2015:00:26:26 +0000] 200 174 0.099",
+			resp: map[string]string{
+				"http_x_forwarded_proto": "https",
+				"remote_addr":            "10.252.4.24",
+				"remote_user":            "-",
+				"time_local":             "08/Oct/2015:00:26:26 +0000",
+				"status":                 "200",
+				"body_bytes_sent":        "174",
+				"request_time":           "0.099",
+			},
+			typedResp: map[string]interface{}{
+				"http_x_forwarded_proto": "https",
+				"remote_addr":            "10.252.4.24",
+				"remote_user":            "-",
+				"time_local":             "08/Oct/2015:00:26:26 +0000",
+				"status":                 200,
+				"body_bytes_sent":        174,
+				"request_time":           0.099,
+			},
+			ev: event.Event{
+				Timestamp: t1,
+				Data: map[string]interface{}{
+					"body_bytes_sent":        int64(174),
+					"http_x_forwarded_proto": "https",
+					"remote_addr":            "10.252.4.24",
+					"request_time":           0.099,
+					"status":                 int64(200),
+				},
+			},
+		},
+	}
+	p := &Parser{
+		conf: Options{},
+		lineParser: &FakeLineParser{
+			tlm: tlm,
+		},
+	}
+	lines := make(chan string)
+	send := make(chan event.Event)
+	go func() {
+		for _, pair := range tlm {
+			lines <- pair.line
+		}
+		close(lines)
+	}()
+	go p.ProcessLines(lines, send, nil)
+	for _, pair := range tlm {
+		resp := <-send
+		if !reflect.DeepEqual(resp, pair.ev) {
+			t.Fatalf("line resp didn't match up for %s. Expected: %v, actual: %v",
+				pair.line, pair.ev.Data, resp.Data)
+		}
+	}
+}
 
 type typeifyTestCase struct {
 	untyped map[string]string

@@ -80,25 +80,13 @@ func (n *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 			"line": line,
 		}).Debug("Attempting to process nginx log line")
 
-		// strip the prefix, catch any interesting fields
-		prefixFields := make(map[string]string)
-		if prefixRegex != nil {
-			// pull out the juicy bits from the prefix
-			prefixMatches := prefixRegex.FindStringSubmatch(line)
-			prefixNames := prefixRegex.SubexpNames()
-			// if we got any matches, save them and strip the prefix
-			if len(prefixMatches) > 0 {
-				for i := 1; i < len(prefixMatches); i++ {
-					prefixFields[prefixNames[i]] = prefixMatches[i]
-				}
-				line = strings.TrimPrefix(line, prefixMatches[0])
-			}
-		}
+		line, prefixFields := capturePrefix(line, prefixRegex)
 
 		parsedLine, err := n.lineParser.ParseLine(line)
 		if err != nil {
 			continue
 		}
+		// merge the prefix fields and the parsed line contents
 		for k, v := range prefixFields {
 			parsedLine[k] = v
 		}
@@ -120,6 +108,27 @@ func (n *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 		send <- e
 	}
 	logrus.Debug("lines channel is closed, ending nginx processor")
+}
+
+// capturePrefix picks out elements in the line prefix if it exists and returns
+// the trimmed line along with the fields it extracted
+func capturePrefix(line string, prefixRegex *regexp.Regexp) (string, map[string]string) {
+	// strip the prefix, catch any interesting fields
+	if prefixRegex != nil {
+		prefixFields := make(map[string]string)
+		// pull out the juicy bits from the prefix
+		prefixMatches := prefixRegex.FindStringSubmatch(line)
+		// if we got any matches, save them and strip the prefix
+		if len(prefixMatches) > 0 {
+			prefixNames := prefixRegex.SubexpNames()
+			for i := 1; i < len(prefixMatches); i++ {
+				prefixFields[prefixNames[i]] = prefixMatches[i]
+			}
+			line = strings.TrimPrefix(line, prefixMatches[0])
+		}
+		return line, prefixFields
+	}
+	return line, nil
 }
 
 // typeifyParsedLine attempts to cast numbers in the event to floats or ints

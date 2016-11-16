@@ -232,8 +232,6 @@ func sanityCheckOptions(options *GlobalOptions) {
 		os.Exit(1)
 	}
 
-	shouldExit := false
-
 	// check the prefix regex for validity
 	if options.PrefixRegex != "" {
 		// make sure the regex is anchored against the start of the string
@@ -244,11 +242,13 @@ func sanityCheckOptions(options *GlobalOptions) {
 		_, err := regexp.Compile(options.PrefixRegex)
 		if err != nil {
 			fmt.Printf("Prefix regex %s doesn't compile: error %s\n", options.PrefixRegex, err)
-			shouldExit = true
+			usage()
+			os.Exit(1)
 		}
 	}
 
 	// Make sure input files exist
+	shouldExit := false
 	for _, f := range options.Reqs.LogFiles {
 		if f == "-" {
 			continue

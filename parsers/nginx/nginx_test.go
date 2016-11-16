@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/honeycombio/honeytail/event"
+	"github.com/honeycombio/honeytail/parsers"
 )
 
 type testLineMaps struct {
@@ -33,7 +34,7 @@ func (f *FakeLineParser) ParseLine(line string) (map[string]string, error) {
 
 func TestProcessLines(t *testing.T) {
 	t1, _ := time.Parse(commonLogFormatTimeLayout, "08/Oct/2015:00:26:26 +0000")
-	preReg := regexp.MustCompile("^.*:..:.. (?P<pre_hostname>[a-zA-Z-.]+): ")
+	preReg := &parsers.ExtRegexp{regexp.MustCompile("^.*:..:.. (?P<pre_hostname>[a-zA-Z-.]+): ")}
 	tlm := []testLineMaps{
 		{
 			line:        "Nov 05 10:23:45 myhost: https - 10.252.4.24 - - [08/Oct/2015:00:26:26 +0000] 200 174 0.099",

@@ -55,7 +55,7 @@ func run(options GlobalOptions) {
 	if options.PrefixRegex == "" {
 		prefixRegex = nil
 	} else {
-		prefixRegex = regexp.MustCompile(options.PrefixRegex)
+		prefixRegex = &parsers.ExtRegexp{regexp.MustCompile(options.PrefixRegex)}
 	}
 
 	// get our lines channel from which to read log lines

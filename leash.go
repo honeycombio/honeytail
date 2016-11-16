@@ -51,7 +51,7 @@ func run(options GlobalOptions) {
 	}
 
 	// compile the prefix regex once for use on all channels
-	var prefixRegex *regexp.Regexp
+	var prefixRegex *parsers.ExtRegexp
 	if options.PrefixRegex == "" {
 		prefixRegex = nil
 	} else {

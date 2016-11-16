@@ -302,7 +302,7 @@ func isMySQLHeaderLine(line string) bool {
 		(first == 'T' && reMySQLColumnHeaders.MatchString(line))
 }
 
-func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, prefixRegex *regexp.Regexp) {
+func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, prefixRegex *parsers.ExtRegexp) {
 	// start up a goroutine to handle grouped sets of lines
 	rawEvents := make(chan []string)
 	var wg sync.WaitGroup
@@ -315,6 +315,14 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 	var foundStatement bool
 	groupedLines := make([]string, 0, 5)
 	for line := range lines {
+		// mysql parser does not support capturing fields in the line prefix - just
+		// strip it.
+		if prefixRegex != nil {
+			var prefix string
+			prefix, _ = prefixRegex.FindStringSubmatchMap(line)
+			line = strings.TrimPrefix(line, prefix)
+		}
+
 		lineIsComment := strings.HasPrefix(line, "# ")
 		if !lineIsComment && !isMySQLHeaderLine(line) {
 			// we've finished the comments before the statement and now should slurp

@@ -4,6 +4,7 @@ package htjson
 
 import (
 	"encoding/json"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -80,7 +81,7 @@ func (j *JSONLineParser) ParseLine(line string) (map[string]interface{}, error) 
 	return processed, err
 }
 
-func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
+func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, prefixRegex *regexp.Regexp) {
 	for line := range lines {
 		logrus.WithFields(logrus.Fields{
 			"line": line,

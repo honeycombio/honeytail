@@ -301,7 +301,7 @@ func isMySQLHeaderLine(line string) bool {
 		(first == 'T' && reMySQLColumnHeaders.MatchString(line))
 }
 
-func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
+func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, prefixRegex *regexp.Regexp) {
 	// start up a goroutine to handle grouped sets of lines
 	rawEvents := make(chan []string)
 	var wg sync.WaitGroup

@@ -3,6 +3,7 @@ package mongodb
 
 import (
 	"errors"
+	"regexp"
 	"strings"
 	"time"
 
@@ -74,7 +75,7 @@ func (p *Parser) Init(options interface{}) error {
 	return nil
 }
 
-func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
+func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, prefixRegex *regexp.Regexp) {
 	for line := range lines {
 		values, err := p.lineParser.ParseLogLine(line)
 		// we get a bunch of errors from the parser on mongo logs, skip em

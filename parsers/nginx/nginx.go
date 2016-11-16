@@ -3,6 +3,7 @@ package nginx
 
 import (
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -72,15 +73,34 @@ func (g *GonxLineParser) ParseLine(line string) (map[string]string, error) {
 	return gonxEvent.Fields, nil
 }
 
-func (n *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
+func (n *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, prefixRegex *regexp.Regexp) {
 	// parse lines one by one
 	for line := range lines {
 		logrus.WithFields(logrus.Fields{
 			"line": line,
 		}).Debug("Attempting to process nginx log line")
+
+		// strip the prefix, catch any interesting fields
+		prefixFields := make(map[string]string)
+		if prefixRegex != nil {
+			// pull out the juicy bits from the prefix
+			prefixMatches := prefixRegex.FindStringSubmatch(line)
+			prefixNames := prefixRegex.SubexpNames()
+			// if we got any matches, save them and strip the prefix
+			if len(prefixMatches) > 0 {
+				for i := 1; i < len(prefixMatches); i++ {
+					prefixFields[prefixNames[i]] = prefixMatches[i]
+				}
+				line = strings.TrimPrefix(line, prefixMatches[0])
+			}
+		}
+
 		parsedLine, err := n.lineParser.ParseLine(line)
 		if err != nil {
 			continue
+		}
+		for k, v := range prefixFields {
+			parsedLine[k] = v
 		}
 		// typedEvent, err := typeifyEvent(nginxEvent)
 		typedEvent, err := typeifyParsedLine(parsedLine)

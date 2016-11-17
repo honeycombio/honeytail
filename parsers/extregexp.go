@@ -2,7 +2,8 @@ package parsers
 
 import "regexp"
 
-// ExtRegexp is a Regexp with one additional method FindStringSubmatchMap
+// ExtRegexp is a Regexp with one additional method to make it easier to work
+// with named groups
 type ExtRegexp struct {
 	*regexp.Regexp
 }

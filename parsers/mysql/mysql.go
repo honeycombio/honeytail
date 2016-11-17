@@ -319,7 +319,7 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 		// strip it.
 		if prefixRegex != nil {
 			var prefix string
-			prefix, _ = prefixRegex.FindStringSubmatchMap(line)
+			prefix = prefixRegex.FindString(line)
 			line = strings.TrimPrefix(line, prefix)
 		}
 

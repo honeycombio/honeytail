@@ -303,6 +303,8 @@ func requestShape(field string, toBeSent chan event.Event, options GlobalOptions
 					ev.Data[prefix+field+"_path_"+k] = v[0]
 				}
 				ev.Data[prefix+field+"_shape"] = res.Shape
+				ev.Data[prefix+field+"_pathshape"] = res.PathShape
+				ev.Data[prefix+field+"_queryshape"] = res.QueryShape
 			}
 			newSent <- ev
 		}

@@ -288,7 +288,9 @@ func requestShape(field string, toBeSent chan event.Event, options GlobalOptions
 				}
 				ev.Data[prefix+field+"_uri"] = res.URI
 				ev.Data[prefix+field+"_path"] = res.Path
-				ev.Data[prefix+field+"_query"] = res.Query
+				if res.Query != "" {
+					ev.Data[prefix+field+"_query"] = res.Query
+				}
 				for k, v := range res.QueryFields {
 					// only include the keys we want
 					if options.RequestParseQuery == "all" ||
@@ -304,7 +306,9 @@ func requestShape(field string, toBeSent chan event.Event, options GlobalOptions
 				}
 				ev.Data[prefix+field+"_shape"] = res.Shape
 				ev.Data[prefix+field+"_pathshape"] = res.PathShape
-				ev.Data[prefix+field+"_queryshape"] = res.QueryShape
+				if res.QueryShape != "" {
+					ev.Data[prefix+field+"_queryshape"] = res.QueryShape
+				}
 			}
 			newSent <- ev
 		}

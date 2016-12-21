@@ -282,11 +282,11 @@ func TestRequestShapeRaw(t *testing.T) {
 			"request_protocol_version": "HTTP/1.1",
 			"request_uri":              "/about/en/books",
 			"request_path":             "/about/en/books",
-			"request_query":            "",
+			"request_query":            nil, // field missing instead of empty
 			"request_path_lang":        "en",
 			"request_shape":            "/about/:lang/books",
 			"request_pathshape":        "/about/:lang/books",
-			"request_queryshape":       "",
+			"request_queryshape":       nil, // field missing instead of empty
 		},
 		"GET /about?foo=bar HTTP/1.0": {
 			"request_method":           "GET",
@@ -302,11 +302,11 @@ func TestRequestShapeRaw(t *testing.T) {
 		"/about/en/books": {
 			"request_uri":        "/about/en/books",
 			"request_path":       "/about/en/books",
-			"request_query":      "",
+			"request_query":      nil, // field missing instead of empty
 			"request_path_lang":  "en",
 			"request_shape":      "/about/:lang/books",
 			"request_pathshape":  "/about/:lang/books",
-			"request_queryshape": "",
+			"request_queryshape": nil, // field missing instead of empty
 		},
 		"/about/en?foo=bar&bar=bar2": {
 			"request_uri":        "/about/en?foo=bar&bar=bar2",

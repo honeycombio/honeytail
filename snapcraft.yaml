@@ -1,0 +1,21 @@
+name: honeytail
+version: master
+summary: debug complex systems
+description: |
+  honeytail is Honeycomb's agent for ingesting log file data into Honeycomb
+  and making it available for exploration. Its favorite format is JSON, but
+  understands how to parse a range of other well-known log formats.
+
+
+grade: devel
+confinement: classic
+
+apps:
+  honeytail:
+    command: honeytail
+
+parts:
+  honeytail:
+    source: .
+    plugin: go
+    go-importpath: github.com/honeycombio/honeytail

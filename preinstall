@@ -23,3 +23,5 @@ then
           --shell /bin/false \
           $USER >/dev/null
 fi
+
+usermod -a -G adm honeytail

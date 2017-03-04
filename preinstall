@@ -24,4 +24,4 @@ then
           $USER >/dev/null
 fi
 
-usermod -a -G adm honeytail
+usermod -a -G adm honeycomb

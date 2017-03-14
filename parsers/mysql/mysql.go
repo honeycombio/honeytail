@@ -4,6 +4,7 @@ package mysql
 import (
 	"database/sql"
 	"fmt"
+	"math/rand"
 	"regexp"
 	"strconv"
 	"strings"
@@ -130,6 +131,10 @@ type Options struct {
 }
 
 type Parser struct {
+	// set SampleRate to cause the MySQL parser to drop events after before
+	// they're parsed to save CPU
+	SampleRate int
+
 	conf       Options
 	wg         sync.WaitGroup
 	nower      Nower
@@ -331,7 +336,16 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 			if foundStatement {
 				// we've started a new event. Send the previous one.
 				foundStatement = false
-				rawEvents <- groupedLines
+				// if sampling is enabled, drop events here to conserve parsing CPU
+				if p.SampleRate > 1 {
+					if rand.Intn(p.SampleRate) == 0 {
+						// keep this event
+						rawEvents <- groupedLines
+					}
+				} else {
+					// sampling is not enabled
+					rawEvents <- groupedLines
+				}
 				groupedLines = make([]string, 0, 5)
 			}
 		}
@@ -339,7 +353,15 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 	}
 	// send the last event, if there was one collected
 	if foundStatement {
-		rawEvents <- groupedLines
+		if p.SampleRate > 1 {
+			if rand.Intn(p.SampleRate) == 0 {
+				// keep this event
+				rawEvents <- groupedLines
+			}
+		} else {
+			// sampling is not enabled
+			rawEvents <- groupedLines
+		}
 	}
 	logrus.Debug("lines channel is closed, ending mysql processor")
 	close(rawEvents)

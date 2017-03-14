@@ -113,9 +113,9 @@ func run(options GlobalOptions) {
 			close(realToBeSent)
 		}()
 
-		// start up the sender
-		go sendToLibhoney(realToBeSent, toBeResent, delaySending, doneSending,
-			options.TailSample)
+		// start up the sender. all sources are either sampled when tailing or in-
+		// parser, so always tell libhoney events are pre-sampled
+		go sendToLibhoney(realToBeSent, toBeResent, delaySending, doneSending, true)
 
 		// start a goroutine that reads from responses and logs.
 		responses := libhoney.Responses()
@@ -156,7 +156,9 @@ func getParserAndOptions(options GlobalOptions) (parsers.Parser, interface{}) {
 		parser = &mongodb.Parser{}
 		opts = &options.Mongo
 	case "mysql":
-		parser = &mysql.Parser{}
+		parser = &mysql.Parser{
+			SampleRate: int(options.SampleRate),
+		}
 		opts = &options.MySQL
 	case "arangodb":
 		parser = &arangodb.Parser{}

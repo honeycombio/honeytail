@@ -3,10 +3,14 @@ package main
 import (
 	"crypto/sha256"
 	"fmt"
+	"io"
+	"os"
+	"os/signal"
 	"regexp"
 	"sort"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/Sirupsen/logrus"
@@ -26,6 +30,22 @@ import (
 // actually go and be leashy
 func run(options GlobalOptions) {
 	logrus.Info("Starting honeytail")
+
+	sigs := make(chan os.Signal, 1)
+	abort := make(chan bool, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		sig := <-sigs
+		io.WriteString(os.Stderr, fmt.Sprintf("Aborting! Caught signal \"%s\"\n", sig))
+		io.WriteString(os.Stderr, "Cleaning up...\n")
+		abort <- true
+		go func() {
+			// don't wait forever to clean up. if we're really stuck, just die.
+			time.Sleep(10 * time.Second)
+			io.WriteString(os.Stderr, "Taking too long to clean up. I die, I die.\n")
+			os.Exit(1)
+		}()
+	}()
 
 	// spin up our transmission to send events to Honeycomb
 	libhConfig := libhoney.Config{
@@ -67,9 +87,9 @@ func run(options GlobalOptions) {
 		Options: options.Tail,
 	}
 	if options.TailSample {
-		linesChans, err = tail.GetSampledEntries(tc, options.SampleRate)
+		linesChans, err = tail.GetSampledEntries(tc, options.SampleRate, abort)
 	} else {
-		linesChans, err = tail.GetEntries(tc)
+		linesChans, err = tail.GetEntries(tc, abort)
 	}
 	if err != nil {
 		logrus.WithFields(logrus.Fields{"err": err}).Fatal(

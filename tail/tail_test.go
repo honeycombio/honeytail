@@ -35,7 +35,7 @@ func TestTailSingleFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	lines := tailSingleFile(tailer, filename, statefilename)
+	lines := tailSingleFile(tailer, filename, statefilename, ts.abort)
 	checkLinesChan(t, lines, jsonLines)
 }
 
@@ -48,7 +48,7 @@ func TestTailSTDIN(t *testing.T) {
 		Paths:   make([]string, 1),
 	}
 	conf.Paths[0] = "-"
-	lineChans, err := GetEntries(conf)
+	lineChans, err := GetEntries(conf, ts.abort)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +81,7 @@ func TestGetSampledEntries(t *testing.T) {
 		ts.writeFile(t, filename, strings.Join(jsonLines[i], "\n"))
 	}
 
-	chanArr, err := GetSampledEntries(conf, 2)
+	chanArr, err := GetSampledEntries(conf, 2, ts.abort)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +124,7 @@ func TestGetEntries(t *testing.T) {
 		ts.writeFile(t, filename, strings.Join(jsonLines[i], "\n"))
 	}
 
-	chanArr, err := GetEntries(conf)
+	chanArr, err := GetEntries(conf, ts.abort)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +144,7 @@ func TestGetEntries(t *testing.T) {
 			StateFile: fn1,
 		},
 	}
-	nilChan, err := GetEntries(conf)
+	nilChan, err := GetEntries(conf, ts.abort)
 	if nilChan != nil {
 		t.Error("errored getEntries was supposed to respond with a nil channel list")
 	}
@@ -236,6 +236,7 @@ func TestGetStateFile(t *testing.T) {
 // to create an environment in which to run these tests
 type testSetup struct {
 	tmpdir string
+	abort  chan bool
 }
 
 func (ts *testSetup) start(t *testing.T) {
@@ -245,6 +246,7 @@ func (ts *testSetup) start(t *testing.T) {
 		t.Fatal(err)
 	}
 	ts.tmpdir = tmpdir
+	ts.abort = make(chan bool)
 }
 
 func (ts *testSetup) writeFile(t *testing.T, path string, body string) {

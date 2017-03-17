@@ -336,14 +336,8 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 			if foundStatement {
 				// we've started a new event. Send the previous one.
 				foundStatement = false
-				// if sampling is enabled, drop events here to conserve parsing CPU
-				if p.SampleRate > 1 {
-					if rand.Intn(p.SampleRate) == 0 {
-						// keep this event
-						rawEvents <- groupedLines
-					}
-				} else {
-					// sampling is not enabled
+				// if sampling is disabled or sampler says keep, pass along this group.
+				if p.SampleRate <= 1 || rand.Intn(p.SampleRate) == 0 {
 					rawEvents <- groupedLines
 				}
 				groupedLines = make([]string, 0, 5)
@@ -353,13 +347,8 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 	}
 	// send the last event, if there was one collected
 	if foundStatement {
-		if p.SampleRate > 1 {
-			if rand.Intn(p.SampleRate) == 0 {
-				// keep this event
-				rawEvents <- groupedLines
-			}
-		} else {
-			// sampling is not enabled
+		// if sampling is disabled or sampler says keep, pass along this group.
+		if p.SampleRate <= 1 || rand.Intn(p.SampleRate) == 0 {
 			rawEvents <- groupedLines
 		}
 	}

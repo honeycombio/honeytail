@@ -3,7 +3,6 @@ package main
 import (
 	"crypto/sha256"
 	"fmt"
-	"io"
 	"os"
 	"os/signal"
 	"regexp"
@@ -31,21 +30,9 @@ import (
 func run(options GlobalOptions) {
 	logrus.Info("Starting honeytail")
 
-	sigs := make(chan os.Signal, 1)
+	sigs := make(chan os.Signal, 0)
 	abort := make(chan bool, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		sig := <-sigs
-		io.WriteString(os.Stderr, fmt.Sprintf("Aborting! Caught signal \"%s\"\n", sig))
-		io.WriteString(os.Stderr, "Cleaning up...\n")
-		abort <- true
-		go func() {
-			// don't wait forever to clean up. if we're really stuck, just die.
-			time.Sleep(10 * time.Second)
-			io.WriteString(os.Stderr, "Taking too long to clean up. I die, I die.\n")
-			os.Exit(1)
-		}()
-	}()
 
 	// spin up our transmission to send events to Honeycomb
 	libhConfig := libhoney.Config{
@@ -95,6 +82,22 @@ func run(options GlobalOptions) {
 		logrus.WithFields(logrus.Fields{"err": err}).Fatal(
 			"Error occurred while trying to tail logfile")
 	}
+
+	// set up our signal handler, now that we know how many files we're tailing,
+	// we can send the right number of abort signals.
+	go func() {
+		sig := <-sigs
+		fmt.Fprintf(os.Stderr, "Aborting! Caught signal \"%s\"\n", sig)
+		fmt.Fprintf(os.Stderr, "Cleaning up...\n")
+		for range linesChans {
+			select {
+			case abort <- true:
+			case <-time.After(10 * time.Second):
+				fmt.Fprintf(os.Stderr, "Taking too long... Aborting.\n")
+				os.Exit(1)
+			}
+		}
+	}()
 
 	// for each channel we got back from tail.GetEntries, spin up a parser.
 	parsersWG := sync.WaitGroup{}

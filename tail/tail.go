@@ -206,9 +206,6 @@ func tailSingleFile(tailer *tail.Tail, file string, stateFile string, abort chan
 				lines <- strings.TrimSpace(line.Text)
 			case <-abort:
 				break ReadLines
-			default:
-				// no new lines to process, just chill for a bit
-				time.Sleep(50 * time.Millisecond)
 			}
 		}
 		close(lines)

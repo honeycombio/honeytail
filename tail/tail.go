@@ -205,6 +205,7 @@ func tailSingleFile(tailer *tail.Tail, file string, stateFile string, abort chan
 				}
 				lines <- strings.TrimSpace(line.Text)
 			case <-abort:
+				// will only trigger when abort is closed
 				break ReadLines
 			}
 		}
@@ -223,12 +224,11 @@ func tailStdIn(abort chan bool) chan string {
 	input := bufio.NewReader(os.Stdin)
 	go func() {
 		defer close(lines)
-	ReadLines:
 		for {
 			// check for signal triggered exit
 			select {
 			case <-abort:
-				break ReadLines
+				return
 			default:
 			}
 			line, partialLine, err := input.ReadLine()

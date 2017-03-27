@@ -1,14 +1,13 @@
-// Package htjson (honeytail-json, renamed to not conflict with the json module)
-// parses logs that are one json blob per line.
-package htjson
+// Package keyval parses logs whose format is many key=val pairs
+package keyval
 
 import (
-	"encoding/json"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/Sirupsen/logrus"
+	"github.com/kr/logfmt"
 
 	"github.com/honeycombio/honeytail/event"
 	"github.com/honeycombio/honeytail/parsers"
@@ -48,7 +47,7 @@ func (p *Parser) Init(options interface{}) error {
 	p.conf = *options.(*Options)
 
 	p.nower = &RealNower{}
-	p.lineParser = &JSONLineParser{}
+	p.lineParser = &KeyValLineParser{}
 	return nil
 }
 
@@ -56,31 +55,31 @@ type LineParser interface {
 	ParseLine(line string) (map[string]interface{}, error)
 }
 
-type JSONLineParser struct {
+type KeyValLineParser struct {
 }
 
-// LineParser will do a complete JSON decode of the line,
-// but then re-encode any value that's not a string as JSON and return
-// it as a string. We don't want nested objects, but it seems silly to
-// balk instead of just pushing json as the value into retriever.
-func (j *JSONLineParser) ParseLine(line string) (map[string]interface{}, error) {
+func (j *KeyValLineParser) ParseLine(line string) (map[string]interface{}, error) {
 	parsed := make(map[string]interface{})
-	err := json.Unmarshal([]byte(line), &parsed)
-	if err != nil {
-		return nil, err
-	}
-	processed := make(map[string]interface{})
-	for k, v := range parsed {
-		switch typedVal := v.(type) {
-		case bool, string, float64:
-			processed[k] = typedVal
-		default:
-			rejsoned, _ := json.Marshal(v)
-			processed[k] = string(rejsoned)
-
+	f := func(key, val []byte) error {
+		keyStr := string(key)
+		valStr := string(val)
+		if b, err := strconv.ParseBool(valStr); err == nil {
+			parsed[keyStr] = b
+			return nil
 		}
+		if i, err := strconv.Atoi(valStr); err == nil {
+			parsed[keyStr] = i
+			return nil
+		}
+		if f, err := strconv.ParseFloat(valStr, 64); err == nil {
+			parsed[keyStr] = f
+			return nil
+		}
+		parsed[keyStr] = valStr
+		return nil
 	}
-	return processed, err
+	err := logfmt.Unmarshal([]byte(line), logfmt.HandlerFunc(f))
+	return parsed, err
 }
 
 func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, prefixRegex *parsers.ExtRegexp) {
@@ -106,12 +105,13 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 			}).Debug("skipping line; failed to parse.")
 			continue
 		}
-		timestamp := p.getTimestamp(parsedLine)
-
 		// merge the prefix fields and the parsed line contents
 		for k, v := range prefixFields {
 			parsedLine[k] = v
 		}
+
+		// look for the timestamp in any of the prefix fields or regular content
+		timestamp := p.getTimestamp(parsedLine)
 
 		// send an event to Transmission
 		e := event.Event{

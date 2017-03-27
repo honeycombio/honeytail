@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Sirupsen/logrus"
+	"github.com/kr/logfmt"
 
 	"github.com/honeycombio/honeytail/event"
 	"github.com/honeycombio/honeytail/parsers"
@@ -24,6 +25,7 @@ var possibleTimeFieldNames = []string{
 type Options struct {
 	TimeFieldName string `long:"timefield" description:"Name of the field that contains a timestamp"`
 	Format        string `long:"format" description:"Format of the timestamp found in timefield (supports strftime and Golang time formats)"`
+	WhichParser   string `long:"whichparser" description:"JSON on keyval parser?" default:"json"`
 }
 
 type Parser struct {
@@ -48,12 +50,43 @@ func (p *Parser) Init(options interface{}) error {
 	p.conf = *options.(*Options)
 
 	p.nower = &RealNower{}
-	p.lineParser = &JSONLineParser{}
+	if p.conf.WhichParser == "json" {
+		p.lineParser = &JSONLineParser{}
+	} else {
+		p.lineParser = &KeyValLineParser{}
+	}
 	return nil
 }
 
 type LineParser interface {
 	ParseLine(line string) (map[string]interface{}, error)
+}
+
+type KeyValLineParser struct {
+}
+
+func (j *KeyValLineParser) ParseLine(line string) (map[string]interface{}, error) {
+	parsed := make(map[string]interface{})
+	f := func(key, val []byte) error {
+		keyStr := string(key)
+		valStr := string(val)
+		if b, err := strconv.ParseBool(valStr); err == nil {
+			parsed[keyStr] = b
+			return nil
+		}
+		if i, err := strconv.Atoi(valStr); err == nil {
+			parsed[keyStr] = i
+			return nil
+		}
+		if f, err := strconv.ParseFloat(valStr, 64); err == nil {
+			parsed[keyStr] = f
+			return nil
+		}
+		parsed[keyStr] = valStr
+		return nil
+	}
+	err := logfmt.Unmarshal([]byte(line), logfmt.HandlerFunc(f))
+	return parsed, err
 }
 
 type JSONLineParser struct {

@@ -86,7 +86,7 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 	for line := range lines {
 		logrus.WithFields(logrus.Fields{
 			"line": line,
-		}).Debug("Attempting to process json log line")
+		}).Debug("Attempting to process keyval log line")
 
 		// take care of any headers on the line
 		var prefixFields map[string]string
@@ -101,7 +101,8 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 		if err != nil {
 			// skip lines that won't parse
 			logrus.WithFields(logrus.Fields{
-				"line": line,
+				"line":  line,
+				"error": err,
 			}).Debug("skipping line; failed to parse.")
 			continue
 		}
@@ -120,7 +121,7 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 		}
 		send <- e
 	}
-	logrus.Debug("lines channel is closed, ending json processor")
+	logrus.Debug("lines channel is closed, ending keyval processor")
 }
 
 // getTimestamp looks through the event map for something that looks
@@ -135,7 +136,17 @@ func (p *Parser) getTimestamp(m map[string]interface{}) time.Time {
 		// remove the timestamp from the body when we stuff it in the header
 		defer delete(m, p.conf.TimeFieldName)
 		if t, found := m[p.conf.TimeFieldName]; found {
-			ts = p.tryTimeFormats(t.(string))
+			timeStr, ok := t.(string)
+			if !ok {
+				timeInt, ok := t.(int)
+				if !ok {
+					p.warnAboutTime(p.conf.TimeFieldName, t, "found time field but unknown type")
+					timeStr = p.nower.Now().String()
+				} else {
+					timeStr = strconv.Itoa(timeInt)
+				}
+			}
+			ts = p.tryTimeFormats(timeStr)
 			if ts.IsZero() {
 				p.warnAboutTime(p.conf.TimeFieldName, t, "found time field but failed to parse")
 				ts = p.nower.Now()

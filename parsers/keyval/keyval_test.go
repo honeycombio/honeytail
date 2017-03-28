@@ -52,11 +52,11 @@ func TestParseLine(t *testing.T) {
 }
 
 type testTimestamp struct {
-	format    string    // the format this test's time is in
-	fieldName string    // the field in the map containing the time
-	input     string    // the value corresponding to the fieldName
-	auto      bool      // whether the input should be parsable even without specifying format/fieldName
-	expected  time.Time // the expected time object to get back
+	format    string      // the format this test's time is in
+	fieldName string      // the field in the map containing the time
+	input     interface{} // the value corresponding to the fieldName
+	auto      bool        // whether the input should be parsable even without specifying format/fieldName
+	expected  time.Time   // the expected time object to get back
 }
 
 var tts = []testTimestamp{
@@ -117,6 +117,12 @@ var tts = []testTimestamp{
 		format:    UnixTimestampFmt,
 		fieldName: "time",
 		input:     "1440116565",
+		expected:  time.Unix(1440116565, 0),
+	},
+	{
+		format:    UnixTimestampFmt,
+		fieldName: "time",
+		input:     1440116565,
 		expected:  time.Unix(1440116565, 0),
 	},
 	{

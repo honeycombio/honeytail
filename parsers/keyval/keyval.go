@@ -121,13 +121,20 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 		}
 
 		parsedLine, err := p.lineParser.ParseLine(line)
-
 		if err != nil {
 			// skip lines that won't parse
 			logrus.WithFields(logrus.Fields{
 				"line":  line,
 				"error": err,
 			}).Debug("skipping line; failed to parse.")
+			continue
+		}
+		if len(parsedLine) == 0 {
+			// skip empty lines, as determined by the parser
+			logrus.WithFields(logrus.Fields{
+				"line":  line,
+				"error": err,
+			}).Debug("skipping line; no key/val pairs found.")
 			continue
 		}
 		// merge the prefix fields and the parsed line contents

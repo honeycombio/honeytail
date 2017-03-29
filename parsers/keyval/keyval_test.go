@@ -68,8 +68,10 @@ func TestBrokenFilterRegex(t *testing.T) {
 
 func TestFilterRegex(t *testing.T) {
 	p := &Parser{
-		lineParser: &NoopLineParser{},
-		nower:      &FakeNower{},
+		lineParser: &NoopLineParser{
+			outgoingMap: map[string]interface{}{"key": "val"},
+		},
+		nower: &FakeNower{},
 	}
 	tsts := []struct {
 		filterString   string
@@ -147,6 +149,38 @@ func TestFilterRegex(t *testing.T) {
 		close(send)
 		wg.Wait()
 	}
+}
+
+func TestDontReturnEmptyEvents(t *testing.T) {
+	p := &Parser{
+		lineParser: &NoopLineParser{},
+		nower:      &FakeNower{},
+	}
+	lines := make(chan string)
+	send := make(chan event.Event)
+	// send input into lines in a goroutine then close the lines channel
+	go func() {
+		for _, line := range []string{"one", "two", "three"} {
+			lines <- line
+		}
+		close(lines)
+	}()
+	// read from the send channel and see if we got back what we expected
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		var counter int
+		for range send {
+			counter++
+		}
+		if counter != 0 {
+			t.Errorf("expected no messages out the send channel, got %d\n", counter)
+		}
+		wg.Done()
+	}()
+	p.ProcessLines(lines, send, nil)
+	close(send)
+	wg.Wait()
 }
 
 type testTimestamp struct {

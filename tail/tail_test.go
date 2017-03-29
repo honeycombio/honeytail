@@ -277,7 +277,7 @@ func TestGetStateFile(t *testing.T) {
 // to create an environment in which to run these tests
 type testSetup struct {
 	tmpdir string
-	abort  chan bool
+	abort  chan struct{}
 }
 
 func (ts *testSetup) start(t *testing.T) {
@@ -287,7 +287,7 @@ func (ts *testSetup) start(t *testing.T) {
 		t.Fatal(err)
 	}
 	ts.tmpdir = tmpdir
-	ts.abort = make(chan bool)
+	ts.abort = make(chan struct{})
 }
 
 func (ts *testSetup) writeFile(t *testing.T, path string, body string) {

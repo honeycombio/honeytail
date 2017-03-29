@@ -1,5 +1,8 @@
 package keyval
 
+// TODO remove duplicate timeformat from the keyval parser or dedupe wit the
+// JSON parser
+
 import "strings"
 
 const (

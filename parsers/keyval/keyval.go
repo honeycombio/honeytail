@@ -51,6 +51,7 @@ func (p *Parser) Init(options interface{}) error {
 	return nil
 }
 
+// TODO dedupe the LineParser interface with the json parser or remove entirely
 type LineParser interface {
 	ParseLine(line string) (map[string]interface{}, error)
 }
@@ -130,6 +131,8 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 // if unable to parse it will return the current time
 // it is highly recommended that you populate the Config with time format
 // sample from logrus: "time":"2014-03-10 19:57:38.562264131 -0400 EDT"
+// TODO remove fancy time parsing from the keyval parser, since timestamps
+// are likely to be more well structured and come from the prefix
 func (p *Parser) getTimestamp(m map[string]interface{}) time.Time {
 	var ts time.Time
 	if p.conf.TimeFieldName != "" {

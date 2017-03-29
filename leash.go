@@ -30,8 +30,8 @@ import (
 func run(options GlobalOptions) {
 	logrus.Info("Starting honeytail")
 
-	sigs := make(chan os.Signal, 0)
-	abort := make(chan bool)
+	sigs := make(chan os.Signal, 1)
+	abort := make(chan struct{})
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 
 	// spin up our transmission to send events to Honeycomb
@@ -91,17 +91,14 @@ func run(options GlobalOptions) {
 		fmt.Fprintf(os.Stderr, "Cleaning up...\n")
 		close(abort)
 		// and if they insist, catch a second CTRL-C or timeout on 10sec
-		signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-		go func() {
-			select {
-			case <-sigs:
-				fmt.Fprintf(os.Stderr, "Caught second signal... Aborting.\n")
-				os.Exit(1)
-			case <-time.After(10 * time.Second):
-				fmt.Fprintf(os.Stderr, "Taking too long... Aborting.\n")
-				os.Exit(1)
-			}
-		}()
+		select {
+		case <-sigs:
+			fmt.Fprintf(os.Stderr, "Caught second signal... Aborting.\n")
+			os.Exit(1)
+		case <-time.After(10 * time.Second):
+			fmt.Fprintf(os.Stderr, "Taking too long... Aborting.\n")
+			os.Exit(1)
+		}
 	}()
 
 	// for each channel we got back from tail.GetEntries, spin up a parser.

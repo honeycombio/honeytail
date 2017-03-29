@@ -192,8 +192,6 @@ func TestAbortChannel(t *testing.T) {
 	for _, ch := range chanArr {
 		checkLinesChanClosed(t, ch)
 	}
-
-	// t.Error("finished")
 }
 
 func TestRemoveStateFiles(t *testing.T) {

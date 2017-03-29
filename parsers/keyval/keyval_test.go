@@ -2,8 +2,12 @@ package keyval
 
 import (
 	"reflect"
+	"regexp"
+	"sync"
 	"testing"
 	"time"
+
+	"github.com/honeycombio/honeytail/event"
 )
 
 type FakeNower struct{}
@@ -48,6 +52,100 @@ func TestParseLine(t *testing.T) {
 		if !reflect.DeepEqual(resp, tlm.expected) {
 			t.Errorf("response %+v didn't match expected %+v", resp, tlm.expected)
 		}
+	}
+}
+
+func TestBrokenFilterRegex(t *testing.T) {
+	// test filter that doesn't compile
+	broken := &Parser{}
+	err := broken.Init(&Options{
+		FilterRegex: "regex [ won't compile",
+	})
+	if err == nil {
+		t.Error("Parser Init with broken regex should err, instead got nil")
+	}
+}
+
+func TestFilterRegex(t *testing.T) {
+	p := &Parser{
+		lineParser: &NoopLineParser{},
+		nower:      &FakeNower{},
+	}
+	tsts := []struct {
+		filterString   string
+		invertFilter   bool
+		lines          []string
+		expectedEvents int
+	}{
+		{
+			"aaaa",
+			false,
+			[]string{
+				"line one",
+				"line two aoeu",
+				"line three",
+			},
+			0, // no lines have 'aaaa'
+		},
+		{
+			"aaaa",
+			true,
+			[]string{
+				"line one",
+				"line two aoeu",
+				"line three",
+			},
+			3, // all lines don't have 'aaaa'
+		},
+		{
+			"aoeu",
+			false,
+			[]string{
+				"line one",
+				"line two aoeu",
+				"line three",
+			},
+			1, // only line two has 'aoeu'
+		},
+		{
+			"aoeu",
+			true,
+			[]string{
+				"line one",
+				"line two aoeu",
+				"line three",
+			},
+			2, // lines one and three don't have 'aoeu'
+		},
+	}
+	for _, tst := range tsts {
+		p.filterRegex = regexp.MustCompile(tst.filterString)
+		p.conf.InvertFilter = tst.invertFilter
+		lines := make(chan string)
+		send := make(chan event.Event)
+		// send input into lines in a goroutine then close the lines channel
+		go func() {
+			for _, line := range tst.lines {
+				lines <- line
+			}
+			close(lines)
+		}()
+		// read from the send channel and see if we got back what we expected
+		wg := sync.WaitGroup{}
+		wg.Add(1)
+		go func() {
+			var counter int
+			for range send {
+				counter++
+			}
+			if counter != tst.expectedEvents {
+				t.Errorf("expected %d messages out the send channel, got %d\n", tst.expectedEvents, counter)
+			}
+			wg.Done()
+		}()
+		p.ProcessLines(lines, send, nil)
+		close(send)
+		wg.Wait()
 	}
 }
 

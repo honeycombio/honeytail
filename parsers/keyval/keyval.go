@@ -50,7 +50,10 @@ func (r *RealNower) Now() time.Time {
 func (p *Parser) Init(options interface{}) error {
 	p.conf = *options.(*Options)
 	if p.conf.FilterRegex != "" {
-		p.filterRegex = regexp.MustCompile(p.conf.FilterRegex)
+		var err error
+		if p.filterRegex, err = regexp.Compile(p.conf.FilterRegex); err != nil {
+			return err
+		}
 	}
 
 	p.nower = &RealNower{}
@@ -247,4 +250,14 @@ func (p *Parser) warnAboutTime(fieldName string, foundTimeVal interface{}, msg s
 	}
 	logrus.WithField("time_field", fieldName).WithField("time_value", foundTimeVal).Warn(msg + "\n  Please refer to https://honeycomb.io/docs/json#timestamp-parsing")
 	p.warnedAboutTime = true
+}
+
+type NoopLineParser struct {
+	incomingLine string
+	outgoingMap  map[string]interface{}
+}
+
+func (n *NoopLineParser) ParseLine(line string) (map[string]interface{}, error) {
+	n.incomingLine = line
+	return n.outgoingMap, nil
 }

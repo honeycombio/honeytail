@@ -32,6 +32,15 @@ var tlms = []testLineMap{
 			"mybool":  true,
 		},
 	},
+	{ // missing keyval pairs
+		input: `foo bar 123 baz`,
+		expected: map[string]interface{}{
+			"foo": "",
+			"bar": "",
+			"123": "",
+			"baz": "",
+		},
+	},
 	{ // time
 		input: `time="2014-03-10 19:57:38.123456789 -0800 PST" myint=3 myfloat=4.234`,
 		expected: map[string]interface{}{
@@ -181,6 +190,96 @@ func TestDontReturnEmptyEvents(t *testing.T) {
 	p.ProcessLines(lines, send, nil)
 	close(send)
 	wg.Wait()
+}
+
+// TestDontReturnUselessEvents a useless event is one with all keys and no
+// values
+func TestDontReturnUselessEvents(t *testing.T) {
+	p := &Parser{
+		lineParser: &NoopLineParser{
+			outgoingMap: map[string]interface{}{
+				"key": "",
+				"k2":  "",
+			},
+		},
+		nower: &FakeNower{},
+	}
+	lines := make(chan string)
+	send := make(chan event.Event)
+	// send input into lines in a goroutine then close the lines channel
+	go func() {
+		for _, line := range []string{"one", "two", "three"} {
+			lines <- line
+		}
+		close(lines)
+	}()
+	// read from the send channel and see if we got back what we expected
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		var counter int
+		for range send {
+			counter++
+		}
+		if counter != 0 {
+			t.Errorf("expected no messages out the send channel, got %d\n", counter)
+		}
+		wg.Done()
+	}()
+	p.ProcessLines(lines, send, nil)
+	close(send)
+	wg.Wait()
+}
+
+func TestAllEmpty(t *testing.T) {
+	tsts := []struct {
+		incoming map[string]interface{}
+		empty    bool
+	}{
+		{
+			map[string]interface{}{
+				"k1": "v1",
+			},
+			false,
+		},
+		{
+			map[string]interface{}{
+				"k1": 3,
+			},
+			false,
+		},
+		{
+			map[string]interface{}{
+				"k1": []string{"foo", "bar"},
+			},
+			false,
+		},
+		{
+			map[string]interface{}{},
+			true,
+		},
+		{
+			map[string]interface{}{
+				"k1": "",
+			},
+			true,
+		},
+		{
+			map[string]interface{}{
+				"k1": "",
+				"k2": "",
+				"k3": "",
+			},
+			true,
+		},
+	}
+	for _, tst := range tsts {
+		res := allEmpty(tst.incoming)
+		if res != tst.empty {
+			t.Errorf("expected %v's empty val would be %v, got %v",
+				tst.incoming, tst.empty, res)
+		}
+	}
 }
 
 type testTimestamp struct {

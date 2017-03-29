@@ -137,6 +137,15 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 			}).Debug("skipping line; no key/val pairs found.")
 			continue
 		}
+		if allEmpty(parsedLine) {
+			// skip events for which all fields are the empty string, because that's
+			// probably broken
+			logrus.WithFields(logrus.Fields{
+				"line":  line,
+				"error": err,
+			}).Debug("skipping line; no all values are the empty string.")
+			continue
+		}
 		// merge the prefix fields and the parsed line contents
 		for k, v := range prefixFields {
 			parsedLine[k] = v
@@ -153,6 +162,24 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 		send <- e
 	}
 	logrus.Debug("lines channel is closed, ending keyval processor")
+}
+
+// allEmpty returns true if all values in the map are the empty string
+// TODO move this into the main honeytail loop instead of the keyval parser
+func allEmpty(pl map[string]interface{}) bool {
+	for _, v := range pl {
+		vStr, ok := v.(string)
+		if !ok {
+			// wouldn't coerce to string, so it must have something that's not an
+			// empty string
+			return false
+		}
+		if vStr != "" {
+			return false
+		}
+	}
+	// we've gone through the entire map and every field value has matched ""
+	return true
 }
 
 // getTimestamp looks through the event map for something that looks

@@ -99,7 +99,8 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 		// if matching regex is set, filter lines here
 		if p.filterRegex != nil {
 			matched := p.filterRegex.MatchString(line)
-			if matched && !p.conf.InvertFilter {
+			// if both are true or both are false, skip. else continue
+			if matched == p.conf.InvertFilter {
 				logrus.WithFields(logrus.Fields{
 					"line":    line,
 					"matched": matched,

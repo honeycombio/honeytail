@@ -50,6 +50,8 @@ import (
 // SET timestamp=1476127288;
 // SELECT * FROM foo WHERE bar=2 AND (baz=104 OR baz=0) ORDER BY baz;
 
+const numParsers = 20
+
 const (
 	rdsStr  = "rds"
 	ec2Str  = "ec2"
@@ -358,32 +360,40 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 
 func (p *Parser) handleEvents(rawEvents <-chan []string, send chan<- event.Event) {
 	defer p.wg.Done()
-	for rawE := range rawEvents {
-		sq, timestamp := p.handleEvent(rawE)
-		if len(sq) == 0 {
-			continue
-		}
-		if q, ok := sq["query"]; !ok || q == "" {
-			// skip events with no query field
-			continue
-		}
-		if p.hostedOn != "" {
-			sq[hostedOnKey] = p.hostedOn
-		}
-		if p.readOnly != nil {
-			sq[readOnlyKey] = *p.readOnly
-		}
-		if p.replicaLag != nil {
-			sq[replicaLagKey] = *p.replicaLag
-		}
-		if p.role != nil {
-			sq[roleKey] = *p.role
-		}
-		send <- event.Event{
-			Timestamp: timestamp,
-			Data:      sq,
-		}
+	wg := sync.WaitGroup{}
+	for i := 0; i < numParsers; i++ {
+		wg.Add(1)
+		go func() {
+			for rawE := range rawEvents {
+				sq, timestamp := p.handleEvent(rawE)
+				if len(sq) == 0 {
+					continue
+				}
+				if q, ok := sq["query"]; !ok || q == "" {
+					// skip events with no query field
+					continue
+				}
+				if p.hostedOn != "" {
+					sq[hostedOnKey] = p.hostedOn
+				}
+				if p.readOnly != nil {
+					sq[readOnlyKey] = *p.readOnly
+				}
+				if p.replicaLag != nil {
+					sq[replicaLagKey] = *p.replicaLag
+				}
+				if p.role != nil {
+					sq[roleKey] = *p.role
+				}
+				send <- event.Event{
+					Timestamp: timestamp,
+					Data:      sq,
+				}
+			}
+			wg.Done()
+		}()
 	}
+	wg.Wait()
 	logrus.Debug("done with mysql handleEvents")
 }
 

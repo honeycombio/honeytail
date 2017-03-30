@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Sirupsen/logrus"
@@ -13,6 +14,8 @@ import (
 	"github.com/honeycombio/honeytail/event"
 	"github.com/honeycombio/honeytail/parsers"
 )
+
+const numParsers = 20
 
 var possibleTimeFieldNames = []string{
 	"time", "Time",
@@ -84,42 +87,51 @@ func (j *JSONLineParser) ParseLine(line string) (map[string]interface{}, error) 
 }
 
 func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, prefixRegex *parsers.ExtRegexp) {
-	for line := range lines {
-		logrus.WithFields(logrus.Fields{
-			"line": line,
-		}).Debug("Attempting to process json log line")
+	wg := sync.WaitGroup{}
+	for i := 0; i < numParsers; i++ {
+		wg.Add(1)
+		go func() {
+			for line := range lines {
+				logrus.WithFields(logrus.Fields{
+					"line": line,
+				}).Debug("Attempting to process json log line")
 
-		// take care of any headers on the line
-		var prefixFields map[string]string
-		if prefixRegex != nil {
-			var prefix string
-			prefix, prefixFields = prefixRegex.FindStringSubmatchMap(line)
-			line = strings.TrimPrefix(line, prefix)
-		}
+				// take care of any headers on the line
+				var prefixFields map[string]string
+				if prefixRegex != nil {
+					var prefix string
+					prefix, prefixFields = prefixRegex.FindStringSubmatchMap(line)
+					line = strings.TrimPrefix(line, prefix)
+				}
 
-		parsedLine, err := p.lineParser.ParseLine(line)
+				parsedLine, err := p.lineParser.ParseLine(line)
 
-		if err != nil {
-			// skip lines that won't parse
-			logrus.WithFields(logrus.Fields{
-				"line": line,
-			}).Debug("skipping line; failed to parse.")
-			continue
-		}
-		timestamp := p.getTimestamp(parsedLine)
+				if err != nil {
+					// skip lines that won't parse
+					logrus.WithFields(logrus.Fields{
+						"line": line,
+					}).Debug("skipping line; failed to parse.")
+					continue
+				}
+				timestamp := p.getTimestamp(parsedLine)
 
-		// merge the prefix fields and the parsed line contents
-		for k, v := range prefixFields {
-			parsedLine[k] = v
-		}
+				// merge the prefix fields and the parsed line contents
+				for k, v := range prefixFields {
+					parsedLine[k] = v
+				}
 
-		// send an event to Transmission
-		e := event.Event{
-			Timestamp: timestamp,
-			Data:      parsedLine,
-		}
-		send <- e
+				// send an event to Transmission
+				e := event.Event{
+					Timestamp: timestamp,
+					Data:      parsedLine,
+				}
+				send <- e
+			}
+
+			wg.Done()
+		}()
 	}
+	wg.Wait()
 	logrus.Debug("lines channel is closed, ending json processor")
 }
 

@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Sirupsen/logrus"
@@ -16,6 +17,7 @@ import (
 )
 
 const (
+	numParsers                = 20
 	commonLogFormatTimeLayout = "02/Jan/2006:15:04:05 -0700"
 	iso8601TimeLayout         = "2006-01-02T15:04:05-07:00"
 )
@@ -75,44 +77,52 @@ func (g *GonxLineParser) ParseLine(line string) (map[string]string, error) {
 
 func (n *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, prefixRegex *parsers.ExtRegexp) {
 	// parse lines one by one
-	for line := range lines {
-		logrus.WithFields(logrus.Fields{
-			"line": line,
-		}).Debug("Attempting to process nginx log line")
+	wg := sync.WaitGroup{}
+	for i := 0; i < numParsers; i++ {
+		wg.Add(1)
+		go func() {
+			for line := range lines {
+				logrus.WithFields(logrus.Fields{
+					"line": line,
+				}).Debug("Attempting to process nginx log line")
 
-		// take care of any headers on the line
-		var prefixFields map[string]string
-		if prefixRegex != nil {
-			var prefix string
-			prefix, prefixFields = prefixRegex.FindStringSubmatchMap(line)
-			line = strings.TrimPrefix(line, prefix)
-		}
+				// take care of any headers on the line
+				var prefixFields map[string]string
+				if prefixRegex != nil {
+					var prefix string
+					prefix, prefixFields = prefixRegex.FindStringSubmatchMap(line)
+					line = strings.TrimPrefix(line, prefix)
+				}
 
-		parsedLine, err := n.lineParser.ParseLine(line)
-		if err != nil {
-			continue
-		}
-		// merge the prefix fields and the parsed line contents
-		for k, v := range prefixFields {
-			parsedLine[k] = v
-		}
-		// typedEvent, err := typeifyEvent(nginxEvent)
-		typedEvent, err := typeifyParsedLine(parsedLine)
-		if err != nil {
-			logrus.WithFields(logrus.Fields{
-				"line":  line,
-				"event": parsedLine,
-			}).Debug("failed to typeify event")
-			continue
-		}
-		timestamp := getTimestamp(n.nower, typedEvent)
+				parsedLine, err := n.lineParser.ParseLine(line)
+				if err != nil {
+					continue
+				}
+				// merge the prefix fields and the parsed line contents
+				for k, v := range prefixFields {
+					parsedLine[k] = v
+				}
+				// typedEvent, err := typeifyEvent(nginxEvent)
+				typedEvent, err := typeifyParsedLine(parsedLine)
+				if err != nil {
+					logrus.WithFields(logrus.Fields{
+						"line":  line,
+						"event": parsedLine,
+					}).Debug("failed to typeify event")
+					continue
+				}
+				timestamp := getTimestamp(n.nower, typedEvent)
 
-		e := event.Event{
-			Timestamp: timestamp,
-			Data:      typedEvent,
-		}
-		send <- e
+				e := event.Event{
+					Timestamp: timestamp,
+					Data:      typedEvent,
+				}
+				send <- e
+			}
+			wg.Done()
+		}()
 	}
+	wg.Wait()
 	logrus.Debug("lines channel is closed, ending nginx processor")
 }
 

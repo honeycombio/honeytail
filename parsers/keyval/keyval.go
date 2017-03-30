@@ -143,7 +143,7 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 			logrus.WithFields(logrus.Fields{
 				"line":  line,
 				"error": err,
-			}).Debug("skipping line; no all values are the empty string.")
+			}).Debug("skipping line; all values are the empty string.")
 			continue
 		}
 		// merge the prefix fields and the parsed line contents

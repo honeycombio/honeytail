@@ -210,47 +210,39 @@ func getParserAndOptions(options GlobalOptions) (parsers.Parser, interface{}) {
 // returns a channel on which it will send the munged events.
 // It is responsible for hashing or dropping or adding fields to the events
 func modifyEventContents(toBeSent chan event.Event, options GlobalOptions) chan event.Event {
-	for _, field := range options.DropFields {
-		toBeSent = dropEventField(field, toBeSent, options)
+	// short circuit this if no field scrubbing is enabled
+	if len(options.DropFields) == 0 && len(options.ScrubFields) == 0 &&
+		len(options.AddFields) == 0 && len(options.RequestShape) == 0 {
+		return toBeSent
 	}
-	for _, field := range options.ScrubFields {
-		toBeSent = scrubEventField(field, toBeSent, options)
-	}
-	for _, field := range options.AddFields {
-		toBeSent = addEventField(field, toBeSent, options)
-	}
-	for _, field := range options.RequestShape {
-		toBeSent = requestShape(field, toBeSent, options)
-	}
-	return toBeSent
-}
-
-// dropEventField drops any fields that are to be dropped, drop them before
-// passing the event on down the line to the next consumer
-func dropEventField(field string, toBeSent chan event.Event, options GlobalOptions) chan event.Event {
-	newSent := make(chan event.Event, options.NumSenders)
-	go func() {
-		wg := sync.WaitGroup{}
-		for i := uint(0); i < options.NumSenders; i++ {
-			wg.Add(1)
-			go func() {
-				for ev := range toBeSent {
-					delete(ev.Data, field)
-					newSent <- ev
-				}
-				wg.Done()
-			}()
+	// parse the addField bit once instead of for every event
+	parsedAddFields := map[string]string{}
+	for _, addField := range options.AddFields {
+		splitField := strings.SplitN(addField, "=", 2)
+		if len(splitField) != 2 {
+			logrus.WithFields(logrus.Fields{
+				"add_field": addField,
+			}).Fatal("unable to separate provided field into a key=val pair")
 		}
-		wg.Wait()
-		close(newSent)
-	}()
-	return newSent
-}
-
-// scrubEventField replaces the value for  any fields that are to be scrubbed
-// with a sha256 hash of the value, then passes the event on down the line to
-// the next consumer
-func scrubEventField(field string, toBeSent chan event.Event, options GlobalOptions) chan event.Event {
+		parsedAddFields[splitField[0]] = splitField[1]
+	}
+	// do all the advance work for request shaping
+	shaper := &requestShaper{}
+	if len(options.RequestShape) != 0 {
+		shaper.pr = &urlshaper.Parser{}
+		if options.ShapePrefix != "" {
+			shaper.prefix = options.ShapePrefix + "_"
+		}
+		for _, rpat := range options.RequestPattern {
+			pat := urlshaper.Pattern{Pat: rpat}
+			if err := pat.Compile(); err != nil {
+				logrus.WithField("request_pattern", rpat).WithError(err).Fatal(
+					"Failed to compile provided pattern.")
+			}
+			shaper.pr.Patterns = append(shaper.pr.Patterns, &pat)
+		}
+	}
+	// ok, we need to munge events. Sing up enough goroutines to handle this
 	newSent := make(chan event.Event, options.NumSenders)
 	go func() {
 		wg := sync.WaitGroup{}
@@ -258,13 +250,24 @@ func scrubEventField(field string, toBeSent chan event.Event, options GlobalOpti
 			wg.Add(1)
 			go func() {
 				for ev := range toBeSent {
-					if val, ok := ev.Data[field]; ok {
-						// generate a sha256 hash
-						newVal := sha256.Sum256([]byte(fmt.Sprintf("%v", val)))
-						// and use the base16 string version of it
-						ev.Data[field] = fmt.Sprintf("%x", newVal)
+					for _, field := range options.DropFields {
+						delete(ev.Data, field)
+					}
+					for _, field := range options.ScrubFields {
+						if val, ok := ev.Data[field]; ok {
+							// generate a sha256 hash and use the base16 for the content
+							newVal := sha256.Sum256([]byte(fmt.Sprintf("%v", val)))
+							ev.Data[field] = fmt.Sprintf("%x", newVal)
+						}
+					}
+					for k, v := range parsedAddFields {
+						ev.Data[k] = v
+					}
+					for _, field := range options.RequestShape {
+						shaper.requestShape(field, &ev, options)
 					}
 					newSent <- ev
+
 				}
 				wg.Done()
 			}()
@@ -275,118 +278,62 @@ func scrubEventField(field string, toBeSent chan event.Event, options GlobalOpti
 	return newSent
 }
 
-// addEventField adds any fields that are to be added to the event before
-// passing the event on down the line to the next consumer
-func addEventField(field string, toBeSent chan event.Event, options GlobalOptions) chan event.Event {
-	newSent := make(chan event.Event, options.NumSenders)
-	// separate the k=v field we got from the command line
-	splitField := strings.SplitN(field, "=", 2)
-	if len(splitField) != 2 {
-		logrus.WithFields(logrus.Fields{
-			"add_field": field,
-		}).Fatal("unable to separate provided field into a key=val pair")
-	}
-	key := splitField[0]
-	val := splitField[1]
-	go func() {
-		wg := sync.WaitGroup{}
-		for i := uint(0); i < options.NumSenders; i++ {
-			wg.Add(1)
-			go func() {
-				for ev := range toBeSent {
-					ev.Data[key] = val
-					newSent <- ev
-				}
-				wg.Done()
-			}()
-		}
-		wg.Wait()
-		close(newSent)
-	}()
-	return newSent
+// requestShaper holds the bits about request shaping that want to be
+// precompiled instead of compute on every event
+type requestShaper struct {
+	prefix string
+	pr     *urlshaper.Parser
 }
 
 // requestShape expects the field passed in to have the form
 // VERB /path/of/request HTTP/1.x
 // If it does, it will break it apart into components, normalize the URL,
 // and add a handful of additional fields based on what it finds.
-func requestShape(field string, toBeSent chan event.Event, options GlobalOptions) chan event.Event {
-	logrus.WithFields(logrus.Fields{
-		"field": field,
-	}).Debug("spinning up request shaper")
-	newSent := make(chan event.Event, options.NumSenders)
-	var prefix string
-	if options.ShapePrefix != "" {
-		prefix = options.ShapePrefix + "_"
-	}
-	pr := urlshaper.Parser{}
-	for _, rpat := range options.RequestPattern {
-		pat := urlshaper.Pattern{Pat: rpat}
-		if err := pat.Compile(); err != nil {
-			logrus.WithField("request_pattern", rpat).WithError(err).Fatal(
-				"Failed to compile provided pattern.")
+func (r *requestShaper) requestShape(field string, ev *event.Event,
+	options GlobalOptions) {
+	if val, ok := ev.Data[field]; ok {
+		// start by splitting out method, uri, and version
+		parts := strings.Split(val.(string), " ")
+		var path string
+		if len(parts) == 3 {
+			// treat it as METHOD /path HTTP/1.X
+			ev.Data[r.prefix+field+"_method"] = parts[0]
+			ev.Data[r.prefix+field+"_protocol_version"] = parts[2]
+			path = parts[1]
+		} else {
+			// treat it as just the /path
+			path = parts[0]
 		}
-		pr.Patterns = append(pr.Patterns, &pat)
-	}
-	go func() {
-		wg := sync.WaitGroup{}
-		for i := uint(0); i < options.NumSenders; i++ {
-			wg.Add(1)
-			go func() {
-				for ev := range toBeSent {
-					if val, ok := ev.Data[field]; ok {
-						// start by splitting out method, uri, and version
-						parts := strings.Split(val.(string), " ")
-						var path string
-						if len(parts) == 3 {
-							// treat it as METHOD /path HTTP/1.X
-							ev.Data[prefix+field+"_method"] = parts[0]
-							ev.Data[prefix+field+"_protocol_version"] = parts[2]
-							path = parts[1]
-						} else {
-							// treat it as just the /path
-							path = parts[0]
-						}
-						// next up, get all the goodies out of the path
-						res, err := pr.Parse(path)
-						if err != nil {
-							// couldn't parse it, just pass along the event
-							newSent <- ev
-							continue
-						}
-						ev.Data[prefix+field+"_uri"] = res.URI
-						ev.Data[prefix+field+"_path"] = res.Path
-						if res.Query != "" {
-							ev.Data[prefix+field+"_query"] = res.Query
-						}
-						for k, v := range res.QueryFields {
-							// only include the keys we want
-							if options.RequestParseQuery == "all" ||
-								whitelistKey(options.RequestQueryKeys, k) {
-								if len(v) > 1 {
-									sort.Strings(v)
-								}
-								ev.Data[prefix+field+"_query_"+k] = strings.Join(v, ", ")
-							}
-						}
-						for k, v := range res.PathFields {
-							ev.Data[prefix+field+"_path_"+k] = v[0]
-						}
-						ev.Data[prefix+field+"_shape"] = res.Shape
-						ev.Data[prefix+field+"_pathshape"] = res.PathShape
-						if res.QueryShape != "" {
-							ev.Data[prefix+field+"_queryshape"] = res.QueryShape
-						}
-					}
-					newSent <- ev
+		// next up, get all the goodies out of the path
+		res, err := r.pr.Parse(path)
+		if err != nil {
+			// couldn't parse it, just pass along the event
+			return
+		}
+		ev.Data[r.prefix+field+"_uri"] = res.URI
+		ev.Data[r.prefix+field+"_path"] = res.Path
+		if res.Query != "" {
+			ev.Data[r.prefix+field+"_query"] = res.Query
+		}
+		for k, v := range res.QueryFields {
+			// only include the keys we want
+			if options.RequestParseQuery == "all" ||
+				whitelistKey(options.RequestQueryKeys, k) {
+				if len(v) > 1 {
+					sort.Strings(v)
 				}
-				wg.Done()
-			}()
+				ev.Data[r.prefix+field+"_query_"+k] = strings.Join(v, ", ")
+			}
 		}
-		wg.Wait()
-		close(newSent)
-	}()
-	return newSent
+		for k, v := range res.PathFields {
+			ev.Data[r.prefix+field+"_path_"+k] = v[0]
+		}
+		ev.Data[r.prefix+field+"_shape"] = res.Shape
+		ev.Data[r.prefix+field+"_pathshape"] = res.PathShape
+		if res.QueryShape != "" {
+			ev.Data[r.prefix+field+"_queryshape"] = res.QueryShape
+		}
+	}
 }
 
 // return true if the key is in the whitelist

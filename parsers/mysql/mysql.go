@@ -144,6 +144,10 @@ type Parser struct {
 	readOnly   *bool
 	replicaLag *int64
 	role       *string
+}
+
+// the normalizer can't be shared by all threads.
+type perThreadParser struct {
 	normalizer *normalizer.Parser
 }
 
@@ -160,7 +164,6 @@ func (n *RealNower) Now() time.Time {
 func (p *Parser) Init(options interface{}) error {
 	p.conf = *options.(*Options)
 	p.nower = &RealNower{}
-	p.normalizer = &normalizer.Parser{}
 	if p.conf.Host != "" {
 		url := fmt.Sprintf("%s:%s@tcp(%s)/", p.conf.User, p.conf.Pass, p.conf.Host)
 		db, err := sql.Open("mysql", url)
@@ -362,10 +365,13 @@ func (p *Parser) handleEvents(rawEvents <-chan []string, send chan<- event.Event
 	defer p.wg.Done()
 	wg := sync.WaitGroup{}
 	for i := 0; i < numParsers; i++ {
+		ptp := perThreadParser{
+			normalizer: &normalizer.Parser{},
+		}
 		wg.Add(1)
 		go func() {
 			for rawE := range rawEvents {
-				sq, timestamp := p.handleEvent(rawE)
+				sq, timestamp := p.handleEvent(&ptp, rawE)
 				if len(sq) == 0 {
 					continue
 				}
@@ -400,7 +406,8 @@ func (p *Parser) handleEvents(rawEvents <-chan []string, send chan<- event.Event
 // Parse a set of MySQL log lines that seem to represent a single event and
 // return a struct of extracted data as well as the highest-resolution timestamp
 // available.
-func (p *Parser) handleEvent(rawE []string) (map[string]interface{}, time.Time) {
+func (p *Parser) handleEvent(ptp *perThreadParser, rawE []string) (
+	map[string]interface{}, time.Time) {
 	sq := map[string]interface{}{}
 	var timeFromComment time.Time
 	var timeFromSet int64
@@ -506,14 +513,14 @@ func (p *Parser) handleEvent(rawE []string) (map[string]interface{}, time.Time) 
 			if strings.HasSuffix(query, ";") {
 				q := strings.TrimSpace(strings.TrimSuffix(query, ";"))
 				sq[queryKey] = q
-				sq[normalizedQueryKey] = p.normalizer.NormalizeQuery(q)
-				if len(p.normalizer.LastTables) > 0 {
-					sq[tablesKey] = strings.Join(p.normalizer.LastTables, " ")
+				sq[normalizedQueryKey] = ptp.normalizer.NormalizeQuery(q)
+				if len(ptp.normalizer.LastTables) > 0 {
+					sq[tablesKey] = strings.Join(ptp.normalizer.LastTables, " ")
 				}
-				if len(p.normalizer.LastComments) > 0 {
-					sq[commentsKey] = "/* " + strings.Join(p.normalizer.LastComments, " */ /* ") + " */"
+				if len(ptp.normalizer.LastComments) > 0 {
+					sq[commentsKey] = "/* " + strings.Join(ptp.normalizer.LastComments, " */ /* ") + " */"
 				}
-				sq[statementKey] = p.normalizer.LastStatement
+				sq[statementKey] = ptp.normalizer.LastStatement
 				query = ""
 			}
 		} else {

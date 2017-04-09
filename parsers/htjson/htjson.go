@@ -15,8 +15,6 @@ import (
 	"github.com/honeycombio/honeytail/parsers"
 )
 
-const numParsers = 20
-
 var possibleTimeFieldNames = []string{
 	"time", "Time",
 	"timestamp", "Timestamp", "TimeStamp",
@@ -27,6 +25,8 @@ var possibleTimeFieldNames = []string{
 type Options struct {
 	TimeFieldName string `long:"timefield" description:"Name of the field that contains a timestamp"`
 	Format        string `long:"format" description:"Format of the timestamp found in timefield (supports strftime and Golang time formats)"`
+
+	NumParsers int `hidden:"true" description:"number of mongo parsers to spin up"`
 }
 
 type Parser struct {
@@ -88,7 +88,7 @@ func (j *JSONLineParser) ParseLine(line string) (map[string]interface{}, error) 
 
 func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, prefixRegex *parsers.ExtRegexp) {
 	wg := sync.WaitGroup{}
-	for i := 0; i < numParsers; i++ {
+	for i := 0; i < p.conf.NumParsers; i++ {
 		wg.Add(1)
 		go func() {
 			for line := range lines {

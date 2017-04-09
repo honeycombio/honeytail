@@ -15,8 +15,6 @@ import (
 	"github.com/honeycombio/honeytail/parsers"
 )
 
-const numParsers = 20
-
 const (
 	// https://github.com/rueckstiess/mongodb-log-spec#timestamps
 	ctimeNoMSTimeFormat    = "Mon Jan _2 15:04:05"

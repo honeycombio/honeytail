@@ -719,6 +719,9 @@ func TestProcessLines(t *testing.T) {
 
 	for _, tt := range tsts {
 		p := &Parser{
+			conf: Options{
+				NumParsers: 5,
+			},
 			nower: &FakeNower{},
 			// normalizer: &normalizer.Parser{},
 		}
@@ -756,6 +759,9 @@ func TestProcessLines(t *testing.T) {
 	var numEvents int
 	for _, tt := range tsts {
 		p := &Parser{
+			conf: Options{
+				NumParsers: 5,
+			},
 			SampleRate: 3,
 			nower:      &FakeNower{},
 			// normalizer: &normalizer.Parser{},

@@ -15,8 +15,6 @@ import (
 	"github.com/honeycombio/honeytail/parsers"
 )
 
-const numParsers = 20
-
 var possibleTimeFieldNames = []string{
 	"time", "Time",
 	"timestamp", "Timestamp", "TimeStamp",
@@ -29,6 +27,8 @@ type Options struct {
 	Format        string `long:"format" description:"Format of the timestamp found in timefield (supports strftime and Golang time formats)"`
 	FilterRegex   string `long:"filter_regex" description:"a regular expression that will filter the input stream and only parse lines that match"`
 	InvertFilter  bool   `long:"invert_filter" description:"change the filter_regex to only process lines that do *not* match"`
+
+	NumParsers int `hidden:"true" description:"number of mongo parsers to spin up"`
 }
 
 type Parser struct {
@@ -98,7 +98,7 @@ func (j *KeyValLineParser) ParseLine(line string) (map[string]interface{}, error
 
 func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, prefixRegex *parsers.ExtRegexp) {
 	wg := sync.WaitGroup{}
-	for i := 0; i < numParsers; i++ {
+	for i := 0; i < p.conf.NumParsers; i++ {
 		wg.Add(1)
 		go func() {
 			for line := range lines {

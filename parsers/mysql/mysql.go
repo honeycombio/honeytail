@@ -50,8 +50,6 @@ import (
 // SET timestamp=1476127288;
 // SELECT * FROM foo WHERE bar=2 AND (baz=104 OR baz=0) ORDER BY baz;
 
-const numParsers = 20
-
 const (
 	rdsStr  = "rds"
 	ec2Str  = "ec2"
@@ -130,6 +128,8 @@ type Options struct {
 	User          string `long:"user" description:"MySQL username"`
 	Pass          string `long:"pass" description:"MySQL password"`
 	QueryInterval uint   `long:"interval" description:"interval for querying the MySQL DB in seconds" default:"30"`
+
+	NumParsers int `hidden:"true" description:"number of mongo parsers to spin up"`
 }
 
 type Parser struct {
@@ -364,7 +364,7 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 func (p *Parser) handleEvents(rawEvents <-chan []string, send chan<- event.Event) {
 	defer p.wg.Done()
 	wg := sync.WaitGroup{}
-	for i := 0; i < numParsers; i++ {
+	for i := 0; i < p.conf.NumParsers; i++ {
 		ptp := perThreadParser{
 			normalizer: &normalizer.Parser{},
 		}

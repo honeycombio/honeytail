@@ -184,12 +184,15 @@ func getParserAndOptions(options GlobalOptions) (parsers.Parser, interface{}) {
 	case "nginx":
 		parser = &nginx.Parser{}
 		opts = &options.Nginx
+		opts.(*nginx.Options).NumParsers = int(options.NumSenders)
 	case "json":
 		parser = &htjson.Parser{}
 		opts = &options.JSON
+		opts.(*htjson.Options).NumParsers = int(options.NumSenders)
 	case "keyval":
 		parser = &keyval.Parser{}
 		opts = &options.KeyVal
+		opts.(*keyval.Options).NumParsers = int(options.NumSenders)
 	case "mongo", "mongodb":
 		parser = &mongodb.Parser{}
 		opts = &options.Mongo
@@ -199,6 +202,7 @@ func getParserAndOptions(options GlobalOptions) (parsers.Parser, interface{}) {
 			SampleRate: int(options.SampleRate),
 		}
 		opts = &options.MySQL
+		opts.(*mysql.Options).NumParsers = int(options.NumSenders)
 	case "arangodb":
 		parser = &arangodb.Parser{}
 		opts = &options.ArangoDB

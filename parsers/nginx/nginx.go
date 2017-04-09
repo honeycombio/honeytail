@@ -17,7 +17,6 @@ import (
 )
 
 const (
-	numParsers                = 20
 	commonLogFormatTimeLayout = "02/Jan/2006:15:04:05 -0700"
 	iso8601TimeLayout         = "2006-01-02T15:04:05-07:00"
 )
@@ -25,6 +24,8 @@ const (
 type Options struct {
 	ConfigFile    flag.Filename `long:"conf" description:"Path to Nginx config file"`
 	LogFormatName string        `long:"format" description:"Log format name to look for in the Nginx config file"`
+
+	NumParsers int `hidden:"true" description:"number of mongo parsers to spin up"`
 }
 
 type Parser struct {
@@ -78,7 +79,7 @@ func (g *GonxLineParser) ParseLine(line string) (map[string]string, error) {
 func (n *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, prefixRegex *parsers.ExtRegexp) {
 	// parse lines one by one
 	wg := sync.WaitGroup{}
-	for i := 0; i < numParsers; i++ {
+	for i := 0; i < n.conf.NumParsers; i++ {
 		wg.Add(1)
 		go func() {
 			for line := range lines {

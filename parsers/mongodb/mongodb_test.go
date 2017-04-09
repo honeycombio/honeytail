@@ -410,9 +410,14 @@ func TestProcessLines(t *testing.T) {
 		},
 	}
 	m := &Parser{
-		conf:       Options{},
-		nower:      nower,
-		lineParser: &MongoLineParser{},
+		conf: Options{
+			NumParsers: 5,
+		},
+		nower: nower,
+	}
+	m.lineParsers = make([]LineParser, m.conf.NumParsers)
+	for i := 0; i < m.conf.NumParsers; i++ {
+		m.lineParsers[i] = &MongoLineParser{}
 	}
 	lines := make(chan string)
 	send := make(chan event.Event)

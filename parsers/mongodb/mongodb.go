@@ -50,13 +50,16 @@ var timestampFormats = []string{
 
 type Options struct {
 	LogPartials bool `long:"log_partials" description:"Send what was successfully parsed from a line (only if the error occured in the log line's message)."`
+
+	NumParsers int `hidden:"true" description:"number of mongo parsers to spin up"`
 }
 
 type Parser struct {
-	conf       Options
-	lineParser LineParser
-	nower      Nower
+	conf        Options
+	lineParsers []LineParser
+	nower       Nower
 
+	lock              sync.RWMutex
 	currentReplicaSet string
 }
 
@@ -74,15 +77,18 @@ func (m *MongoLineParser) ParseLogLine(line string) (map[string]interface{}, err
 func (p *Parser) Init(options interface{}) error {
 	p.conf = *options.(*Options)
 	p.nower = &RealNower{}
-	p.lineParser = &MongoLineParser{}
+	p.lineParsers = make([]LineParser, p.conf.NumParsers)
+	for i := 0; i < p.conf.NumParsers; i++ {
+		p.lineParsers[i] = &MongoLineParser{}
+	}
 	return nil
 }
 
 func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, prefixRegex *parsers.ExtRegexp) {
 	wg := sync.WaitGroup{}
-	for i := 0; i < numParsers; i++ {
+	for i := 0; i < p.conf.NumParsers; i++ {
 		wg.Add(1)
-		go func() {
+		go func(pNum int) {
 			for line := range lines {
 				// take care of any headers on the line
 				var prefixFields map[string]string
@@ -91,7 +97,7 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 					prefix, prefixFields = prefixRegex.FindStringSubmatchMap(line)
 					line = strings.TrimPrefix(line, prefix)
 				}
-				values, err := p.lineParser.ParseLogLine(line)
+				values, err := p.lineParsers[pNum].ParseLogLine(line)
 				// we get a bunch of errors from the parser on mongo logs, skip em
 				if err == nil || (p.conf.LogPartials && logparser.IsPartialLogLine(err)) {
 					timestamp, err := p.parseTimestamp(values)
@@ -129,15 +135,19 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 						if cmdType, ok := values["command_type"]; ok && cmdType == "replSetHeartbeat" {
 							if cmd, ok := values["command"].(map[string]interface{}); ok {
 								if replicaSet, ok := cmd["replSetHeartbeat"].(string); ok {
+									p.lock.Lock()
 									p.currentReplicaSet = replicaSet
+									p.lock.Unlock()
 								}
 							}
 						}
 					}
 
+					p.lock.RLock()
 					if p.currentReplicaSet != "" {
 						values["replica_set"] = p.currentReplicaSet
 					}
+					p.lock.RUnlock()
 
 					// merge the prefix fields and the parsed line contents
 					for k, v := range prefixFields {
@@ -162,7 +172,7 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 				}
 			}
 			wg.Done()
-		}()
+		}(i)
 	}
 	wg.Wait()
 	logrus.Debug("lines channel is closed, ending mongo processor")

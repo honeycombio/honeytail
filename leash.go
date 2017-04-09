@@ -193,6 +193,7 @@ func getParserAndOptions(options GlobalOptions) (parsers.Parser, interface{}) {
 	case "mongo", "mongodb":
 		parser = &mongodb.Parser{}
 		opts = &options.Mongo
+		opts.(*mongodb.Options).NumParsers = int(options.NumSenders)
 	case "mysql":
 		parser = &mysql.Parser{
 			SampleRate: int(options.SampleRate),

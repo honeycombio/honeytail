@@ -3,16 +3,19 @@ package main
 import (
 	"crypto/sha256"
 	"fmt"
+	"math/rand"
 	"os"
 	"os/signal"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
 
 	"github.com/Sirupsen/logrus"
+	"github.com/honeycombio/dynsampler-go"
 	"github.com/honeycombio/libhoney-go"
 	"github.com/honeycombio/urlshaper"
 
@@ -39,7 +42,6 @@ func run(options GlobalOptions) {
 	libhConfig := libhoney.Config{
 		WriteKey:             options.Reqs.WriteKey,
 		Dataset:              options.Reqs.Dataset,
-		SampleRate:           options.SampleRate,
 		APIHost:              options.APIHost,
 		MaxConcurrentBatches: options.NumSenders,
 		SendFrequency:        time.Duration(options.BatchFrequencyMs) * time.Millisecond,
@@ -212,14 +214,10 @@ func getParserAndOptions(options GlobalOptions) (parsers.Parser, interface{}) {
 }
 
 // modifyEventContents takes a channel from which it will read events. It
-// returns a channel on which it will send the munged events.
-// It is responsible for hashing or dropping or adding fields to the events
+// returns a channel on which it will send the munged events. It is responsible
+// for hashing or dropping or adding fields to the events and doing the dynamic
+// sampling, if enabled
 func modifyEventContents(toBeSent chan event.Event, options GlobalOptions) chan event.Event {
-	// short circuit this if no field scrubbing is enabled
-	if len(options.DropFields) == 0 && len(options.ScrubFields) == 0 &&
-		len(options.AddFields) == 0 && len(options.RequestShape) == 0 {
-		return toBeSent
-	}
 	// parse the addField bit once instead of for every event
 	parsedAddFields := map[string]string{}
 	for _, addField := range options.AddFields {
@@ -247,6 +245,16 @@ func modifyEventContents(toBeSent chan event.Event, options GlobalOptions) chan 
 			shaper.pr.Patterns = append(shaper.pr.Patterns, &pat)
 		}
 	}
+	// initialize the dynamic sampler
+	var sampler dynsampler.Sampler
+	if len(options.DynSample) != 0 {
+		sampler = &dynsampler.AvgSampleWithMin{
+			GoalSampleRate: options.GoalSampleRate,
+		}
+		if err := sampler.Start(); err != nil {
+			logrus.WithField("error", err).Fatal("dynsampler failed to start")
+		}
+	}
 	// ok, we need to munge events. Sing up enough goroutines to handle this
 	newSent := make(chan event.Event, options.NumSenders)
 	go func() {
@@ -255,9 +263,11 @@ func modifyEventContents(toBeSent chan event.Event, options GlobalOptions) chan 
 			wg.Add(1)
 			go func() {
 				for ev := range toBeSent {
+					// do dropping
 					for _, field := range options.DropFields {
 						delete(ev.Data, field)
 					}
+					// do scrubbing
 					for _, field := range options.ScrubFields {
 						if val, ok := ev.Data[field]; ok {
 							// generate a sha256 hash and use the base16 for the content
@@ -265,14 +275,45 @@ func modifyEventContents(toBeSent chan event.Event, options GlobalOptions) chan 
 							ev.Data[field] = fmt.Sprintf("%x", newVal)
 						}
 					}
+					// do adding
 					for k, v := range parsedAddFields {
 						ev.Data[k] = v
 					}
+					// do request shaping
 					for _, field := range options.RequestShape {
 						shaper.requestShape(field, &ev, options)
 					}
-					newSent <- ev
+					// do dynsampling last so it can use request shaped fields
+					if sampler == nil {
+						ev.SampleRate = int(options.SampleRate)
+					} else {
+						key := make([]string, len(options.DynSample))
+						for i, field := range options.DynSample {
+							if val, ok := ev.Data[field]; ok {
+								switch val := val.(type) {
+								case bool:
+									key[i] = strconv.FormatBool(val)
+								case int64:
+									key[i] = strconv.FormatInt(val, 10)
+								case float64:
 
+									key[i] = strconv.FormatFloat(val, 'E', -1, 64)
+								case string:
+									key[i] = val
+								default:
+									key[i] = "" // skip it
+								}
+							}
+						}
+						keyStr := strings.Join(key, "_")
+						sr := sampler.GetSampleRate(keyStr)
+						if rand.Intn(sr) != 0 {
+							ev.SampleRate = -1
+						} else {
+							ev.SampleRate = sr
+						}
+					}
+					newSent <- ev
 				}
 				wg.Done()
 			}()
@@ -391,9 +432,17 @@ func sendToLibhoney(toBeSent chan event.Event, toBeResent chan event.Event,
 
 // sendEvent does the actual handoff to libhoney
 func sendEvent(ev event.Event) {
+	if ev.SampleRate == -1 {
+		// drop the event!
+		logrus.WithFields(logrus.Fields{
+			"event": ev,
+		}).Debug("droppped event due to sampling")
+		return
+	}
 	libhEv := libhoney.NewEvent()
 	libhEv.Metadata = ev
 	libhEv.Timestamp = ev.Timestamp
+	libhEv.SampleRate = uint(ev.SampleRate)
 	if err := libhEv.Add(ev.Data); err != nil {
 		logrus.WithFields(logrus.Fields{
 			"event": ev,

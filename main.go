@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/Sirupsen/logrus"
-	"github.com/honeycombio/libhoney-go"
 	flag "github.com/jessevdk/go-flags"
 
 	"github.com/honeycombio/honeytail/parsers/arangodb"
@@ -22,6 +21,7 @@ import (
 	"github.com/honeycombio/honeytail/parsers/mysql"
 	"github.com/honeycombio/honeytail/parsers/nginx"
 	"github.com/honeycombio/honeytail/tail"
+	libhoney "github.com/honeycombio/libhoney-go"
 )
 
 // BuildID is set by Travis CI

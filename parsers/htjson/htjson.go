@@ -26,7 +26,7 @@ type Options struct {
 	TimeFieldName string `long:"timefield" description:"Name of the field that contains a timestamp"`
 	Format        string `long:"format" description:"Format of the timestamp found in timefield (supports strftime and Golang time formats)"`
 
-	NumParsers int `hidden:"true" description:"number of mongo parsers to spin up"`
+	NumParsers int `hidden:"true" description:"number of JSON parsers to spin up"`
 }
 
 type Parser struct {
@@ -132,7 +132,7 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 		}()
 	}
 	wg.Wait()
-	logrus.Debug("lines channel is closed, ending json processor")
+	logrus.Debug("all goroutines are done or 0 parsers have been set")
 }
 
 // getTimestamp looks through the event map for something that looks

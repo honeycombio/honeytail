@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/Sirupsen/logrus"
-	"github.com/honeycombio/libhoney-go"
 	"github.com/honeycombio/urlshaper"
 
 	"github.com/honeycombio/honeytail/event"
@@ -24,7 +23,9 @@ import (
 	"github.com/honeycombio/honeytail/parsers/mongodb"
 	"github.com/honeycombio/honeytail/parsers/mysql"
 	"github.com/honeycombio/honeytail/parsers/nginx"
+	"github.com/honeycombio/honeytail/parsers/systemd"
 	"github.com/honeycombio/honeytail/tail"
+	libhoney "github.com/honeycombio/libhoney-go"
 )
 
 // actually go and be leashy
@@ -218,6 +219,10 @@ func getParserAndOptions(options GlobalOptions) (parsers.Parser, interface{}) {
 	case "arangodb":
 		parser = &arangodb.Parser{}
 		opts = &options.ArangoDB
+	case "systemd":
+		parser = &systemd.Parser{}
+		opts = &options.JSON
+		opts.(*htjson.Options).NumParsers = int(options.NumSenders)
 	}
 	parser, _ = parser.(parsers.Parser)
 	return parser, opts

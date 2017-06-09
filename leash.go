@@ -249,7 +249,8 @@ func modifyEventContents(toBeSent chan event.Event, options GlobalOptions) chan 
 	var sampler dynsampler.Sampler
 	if len(options.DynSample) != 0 {
 		sampler = &dynsampler.AvgSampleWithMin{
-			GoalSampleRate: options.GoalSampleRate,
+			GoalSampleRate:    options.GoalSampleRate,
+			ClearFrequencySec: options.DynWindowSec,
 		}
 		if err := sampler.Start(); err != nil {
 			logrus.WithField("error", err).Fatal("dynsampler failed to start")
@@ -287,26 +288,8 @@ func modifyEventContents(toBeSent chan event.Event, options GlobalOptions) chan 
 					if sampler == nil {
 						ev.SampleRate = int(options.SampleRate)
 					} else {
-						key := make([]string, len(options.DynSample))
-						for i, field := range options.DynSample {
-							if val, ok := ev.Data[field]; ok {
-								switch val := val.(type) {
-								case bool:
-									key[i] = strconv.FormatBool(val)
-								case int64:
-									key[i] = strconv.FormatInt(val, 10)
-								case float64:
-
-									key[i] = strconv.FormatFloat(val, 'E', -1, 64)
-								case string:
-									key[i] = val
-								default:
-									key[i] = "" // skip it
-								}
-							}
-						}
-						keyStr := strings.Join(key, "_")
-						sr := sampler.GetSampleRate(keyStr)
+						key := makeDynsampleKey(&ev, options)
+						sr := sampler.GetSampleRate(key)
 						if rand.Intn(sr) != 0 {
 							ev.SampleRate = -1
 						} else {
@@ -322,6 +305,30 @@ func modifyEventContents(toBeSent chan event.Event, options GlobalOptions) chan 
 		close(newSent)
 	}()
 	return newSent
+}
+
+// makeDynsampleKey pulls in all the values necessary from the event to create a
+// key for dynamic sampling
+func makeDynsampleKey(ev *event.Event, options GlobalOptions) string {
+	key := make([]string, len(options.DynSample))
+	for i, field := range options.DynSample {
+		if val, ok := ev.Data[field]; ok {
+			switch val := val.(type) {
+			case bool:
+				key[i] = strconv.FormatBool(val)
+			case int64:
+				key[i] = strconv.FormatInt(val, 10)
+			case float64:
+
+				key[i] = strconv.FormatFloat(val, 'E', -1, 64)
+			case string:
+				key[i] = val
+			default:
+				key[i] = "" // skip it
+			}
+		}
+	}
+	return strings.Join(key, "_")
 }
 
 // requestShaper holds the bits about request shaping that want to be

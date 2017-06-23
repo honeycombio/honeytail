@@ -1,0 +1,25 @@
+{
+    source: {
+        files: [
+            "nginx.log",
+        ],
+    },
+
+    parser: {
+        num_threads: 2,
+        pre_sample_rate: 2,
+        engine: {
+            nginx: {
+                config_file: "nginx.conf",
+                log_format_name: "combined",
+            },
+        },
+    },
+
+    uploader: {
+        data_set: "LoadBalancer",
+        libhoney_config: {
+            max_concurrent_batches: 12,
+        },
+    },
+}

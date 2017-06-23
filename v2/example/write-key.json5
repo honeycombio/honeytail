@@ -1,0 +1,4 @@
+{
+    write_key: "blah",
+    api_host: "https://api.honeycomb.io/",  // can be omitted
+}

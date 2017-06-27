@@ -7,18 +7,12 @@ import (
 )
 
 type FilterFunc func(*htevent.Event) bool
-type FilterFactory func() FilterFunc
+type Factory func() FilterFunc
+type RuleBuilder func(l sx.List, args []*sx.Value) Factory
 
-func Build(v *sx.Value) FilterFactory {
-	// If no filter config was provided, just return the default dummy config.
-	if v == nil {
-		filterFunc := func(event *htevent.Event) bool {
-			return true
-		}
-		return func() FilterFunc {
-			return filterFunc
-		}
-	}
 
-	panic(v.Fail("sorry, filters not yet implemented"))
+// If your filter function doesn't need any thread-local state, you can use this
+// generic filter factory -- it just returns your 'filter' instance.
+func StatelessFactory(filter FilterFunc) Factory {
+	return func() FilterFunc { return filter }
 }

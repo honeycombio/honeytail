@@ -140,6 +140,14 @@ func (v *Value) String() string {
 	return s
 }
 
+func (v *Value) TryString() (string, bool) {
+	s, ok := v.inner.(string)
+	if !ok {
+		return "", false
+	}
+	return s, true
+}
+
 func (v *Value) TaggedUnion() (string, *Value) {
 	m := v.RawMap()
 	kvs := m.PopAll()
@@ -153,15 +161,23 @@ func (v *Value) Any() interface{} {
 	return v.inner
 }
 
-func (v *Value) RawMap() Map {
+func (v *Value) TryRawMap() (Map, bool) {
 	m, ok := v.inner.(map[string]interface{})
 	if !ok {
-		v.Fail("expecting object, got %s", DescribeValueType(v.inner))
+		return Map{}, false
 	}
 	return Map{
 		source: v,
 		inner: m,
+	}, true
+}
+
+func (v *Value) RawMap() Map {
+	m, ok := v.TryRawMap()
+	if !ok {
+		v.Fail("expecting object, got %s", DescribeValueType(v.inner))
 	}
+	return m
 }
 
 func (v *Value) Map(f func(m Map)) {
@@ -243,15 +259,23 @@ func (m Map) IgnoreRest() {
 	}
 }
 
-func (v *Value) List() List {
+func (v *Value) TryList() (List, bool) {
 	l, ok := v.inner.([]interface{})
 	if !ok {
-		v.Fail("expecting object, got %s", DescribeValueType(v.inner))
+		return List{}, false
 	}
 	return List{
 		source: v,
 		inner: l,
+	}, true
+}
+
+func (v *Value) List() List {
+	l, ok := v.TryList()
+	if !ok {
+		v.Fail("expecting object, got %s", DescribeValueType(v.inner))
 	}
+	return l
 }
 
 func (l List) Len() int {

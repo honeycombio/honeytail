@@ -5,7 +5,7 @@ import (
 )
 
 type Event struct {
-	SampleRate int
+	SampleRate uint
 	Timestamp time.Time
 	Data map[string]interface{}
 }

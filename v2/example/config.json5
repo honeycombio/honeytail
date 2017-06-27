@@ -16,6 +16,15 @@
         },
     },
 
+    filter: [
+        ["add", "goose", "man"],
+        ["drop", "remote_user"],
+        ["timestamp", "goose", "%s"],
+        ["http_request_line", "request", {
+            "extract_query_args": "all",
+        }],
+    ],
+
     uploader: {
         data_set: "LoadBalancer",
         libhoney_config: {

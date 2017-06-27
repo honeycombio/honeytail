@@ -1,48 +1,47 @@
 package wrapper
 
 import (
-	"github.com/Sirupsen/logrus"
-
 	htparser "github.com/honeycombio/honeytail/v2/parser"
 )
 
 // If your log format is line-oriented, then just write a function that can
 // parse a single line.  This wrapper will take care of the rest of the work.
 
+// Perform one-time setup.
+type SetupLineParser func() (LineParserFactory, error)
+
+// Perform thread-local setup.
+type LineParserFactory func() LineParser
+
 // Given a log line, parse it into zero or more events and call 'sendEvent' on each one.
 type LineParser func(line string, sendEvent htparser.SendEvent)
 
-func Start(factory func() LineParser, lineChannelChannel <-chan <-chan string,
-    preSampleRate int, spawnWorkers func(htparser.Worker)) error {
-
-	// Merge all line channels into single channel
-	combinedChannel := make(chan string, 1024)
-	go func() {
-		htparser.HandleEachLineChannel(lineChannelChannel, func(lineChannel <-chan string) {
-			for line := range lineChannel {
-				combinedChannel <- line
-			}
-		})
-		close(combinedChannel)
-	}()
-
-	spawnWorkers(func(sendEvent htparser.SendEvent) {
-		// Thread-locals, to avoid contention overhead.
-		lineParser := factory()
-		randObj := htparser.NewRand(preSampleRate)
-
-		for line := range combinedChannel {
-			if randObj != nil && randObj.Intn(preSampleRate) != 0 {
-				continue
-			}
-
-			logrus.WithFields(logrus.Fields{
-				"line": line,
-			}).Debug("Attempting to process nginx log line")
-
-			lineParser(line, sendEvent)
+func LineParserWrapper(setupLineParser SetupLineParser) htparser.BuildFunc {
+	return func(channelSize int) (func(), htparser.PreParser, htparser.Parser, error) {
+		lineParserFactory, err := setupLineParser()
+		if err != nil {
+			return nil, nil, nil, err
 		}
-	})
 
-	return nil
+		combinedChannel := make(chan string, channelSize)
+		closeChannel := func() { close(combinedChannel) }
+
+		preParser := func(lineChannel <-chan string, sampler htparser.Sampler) {
+			// Just reads from the separate log channels and writes to the combined log channel.
+			for line := range lineChannel {
+				if sampler.ShouldKeep() {
+					combinedChannel <- line
+				}
+			}
+		}
+
+		parser := func(sendEvent htparser.SendEvent) {
+			lineParser := lineParserFactory()  // Thread-local, to avoid contention overhead.
+			for line := range combinedChannel {
+				lineParser(line, sendEvent)
+			}
+		}
+
+		return closeChannel, preParser, parser, nil
+	}
 }

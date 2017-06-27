@@ -118,22 +118,21 @@ type Config struct {
 	QueryInterval uint
 }
 
-func Build(v *sx.Value) htparser.StartFunc {
-	v.Map(func(m sx.Map) {})
-	return Start
+func Configure(v *sx.Value) htparser.BuildFunc {
+	v.Map(func(m sx.Map) {})  // We don't have any configuration fields.
+	return Build
 }
 
-func Start(lineChannelChannel <-chan (<-chan string), preSampleRate int, spawnWorkers func(htparser.Worker)) error {
-	lineGroupChannel := make(chan []string, 10)
+func Build(channelSize int) (func(), htparser.PreParser, htparser.Parser, error) {
 
-	go func() {
-		htparser.HandleEachLineChannel(lineChannelChannel, func(lineChannel <-chan string) {
-			grouper(lineChannel, lineGroupChannel, preSampleRate)
-		})
-		close(lineGroupChannel)
-	}()
+	lineGroupChannel := make(chan []string, channelSize)
+	closeChannel := func() { close(lineGroupChannel) }
 
-	spawnWorkers(func(sendEvent htparser.SendEvent) {
+	preParser := func(lineChannel <-chan string, sampler htparser.Sampler) {
+		grouper(lineChannel, lineGroupChannel, sampler)
+	}
+
+	parser := func(sendEvent htparser.SendEvent) {
 		threadLocalNormalizer := &normalizer.Parser{}
 		for lineGroup := range lineGroupChannel {
 			data, timestamp := handleEvent(threadLocalNormalizer, lineGroup)
@@ -144,14 +143,14 @@ func Start(lineChannelChannel <-chan (<-chan string), preSampleRate int, spawnWo
 
 			sendEvent(timestamp, data)
 		}
-	})
+	}
 
-	return nil
+	return closeChannel, preParser, parser, nil
 }
 
-func grouper(lineChannel <-chan string, lineGroupChannel chan<- []string, preSampleRate int) {
-	randObj := htparser.NewRand(preSampleRate)
-
+// A single log event can be multiple lines.  Read from 'lineChannel', find the group
+// of lines that comprise an event, and write that group to 'lineGroupChannel'.
+func grouper(lineChannel <-chan string, lineGroupChannel chan<- []string, sampler htparser.Sampler) {
 	// flag to indicate when we've got a complete event to send
 	var foundStatement bool
 	groupedLines := make([]string, 0, 5)
@@ -165,8 +164,7 @@ func grouper(lineChannel <-chan string, lineGroupChannel chan<- []string, preSam
 			if foundStatement {
 				// we've started a new event. Send the previous one.
 				foundStatement = false
-				// if sampling is disabled or sampler says keep, pass along this group.
-				if randObj == nil || randObj.Intn(preSampleRate) == 0 {
+				if sampler.ShouldKeep() {
 					lineGroupChannel <- groupedLines
 				}
 				groupedLines = make([]string, 0, 5)
@@ -177,7 +175,7 @@ func grouper(lineChannel <-chan string, lineGroupChannel chan<- []string, preSam
 	// send the last event, if there was one collected
 	if foundStatement {
 		// if sampling is disabled or sampler says keep, pass along this group.
-		if randObj == nil || randObj.Intn(preSampleRate) == 0 {
+		if sampler.ShouldKeep() {
 			lineGroupChannel <- groupedLines
 		}
 	}

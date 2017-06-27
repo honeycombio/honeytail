@@ -28,35 +28,37 @@ type span struct {
 }
 
 func extractStuff(v *Value) *stuff {
-	m := v.Map()
-
-	name := m.Pop("name").String()
-	main := extractSpan(m.Pop("main"))
-	var alternates []*span
-	for _, alternateV := range m.Pop("alternates").List().All() {
-		fmt.Printf("alternateV: %#v", alternateV)
-		alternates = append(alternates, extractSpan(alternateV))
-	}
-
-	m.Done()
-	return &stuff{name, main, alternates}
+	var r *stuff
+	v.Map(func(m Map) {
+		name := m.Pop("name").String()
+		main := extractSpan(m.Pop("main"))
+		var alternates []*span
+		for _, alternateV := range m.Pop("alternates").List().All() {
+			fmt.Printf("alternateV: %#v", alternateV)
+			alternates = append(alternates, extractSpan(alternateV))
+		}
+		r = &stuff{name, main, alternates}
+	})
+	return r
 }
 
 func extractSpan(v *Value) *span {
-	m := v.Map()
+	var r *span
+	v.Map(func(m Map) {
+		start := m.Pop("start").Int32()
 
-	start := m.Pop("start").Int32()
+		end := -1
+		m.PopMaybeAnd("end", func(v *Value) {
+			end = v.Int32()
+			if end < start {
+				m.Fail("\"end\" must not be less than \"start\"; got start=%d and end=%d", start, end)
+			}
+		})
 
-	end := -1
-	m.PopMaybeAnd("end", func(v *Value) {
-		end = v.Int32()
-		if end < start {
-			m.Fail("\"end\" must not be less than \"start\"; got start=%d and end=%d", start, end)
-		}
+		r = &span{start, end}
 	})
 
-	m.Done()
-	return &span{start, end}
+	return r
 }
 
 func TestBasic(t *testing.T) {

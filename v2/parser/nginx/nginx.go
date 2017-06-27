@@ -21,7 +21,7 @@ const (
 	iso8601TimeLayout         = "2006-01-02T15:04:05-07:00"
 )
 
-func Build(v *sx.Value) htparser.StartFunc {
+func Configure(v *sx.Value) htparser.BuildFunc {
 	var configFile string
 	var logFormatName string
 
@@ -30,20 +30,24 @@ func Build(v *sx.Value) htparser.StartFunc {
 		logFormatName = m.Pop("log_format_name").String()
 	})
 
-	return func(lineChannelChannel <-chan (<-chan string), preSampleRate int, spawnWorkers func(htparser.Worker)) error {
+	setupLineParser := func() (htparser_wrapper.LineParserFactory, error) {
 		configFileH, err := os.Open(configFile)
 		if err != nil {
-			return fmt.Errorf("couldn't open \"config_file\" %q: %s", configFile, err)
+			return nil, fmt.Errorf("couldn't open \"config_file\" %q: %s", configFile, err)
 		}
 		defer configFileH.Close()
 
 		gonxParser, err := gonx.NewNginxParser(configFileH, logFormatName)
 		if err != nil {
-			return fmt.Errorf("unable to determine log format from Nginx config file %q and log format name %q: %s",
+			return nil, fmt.Errorf("unable to determine log format from Nginx config file %q and log format name %q: %s",
 				configFile, logFormatName, err)
 		}
 
 		lineParser := func(line string, sendEvent htparser.SendEvent) {
+			logrus.WithFields(logrus.Fields{
+				"line": line,
+			}).Debug("Attempting to process nginx log line")
+
 			gonxEvent, err := gonxParser.ParseString(line)
 			if err != nil {
 				logrus.WithFields(logrus.Fields{
@@ -55,12 +59,13 @@ func Build(v *sx.Value) htparser.StartFunc {
 			sendEvent(getTimestamp(fields), fields)
 		}
 
-		lineParserFactory := func() htparser_wrapper.LineParser {
-			return lineParser
-		}
+		// We don't have any thread-local setup, so just return the same instance.
+		lineParserFactory := func() htparser_wrapper.LineParser { return lineParser }
 
-		return htparser_wrapper.Start(lineParserFactory, lineChannelChannel, preSampleRate, spawnWorkers)
+		return lineParserFactory, nil
 	}
+
+	return htparser_wrapper.LineParserWrapper(setupLineParser)
 }
 
 // typeifyParsedLine attempts to cast numbers in the event to floats or ints

@@ -8,20 +8,25 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"math/rand"
 
 	flag "github.com/jessevdk/go-flags"
 	sx "github.com/honeycombio/honeytail/v2/struct_extractor"
 
 	htevent "github.com/honeycombio/honeytail/v2/event"
 	htfilter "github.com/honeycombio/honeytail/v2/filter"
+	htfilter_registry "github.com/honeycombio/honeytail/v2/filter/registry"
 	htparser "github.com/honeycombio/honeytail/v2/parser"
 	htparser_registry "github.com/honeycombio/honeytail/v2/parser/registry"
 	htsource "github.com/honeycombio/honeytail/v2/source"
 	htsource_registry "github.com/honeycombio/honeytail/v2/source/registry"
 	htuploader "github.com/honeycombio/honeytail/v2/uploader"
 	htutil "github.com/honeycombio/honeytail/v2/util"
-	"strings"
+	"sort"
 )
+
+// Set via linker flag "-X" by Travis CI
+var BuildID string = ""
 
 func main() {
 	var err error
@@ -48,7 +53,14 @@ func main() {
 		die(2, "%s", err)
 	}
 
-	err = startUploader(mc.uploaderConfig, flags.TestMode, flags.WriteKeyFile, eventChannel, doneWG)
+	version := "dev"
+	if BuildID != "" {
+		version = BuildID
+	}
+	// TODO(kannan): The old code would include the parser name.  Do we still need to do that?
+	userAgent := fmt.Sprintf("honeytail/%s", version)
+
+	err = startUploader(flags.TestMode, userAgent, mc.uploaderConfig, flags.WriteKeyFile, eventChannel, doneWG)
 	if err != nil {
 		die(2, "%s", err)
 	}
@@ -113,70 +125,104 @@ func setupSignalHandler(abort chan<- struct{}) {
 	}()
 }
 
-func startParser(parserConfig *ParserConfig, filterFactory htfilter.FilterFactory,
+func startParser(config *ParserConfig, filterFactory htfilter.Factory,
 	lineChannelChannel <-chan (<-chan string), eventChannel chan<- htevent.Event) error {
 
-	spawnWorkersCalled := false
+	channelSize := 2 * config.numThreads
+	closeChannel, preParserFunc, parserFunc, err := config.buildFunc(channelSize)
+	if err != nil {
+		return fmt.Errorf("building parser: %s", err)
+	}
 
-	// The function that a parser should call to spawn worker threads.  Takes care of spawning
-	// the right number of threads and doing post-parse event filtering/sampling.
-	workerWG := sync.WaitGroup{}
-	spawnWorkers := func(worker htparser.Worker) {
-		if spawnWorkersCalled {
-			panic("Don't call spawnWorkers more than once!")  // Maybe not necessary?  Should revisit.
-		}
-		spawnWorkersCalled = true
-		for i := 0; i < parserConfig.numThreads; i++ {
-			workerWG.Add(1)
+	// Start pre-parser thread for each new line channel.
+	go func(){
+		wg := sync.WaitGroup{}
+		for lineChannel := range lineChannelChannel {
+			wg.Add(1)
 			go func() {
-				defer workerWG.Done()
-				filterFunc := filterFactory()  // Thread-local, to avoid contention overhead
-				// We pass 'sendEvent' to the worker so it can send events.
-				sendEvent := func(timestamp time.Time, data map[string]interface{}) {
-					event := htevent.Event{
-						SampleRate: parserConfig.preSampleRate,
-						Timestamp: timestamp,
-						Data: data,
-					}
-					keep := filterFunc(&event)
-					if keep {
-						eventChannel <- event
-					}
-				}
-				worker(sendEvent)
+				defer wg.Done()
+				preParserFunc(lineChannel, newSampler(config.preSampleRate))
 			}()
 		}
-		// Close channel when all workers are done.
+		wg.Wait()
+		closeChannel()
+	}()
+
+	// Start parser threads.
+	parserWG := sync.WaitGroup{}
+	for i := 0; i < config.numThreads; i++ {
+		parserWG.Add(1)
 		go func() {
-			workerWG.Wait()
-			close(eventChannel)
+			defer parserWG.Done()
+			filterFunc := filterFactory()  // Thread-local, to avoid contention overhead
+
+			// The parser function doesn't get direct access to the event channel.  We instead
+			// pass it a 'sendEvent' function so we can apply filtering before putting it in
+			// the channel.
+			sendEvent := func(timestamp time.Time, data map[string]interface{}) {
+				event := htevent.Event{
+					SampleRate: config.preSampleRate,
+					Timestamp: timestamp,
+					Data: data,
+				}
+				keep := filterFunc(&event)
+				if keep {
+					eventChannel <- event
+				}
+			}
+			parserFunc(sendEvent)
 		}()
 	}
-
-	err := parserConfig.startFunc(lineChannelChannel, parserConfig.preSampleRate, spawnWorkers)
-	if err != nil {
-		return fmt.Errorf("running parser: %s", err)
-	}
-	if !spawnWorkersCalled {
-		panic("spawnWorkers was never called; the parser implementation has a bug")
-	}
+	// Close event channel when all parsers threads are done.
+	go func() {
+		parserWG.Wait()
+		close(eventChannel)
+	}()
 
 	return nil
 }
 
-func startUploader(uploaderConfig *htuploader.Config, testMode bool, writeKeyFilePath string,
-	eventChannel <-chan htevent.Event, doneWG *sync.WaitGroup) error {
+type dummySampler struct{}
+
+type randSampler struct {
+	randObj rand.Rand
+	rate uint
+}
+
+func newSampler(rate uint) htparser.Sampler {
+	if rate < 1 {
+		panic(fmt.Sprintf("bad rate: %d", rate))
+	}
+	if rate == 1 {
+		return dummySampler{}
+	}
+	return randSampler{
+		*rand.New(rand.NewSource(rand.Int63())),
+		rate,
+	}
+}
+
+func (_ dummySampler) ShouldKeep() bool {
+	return true
+}
+
+func (s randSampler) ShouldKeep() bool {
+	return s.randObj.Intn(int(s.rate)) == 0
+}
+
+func startUploader(testMode bool, userAgent string, uploaderConfig *htuploader.Config,
+	writeKeyFilePath string, eventChannel <-chan htevent.Event, doneWG *sync.WaitGroup) error {
 
 	if testMode {
 		doneWG.Add(1)
 		go func() {
 			defer doneWG.Done()
+			fmt.Printf("User-Agent: %s\n", userAgent)
 			for event := range eventChannel {
-				var kvs []string
-				for k, v := range event.Data {
-					kvs = append(kvs, fmt.Sprintf("%q=%#v", k, v))
+				fmt.Printf("[%v] 1/%d\n", event.Timestamp, event.SampleRate)
+				for _, k := range sortedKeys(event.Data) {
+					fmt.Printf("    %s  %#v\n", k, event.Data[k])
 				}
-				fmt.Printf("[%v] 1/%d %s\n", event.Timestamp, event.SampleRate, strings.Join(kvs, ", "))
 			}
 		}()
 	} else {
@@ -184,29 +230,38 @@ func startUploader(uploaderConfig *htuploader.Config, testMode bool, writeKeyFil
 			return errors.New("missing flag \"--write-key-file\"; to just test parsing, pass \"-test\".")
 		}
 		if uploaderConfig == nil {
-			return errors.New("missing \"uploader\" configuration; to just test parsing, pass \"-test\".")
+			return errors.New("configuration is missing \"uploader\" section; to just test parsing, pass \"-test\".")
 		}
 		writeKeyConfig, err := loadWriteKeyConfig(writeKeyFilePath)
 		if err != nil {
 			return fmt.Errorf("\"--write-key-file\": %s", err)
 		}
 
-		htuploader.StartUploader(uploaderConfig, eventChannel, writeKeyConfig, doneWG)
+		htuploader.Start(userAgent, uploaderConfig, writeKeyConfig, eventChannel, doneWG)
 	}
 	return nil
+}
+
+func sortedKeys(m map[string]interface{}) []string {
+	var keys []string
+	for k, _ := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 type MainConfig struct {
 	sourceStartFunc htsource.StartFunc
 	parserConfig    *ParserConfig
-	filterFactory   htfilter.FilterFactory
+	filterFactory   htfilter.Factory
 	uploaderConfig  *htuploader.Config
 }
 
 type ParserConfig struct {
-	numThreads int
-	preSampleRate int
-	startFunc htparser.StartFunc
+	numThreads    int
+	preSampleRate uint
+	buildFunc     htparser.BuildFunc
 }
 
 func ExtractMainConfig(v *sx.Value, backfill bool) *MainConfig{
@@ -218,10 +273,10 @@ func ExtractMainConfig(v *sx.Value, backfill bool) *MainConfig{
 
 		r.uploaderConfig = nil
 		m.PopMaybeAnd("uploader", func(v *sx.Value) {
-			r.uploaderConfig = htuploader.ExtractConfig(v)
+			r.uploaderConfig = htuploader.ExtractConfig(v, backfill)
 		})
 
-		r.filterFactory = htfilter.Build(m.PopMaybe("filter"))
+		r.filterFactory = htfilter_registry.Build(m.PopMaybe("filter"))
 	})
 	return r
 }
@@ -236,10 +291,10 @@ func ExtractParserConfig(v *sx.Value) *ParserConfig {
 
 		r.preSampleRate = 1
 		m.PopMaybeAnd("pre_sample_rate", func(v *sx.Value) {
-			r.preSampleRate = int(v.Int32B(1, 1 * 1000 * 1000))
+			r.preSampleRate = uint(v.UInt32B(1, 1 * 1000 * 1000))
 		})
 
-		r.startFunc = htparser_registry.Build(m.Pop("engine"))
+		r.buildFunc = htparser_registry.Configure(m.Pop("engine"))
 	})
 	return r
 }

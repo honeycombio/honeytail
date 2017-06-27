@@ -8,17 +8,17 @@ import (
     htparser_mysql "github.com/honeycombio/honeytail/v2/parser/mysql"
 )
 
-var builders map[string]htparser.BuildFunc = map[string]htparser.BuildFunc{
-    "nginx": htparser_nginx.Build,
-	"mysql": htparser_mysql.Build,
+var builders map[string]htparser.ConfigureFunc = map[string]htparser.ConfigureFunc{
+    "nginx": htparser_nginx.Configure,
+	"mysql": htparser_mysql.Configure,
 }
 
-func Build(v *sx.Value) htparser.StartFunc {
+func Configure(v *sx.Value) htparser.BuildFunc {
 	sourceType, sourceConfig := v.TaggedUnion()
-	buildFunc, ok := builders[sourceType]
+	configureFunc, ok := builders[sourceType]
 	if !ok {
-		v.Fail("unknown source type %q", sourceType)
+		v.Fail("unknown parser type %q", sourceType)
 	}
 
-	return buildFunc(sourceConfig)
+	return configureFunc(sourceConfig)
 }

@@ -22,6 +22,9 @@ type WriteKeyConfig struct {
 type Config struct {
 	dataSet string
 	lhc *LibhoneyConfig
+
+	// Whether we should retry sending data if we a rate limit response or 500 response.
+	retrySends bool
 }
 
 type LibhoneyConfig struct {
@@ -55,11 +58,15 @@ func ExtractLibhoneyConfig(v *sx.Value) *LibhoneyConfig {
 	return r
 }
 
-func ExtractConfig(v *sx.Value) *Config {
+func ExtractConfig(v *sx.Value, backfill bool) *Config {
 	r := &Config{}
 	v.Map(func(m sx.Map) {
 		r.dataSet = m.Pop("data_set").String()
 		r.lhc = ExtractLibhoneyConfig(m.PopMaybe("libhoney_config"))
+
+		// If we're not backfilling, then a failed send probably means data is coming in
+		// at a faster rate than we can upload, so it's probably not worth retrying.
+		r.retrySends = backfill
 	})
 	return r
 }
@@ -86,10 +93,10 @@ func ExtractWriteKeyConfig(v *sx.Value) *WriteKeyConfig {
 }
 
 
-func StartUploader(config *Config, eventChannel <-chan htevent.Event, writeKeyConfig *WriteKeyConfig,
-	doneWG *sync.WaitGroup) error {
+func Start(userAgent string, config *Config, writeKeyConfig *WriteKeyConfig,
+	eventChannel <-chan htevent.Event, doneWG *sync.WaitGroup) error {
 
-	err := verifyWriteKeyConfig(writeKeyConfig)
+	err := verifyWriteKeyConfig(userAgent, writeKeyConfig)
 	if err != nil {
 		return err
 	}
@@ -97,6 +104,7 @@ func StartUploader(config *Config, eventChannel <-chan htevent.Event, writeKeyCo
 	stats := newResponseStats()
 
 	// spin up our transmission to send events to Honeycomb
+	libhoney.UserAgentAddition = userAgent
 	libhConfig := libhoney.Config{
 		WriteKey:             writeKeyConfig.WriteKey,
 		Dataset:              config.dataSet,
@@ -136,7 +144,7 @@ func StartUploader(config *Config, eventChannel <-chan htevent.Event, writeKeyCo
 	// start a goroutine that reads from responses and logs.
 	doneWG.Add(1)
 	go func() {
-		handleResponses(libhoney.Responses(), stats, toBeResent, delaySending)
+		handleResponses(libhoney.Responses(), stats, toBeResent, delaySending, config.retrySends)
 		stats.log()
 		stats.logFinal()
 		doneWG.Done()
@@ -161,8 +169,6 @@ func sendToLibhoney(toBeSent <-chan htevent.Event, toBeResent <-chan htevent.Eve
 		// if we have events to retransmit, send those first
 		select {
 		case ev := <-toBeResent:
-		// retransmitted events have already been sampled; always use
-		// SendPresampled() for these
 			sendEvent(ev)
 			continue
 		default:
@@ -190,12 +196,14 @@ func sendEvent(ev htevent.Event) {
 	libhEv := libhoney.NewEvent()
 	libhEv.Metadata = ev
 	libhEv.Timestamp = ev.Timestamp
+	libhEv.SampleRate = ev.SampleRate
 	if err := libhEv.Add(ev.Data); err != nil {
 		logrus.WithFields(logrus.Fields{
 			"event": ev,
 			"error": err,
 		}).Error("Unexpected error adding data to libhoney event")
 	}
+	// We do the sampling ourselves, so use SendPresampled
 	if err := libhEv.SendPresampled(); err != nil {
 		logrus.WithFields(logrus.Fields{
 			"event": ev,
@@ -207,7 +215,7 @@ func sendEvent(ev htevent.Event) {
 // handleResponses reads from the response queue, logging a summary and debug
 // re-enqueues any events that failed to send in a retryable way
 func handleResponses(responses <-chan libhoney.Response, stats *responseStats,
-	toBeResent chan<- htevent.Event, delaySending chan int) {
+	toBeResent chan<- htevent.Event, delaySending chan int, retrySends bool) {
 	statusInterval := uint(1000)  // TODO: allow specifying in config file
 	go logStats(stats, statusInterval)
 
@@ -221,8 +229,7 @@ func handleResponses(responses <-chan libhoney.Response, stats *responseStats,
 			"timestamp":   rsp.Metadata.(htevent.Event).Timestamp,
 		}
 		// if this is an error we should retry sending, re-enqueue the event
-		backOff := true  // TODO: make this configurable
-		if backOff && (rsp.StatusCode == 429 || rsp.StatusCode == 500) {
+		if retrySends && (rsp.StatusCode == 429 || rsp.StatusCode == 500) {
 			logfields["retry_send"] = true
 			delaySending <- 1000  // back off for a little bit
 			toBeResent <- rsp.Metadata.(htevent.Event)  // then retry sending the event
@@ -361,10 +368,10 @@ func logStats(stats *responseStats, interval uint) {
 	}
 }
 
-func verifyWriteKeyConfig(c *WriteKeyConfig) error {
+func verifyWriteKeyConfig(userAgent string, c *WriteKeyConfig) error {
 	url := fmt.Sprintf("%s/1/team_slug", c.ApiUrl)
 	req, err := http.NewRequest("GET", url, nil)
-	req.Header.Set("User-Agent", libhoney.UserAgentAddition)
+	req.Header.Set("User-Agent", userAgent)
 	req.Header.Add("X-Honeycomb-Team", c.WriteKey)
 	client := &http.Client{}
 	resp, err := client.Do(req)

@@ -26,58 +26,45 @@ The file format is JSON/[JSON5](https://github.com/json5/json5/blob/master/READM
         num_threads: int
     },
 
-    // Post-processing of the event before uploading.
-    // NOTE: The filtering code isn't implemented yet.  I'm just
-    // sketching out one idea for the configuration format.
-    filter: {
-        // A list of rules.  The rule types are documented below.
-        rules: [
-            // Add a field with the given value.
-            ["add", field_name, field_value],
-            
-            // Drop a field.
-            ["drop", field_name],
+    // A list of rules to apply after parsing.  The rule types are documented below.
+    filter: [
+        // Add a field with the given value.
+        ["add", field_name, field_value],
 
-            // Replace a field's value with the SHA-256 hash of its value.
-            ["sha256", field_name],
+        // Drop a field.
+        ["drop", field_name],
 
-            // Parse a field as an HTTP request line and produce new
-            // fields for each component of the request line.  If the
-            // field name/value is "xyz"/"GET /blah?x=12 HTTP/1.1",
-            // you'll get a few additional fields:
-            //     "<field_name>_method": "GET"
-            //     "<field_name>_protocol_version": "1.1"
-            //     "<field_name>_uri": "/blah?x=12"
-            //     "<field_name>_path": "/blah"
-            //     "<field_name>_query": "x=12"
-            //     "<field_name>_query_x": ""
-            ["parse_request_line", field_name, {
-                // Add a prefix to the output field name, to avoid
-                // collisions.
-                "field_name_prefix": string
-                "path_patterns": [
-                    "blah",
-                ],
-                // Which query params to include.
-                "query_params": // one of..
-                    // Only include query params from the list.
-                    | {"whitelist": [query_param_names...]},
-                    // Include all query params.
-                    | "all",
-            }]
+        // Replace a field's value with the SHA-256 hash of its value.
+        ["sha256", field_name],
 
-            // Sample different categories of events differently.  The
-            // sample rate for each category is based on their frequency
-            // in the last N seconds of data.
-            ["dynamic_sample", [field_names...], {
-                // The overall sample rate to aim for.
-                "goal_rate": int
-                // The size, in seconds, of the dynamic sampling window.
-                // Defaults to 30.
-                "window_sec": int
-            }]
-        ]
-    },
+        // Parse a field as an HTTP request line and produce new fields
+        // for each component of the request line.
+        // See: https://github.com/honeycombio/urlshaper
+        ["parse_request_line", field_name, {
+            // Add a prefix to the output field name, to avoid
+            // collisions.
+            "field_name_prefix": string
+
+            // URL path patterns, e.g. "/about/:lang/books/:isbn"
+            "path_patterns": [patterns...],
+
+            // Which query params to copy into top-level fields.
+            "extract_query_params": // one of..
+                // Only extract query params from the list.
+                | [query_param_names...],
+                // Extract all query params.
+                | "all",
+        }]
+
+        // Sample different categories of events differently.  The
+        // sample rate for each category is based on their frequency
+        // in the last N seconds of data.
+        ["dynamic_sample", goal_rate, [field_names...], {
+            // The size, in seconds, of the dynamic sampling window.
+            // Defaults to 30.
+            "window_sec": int
+        }]
+    ],
 
     // Not needed in "--test" mode.
     uploader: {
@@ -100,7 +87,8 @@ The file format is JSON/[JSON5](https://github.com/json5/json5/blob/master/READM
 ```
 {
     write_key: string,
+
+    // Optional; defaults to "https://api.honeycomb.io/"
     api_url: string,
-        // Optional; defaults to "https://api.honeycomb.io/"
 }
 ```

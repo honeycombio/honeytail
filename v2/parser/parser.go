@@ -25,3 +25,5 @@ type SendEvent func(timestamp time.Time, data map[string]interface{})
 type Sampler interface {
 	ShouldKeep() bool
 }
+
+type

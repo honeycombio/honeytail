@@ -8,7 +8,6 @@ import (
 	"sync"
 	"syscall"
 	"time"
-	"math/rand"
 
 	flag "github.com/jessevdk/go-flags"
 	sx "github.com/honeycombio/honeytail/v2/struct_extractor"
@@ -23,6 +22,7 @@ import (
 	htuploader "github.com/honeycombio/honeytail/v2/uploader"
 	htutil "github.com/honeycombio/honeytail/v2/util"
 	"sort"
+	"math/rand"
 )
 
 // Set via linker flag "-X" by Travis CI
@@ -48,7 +48,7 @@ func main() {
 
 	setupSignalHandler(abort)
 
-	err = startParser(mc.parserConfig, mc.filterFactory, lineChannelChannel, eventChannel)
+	err = startParser(mc.parserConfig, mc.filterTLFactory, lineChannelChannel, eventChannel)
 	if err != nil {
 		die(2, "%s", err)
 	}
@@ -125,57 +125,42 @@ func setupSignalHandler(abort chan<- struct{}) {
 	}()
 }
 
-func startParser(config *ParserConfig, filterFactory htfilter.Factory,
+func startParser(config *ParserConfig, filterTLFactory htfilter.TLFactory,
 	lineChannelChannel <-chan (<-chan string), eventChannel chan<- htevent.Event) error {
 
-	channelSize := 2 * config.numThreads
-	closeChannel, preParserFunc, parserFunc, err := config.buildFunc(channelSize)
-	if err != nil {
-		return fmt.Errorf("building parser: %s", err)
-	}
+	var doneWG sync.WaitGroup
 
-	// Start pre-parser thread for each new line channel.
-	go func(){
-		wg := sync.WaitGroup{}
-		for lineChannel := range lineChannelChannel {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				preParserFunc(lineChannel, newSampler(config.preSampleRate))
-			}()
-		}
-		wg.Wait()
-		closeChannel()
-	}()
+	// Instead of giving the parser a channel to write events to, we give them
+	// a function to call to send events.  We do this because function calls are
+	// a little more efficient than passing data via a channel.
+	sendEventTLFactory := func() htparser.SendEvent {
+		filterFunc := filterTLFactory()
 
-	// Start parser threads.
-	parserWG := sync.WaitGroup{}
-	for i := 0; i < config.numThreads; i++ {
-		parserWG.Add(1)
-		go func() {
-			defer parserWG.Done()
-			filterFunc := filterFactory()  // Thread-local, to avoid contention overhead
-
-			// The parser function doesn't get direct access to the event channel.  We instead
-			// pass it a 'sendEvent' function so we can apply filtering before putting it in
-			// the channel.
-			sendEvent := func(timestamp time.Time, data map[string]interface{}) {
-				event := htevent.Event{
-					SampleRate: config.preSampleRate,
-					Timestamp: timestamp,
-					Data: data,
-				}
-				keep := filterFunc(&event)
-				if keep {
-					eventChannel <- event
-				}
+		return func(timestamp time.Time, data map[string]interface{}) {
+			event := htevent.Event{
+				SampleRate: config.sampleRate,
+				Timestamp: timestamp,
+				Data: data,
 			}
-			parserFunc(sendEvent)
-		}()
+			keep := filterFunc(&event)
+			if keep {
+				eventChannel <- event
+			}
+		}
 	}
-	// Close event channel when all parsers threads are done.
+
+	samplerTLFactory := func() htparser.Sampler { return newSampler(config.sampleRate) }
+
+	startFunc, err := config.setupFunc()
+	if err != nil {
+		return fmt.Errorf("setting up parser: %s", err)
+	}
+
+	startFunc(config.numThreads, lineChannelChannel, samplerTLFactory, sendEventTLFactory, &doneWG)
+
+	// Close event channel when parser is done.
 	go func() {
-		parserWG.Wait()
+		doneWG.Wait()
 		close(eventChannel)
 	}()
 
@@ -209,6 +194,7 @@ func (_ dummySampler) ShouldKeep() bool {
 func (s randSampler) ShouldKeep() bool {
 	return s.randObj.Intn(int(s.rate)) == 0
 }
+
 
 func startUploader(testMode bool, userAgent string, uploaderConfig *htuploader.Config,
 	writeKeyFilePath string, eventChannel <-chan htevent.Event, doneWG *sync.WaitGroup) error {
@@ -254,14 +240,14 @@ func sortedKeys(m map[string]interface{}) []string {
 type MainConfig struct {
 	sourceStartFunc htsource.StartFunc
 	parserConfig    *ParserConfig
-	filterFactory   htfilter.Factory
+	filterTLFactory htfilter.TLFactory
 	uploaderConfig  *htuploader.Config
 }
 
 type ParserConfig struct {
-	numThreads    int
-	preSampleRate uint
-	buildFunc     htparser.BuildFunc
+	numThreads int
+	sampleRate uint
+	setupFunc  htparser.SetupFunc
 }
 
 func ExtractMainConfig(v *sx.Value, backfill bool) *MainConfig{
@@ -276,25 +262,27 @@ func ExtractMainConfig(v *sx.Value, backfill bool) *MainConfig{
 			r.uploaderConfig = htuploader.ExtractConfig(v, backfill)
 		})
 
-		r.filterFactory = htfilter_registry.Build(m.PopMaybe("filter"))
+		r.filterTLFactory = htfilter_registry.Build(m.PopMaybe("filter"))
 	})
 	return r
 }
 
 func ExtractParserConfig(v *sx.Value) *ParserConfig {
-	r := &ParserConfig{}
+	r := &ParserConfig{
+		numThreads: 1,
+		sampleRate: 1,
+	}
+
 	v.Map(func(m sx.Map) {
-		r.numThreads = 1
 		m.PopMaybeAnd("num_threads", func(v *sx.Value) {
 			r.numThreads = int(v.Int32B(1, 1024))
 		})
 
-		r.preSampleRate = 1
-		m.PopMaybeAnd("pre_sample_rate", func(v *sx.Value) {
-			r.preSampleRate = uint(v.UInt32B(1, 1 * 1000 * 1000))
+		m.PopMaybeAnd("sample_rate", func(v *sx.Value) {
+			r.sampleRate = uint(v.UInt32B(1, 1 * 1000 * 1000))
 		})
 
-		r.buildFunc = htparser_registry.Configure(m.Pop("engine"))
+		r.setupFunc = htparser_registry.Configure(m.Pop("engine"))
 	})
 	return r
 }

@@ -22,8 +22,14 @@ The file format is JSON/[JSON5](https://github.com/json5/json5/blob/master/READM
             },
         },
 
-        // The number of parser threads to spawn.
+        // The number of parser threads to spawn.  NOTE: Any filtering rules are applied
+        // on the parser threads as well.
         num_threads: int
+
+        // Do sampling in the parser.  If set to 5, we will select approximately 1 out
+        // of every five log entries.  The selection will be done with a pseudo-random
+        // number generator.
+        sample_rate: int
     },
 
     // A list of rules to apply after parsing.  The rule types are documented below.

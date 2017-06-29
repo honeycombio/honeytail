@@ -14,7 +14,7 @@ import (
 	htfilter_httprequestline "github.com/honeycombio/honeytail/v2/filter/httprequestline"
 )
 
-func Build(v *sx.Value) htfilter.Factory {
+func Build(v *sx.Value) htfilter.TLFactory {
 	// If no filter config was provided, just return a function that does nothing.
 	if v == nil {
 		filterFunc := func(event *htevent.Event) bool {
@@ -26,7 +26,7 @@ func Build(v *sx.Value) htfilter.Factory {
 	}
 
 	rulesV := v.List()
-	factories := make([]htfilter.Factory, 0, rulesV.Len())
+	factories := make([]htfilter.TLFactory, 0, rulesV.Len())
 
 	for _, ruleRaw := range rulesV.All() {
 		ruleV := ruleRaw.List()
@@ -71,7 +71,7 @@ var ruleBuilders map[string]htfilter.RuleBuilder = map[string]htfilter.RuleBuild
 	"http_request_line": htfilter_httprequestline.Rule,
 }
 
-func ruleAdd(l sx.List, args []*sx.Value) htfilter.Factory {
+func ruleAdd(l sx.List, args []*sx.Value) htfilter.TLFactory {
 	if len(args) != 2 {
 		l.Fail("expecting 2 arguments, got %d.", len(args))
 	}
@@ -86,7 +86,7 @@ func ruleAdd(l sx.List, args []*sx.Value) htfilter.Factory {
 	})
 }
 
-func ruleSet(l sx.List, args []*sx.Value) htfilter.Factory {
+func ruleSet(l sx.List, args []*sx.Value) htfilter.TLFactory {
 	if len(args) != 2 {
 		l.Fail("expecting 2 arguments, got %d.", len(args))
 	}
@@ -98,7 +98,7 @@ func ruleSet(l sx.List, args []*sx.Value) htfilter.Factory {
 	})
 }
 
-func ruleDrop(l sx.List, args []*sx.Value) htfilter.Factory {
+func ruleDrop(l sx.List, args []*sx.Value) htfilter.TLFactory {
 	if len(args) != 1 {
 		l.Fail("expecting 1 argument, got %d.", len(args))
 	}
@@ -109,7 +109,7 @@ func ruleDrop(l sx.List, args []*sx.Value) htfilter.Factory {
 	})
 }
 
-func ruleSha256(l sx.List, args []*sx.Value) htfilter.Factory {
+func ruleSha256(l sx.List, args []*sx.Value) htfilter.TLFactory {
 	if len(args) != 1 {
 		l.Fail("expecting 1 argument, got %d.", len(args))
 	}
@@ -124,7 +124,7 @@ func ruleSha256(l sx.List, args []*sx.Value) htfilter.Factory {
 	})
 }
 
-func ruleTimestamp(l sx.List, args []*sx.Value) htfilter.Factory {
+func ruleTimestamp(l sx.List, args []*sx.Value) htfilter.TLFactory {
 	if len(args) != 2 {
 		l.Fail("expecting 2 arguments, got %d.", len(args))
 	}

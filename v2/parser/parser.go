@@ -1,29 +1,39 @@
 package parser
 
 import (
-    sx "github.com/honeycombio/honeytail/v2/struct_extractor"
 	"time"
+	"sync"
+
+	sx "github.com/honeycombio/honeytail/v2/struct_extractor"
 )
 
 // Check the parser's configuration in 'v'.  Don't check anything about the outside world yet.
-type ConfigureFunc func(v *sx.Value) BuildFunc
+type ConfigureFunc func(v *sx.Value) SetupFunc
 
-// Try and build a parser.  If there's something about the outside world that isn't what you
-// expect, return an error.
-type BuildFunc func(channelSize int) (func(), PreParser, Parser, error)
+// Check stuff about the world and issue an error if something is wrong.
+type SetupFunc func() (StartFunc, error)
 
-// Do the minimum amount of parsing to identify a group of lines that is a single event,
-// apply the given sampler, then write the barely-parsed event to the intermediary channel
-// created in 'BuildFunc'.
-type PreParser func(lineChannel <-chan string, sampler Sampler)
+// Start a process that will read from the given streams of log lines, parse them into events,
+// then send them via 'sendEvent'.
+//
+// The caller will wait on 'doneWG' to determine when the parsing is complete.
+//
+// See parser/structured.NewStartFunc" for a helper that makes it easier to define a StartFunc.
+type StartFunc func(
+	numThreads int,
+	lineChannelChannel <-chan (<-chan string),
+	samplerTLFactory SamplerTLFactory,
+	sendEventTLFactory SendEventTLFactory,
+	doneWG *sync.WaitGroup)
 
-// Read from the intermediary channel created in 'BuildFunc', parse the event's fields, and
-// pass the result to 'sendEvent'
-type Parser func(sendEvent SendEvent)
 type SendEvent func(timestamp time.Time, data map[string]interface{})
+
+// Performs thread-local setup.
+type SendEventTLFactory func() SendEvent
 
 type Sampler interface {
 	ShouldKeep() bool
 }
 
-type
+// Performs thread-local setup.
+type SamplerTLFactory func() Sampler

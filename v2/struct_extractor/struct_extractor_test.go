@@ -45,11 +45,11 @@ func extractStuff(v *Value) *stuff {
 func extractSpan(v *Value) *span {
 	var r *span
 	v.Map(func(m Map) {
-		start := m.Pop("start").Int32()
+		start := int(m.Pop("start").Int32())
 
 		end := -1
 		m.PopMaybeAnd("end", func(v *Value) {
-			end = v.Int32()
+			end = int(v.Int32())
 			if end < start {
 				m.Fail("\"end\" must not be less than \"start\"; got start=%d and end=%d", start, end)
 			}

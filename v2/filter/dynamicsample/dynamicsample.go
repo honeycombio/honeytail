@@ -14,7 +14,7 @@ import (
 	"fmt"
 )
 
-func Rule(l sx.List, args []*sx.Value) htfilter.Factory {
+func Rule(l sx.List, args []*sx.Value) htfilter.TLFactory {
 	if len(args) < 2 || len(args) > 3 {
 		l.Fail("expecting 2 or 3 arguments, got %d.", len(args))
 	}

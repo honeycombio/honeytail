@@ -2,7 +2,6 @@ package mysql
 
 import (
 	"fmt"
-	"math/rand"
 	"reflect"
 	"strings"
 	"testing"
@@ -10,7 +9,7 @@ import (
 
 	"github.com/honeycombio/mysqltools/query/normalizer"
 	htevent "github.com/honeycombio/honeytail/v2/event"
-	"golang.org/x/tools/go/gcimporter15/testdata"
+	"github.com/honeycombio/honeytail/v2/parser/internal/test_utils"
 )
 
 type slowQueryData struct {
@@ -527,7 +526,7 @@ func TestProcessLines(t *testing.T) {
 
 	tsts := []struct {
 		in       []string
-		expected []htevent.Event
+		expected []*htevent.Event
 	}{
 		{
 			[]string{
@@ -543,7 +542,7 @@ func TestProcessLines(t *testing.T) {
 				"SELECT * FROM",
 				"customers;",
 			},
-			[]htevent.Event{
+			[]*htevent.Event{
 				{
 					Timestamp: ts1,
 					Data: map[string]interface{}{
@@ -588,7 +587,7 @@ func TestProcessLines(t *testing.T) {
 				"SET timestamp=1444264264;",
 				"SELECT `certs`.* FROM `certs` WHERE (`certs`.app_id = 993089) LIMIT 1;",
 			},
-			[]htevent.Event{
+			[]*htevent.Event{
 				{
 					Timestamp: time.Unix(1444264264, 0),
 					Data: map[string]interface{}{
@@ -637,9 +636,10 @@ func TestProcessLines(t *testing.T) {
 				"# User@Host: rails[rails] @  [10.252.9.33]",
 				"# Query_time: 0.002280  Lock_time: 0.000023 Rows_sent: 0  Rows_examined: 921",
 				"SET timestamp=1444264264;",
-				"SELECT `certs`.* FROM `certs` WHERE (`certs`.app_id = 993089) LIMIT 1;",
+				"SELECT `certs`.* FROM `certs` WHERE (`certs`.app_id = 993089) LIMIT 2;",
 			},
-			[]htevent.Event{
+			[]*htevent.Event{
+				nil,
 				{
 					Timestamp: time.Unix(1444264264, 0), // should pick up the SET timestamp=... cmd
 					Data: map[string]interface{}{
@@ -655,6 +655,7 @@ func TestProcessLines(t *testing.T) {
 						"statement":        "select",
 					},
 				},
+				nil,
 				{
 					Timestamp: time.Unix(1444264264, 0), // should pick up the SET timestamp=... cmd
 					Data: map[string]interface{}{
@@ -664,7 +665,7 @@ func TestProcessLines(t *testing.T) {
 						"lock_time":        0.000023,
 						"rows_sent":        0,
 						"rows_examined":    921,
-						"query":            "SELECT `certs`.* FROM `certs` WHERE (`certs`.app_id = 993089) LIMIT 1",
+						"query":            "SELECT `certs`.* FROM `certs` WHERE (`certs`.app_id = 993089) LIMIT 2",
 						"normalized_query": "select `certs`.* from `certs` where (`certs`.app_id = ?) limit ?",
 						"tables":           "certs",
 						"statement":        "select",
@@ -687,7 +688,8 @@ func TestProcessLines(t *testing.T) {
 				"# Query_time: 0.002280  Lock_time: 0.000023 Rows_sent: 0  Rows_examined: 921",
 				"SET timestamp=1444264264;",
 			},
-			[]htevent.Event{
+			[]*htevent.Event{
+				nil,
 				{
 					Timestamp: time.Unix(1444264264, 0), // should pick up the SET timestamp=... cmd
 					Data: map[string]interface{}{
@@ -703,77 +705,15 @@ func TestProcessLines(t *testing.T) {
 						"statement":        "select",
 					},
 				},
-				{}, // to match already closed channel
+				nil,
 			},
 		},
 	}
 
-	for _, tt := range tsts {
-		p := &Parser{
-			conf: Options{
-				NumParsers: 5,
-			},
-			nower: &FakeNower{},
-			// normalizer: &normalizer.Parser{},
-		}
-		lines := make(chan string, 10)
-		go grouper(lines, )
-		go
-		go func() {
-			p.ProcessLines(lines, send, nil)
-			close(send)
-		}()
-		for _, line := range tt.in {
-			lines <- line
-		}
-		close(lines)
-
-		for range tt.expected {
-			ev := <-send
-			var found bool
-			// returned events may come out of order so just look for the event rather
-			// than expecting it to come in order
-			for _, exp := range tt.expected {
-				if ev.Timestamp.Equal(exp.Timestamp) && reflect.DeepEqual(ev.Data, exp.Data) {
-					found = true
-				}
-			}
-			if !found {
-				t.Errorf("ev\n%+v\nnot found in expected list:\n%+v\n", ev, tt.expected)
-			}
-		}
-		if len(send) > 0 {
-			t.Errorf("unexpected: %d additional events were extracted", len(send))
-		}
-	}
-	// test sampling
-	rand.Seed(3)
-	var numEvents int
-	for _, tt := range tsts {
-		p := &Parser{
-			conf: Options{
-				NumParsers: 5,
-			},
-			SampleRate: 3,
-			// normalizer: &normalizer.Parser{},
-		}
-		lines := make(chan string, 10)
-		send := make(chan htevent.Event, 5)
-		go func() {
-			p.ProcessLines(lines, send, nil)
-			close(send)
-		}()
-		for _, line := range tt.in {
-			lines <- line
-		}
-		close(lines)
-		for range send {
-			// just count the number of events we're getting on the downstream side of
-			// sampling, verify it's fewer than we sent in.
-			numEvents++
-		}
-	}
-	if numEvents != 5 {
-		t.Errorf("With sampling enabled, only expected 5 events, got %d", numEvents)
+	for i, tt := range tsts {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			t.Parallel()
+			test_utils.Check(t, Build, tt.in, tt.expected)
+		})
 	}
 }

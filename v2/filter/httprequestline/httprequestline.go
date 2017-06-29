@@ -10,7 +10,7 @@ import (
 	"sort"
 )
 
-func Rule(l sx.List, args []*sx.Value) htfilter.Factory {
+func Rule(l sx.List, args []*sx.Value) htfilter.TLFactory {
 	if len(args) < 1 || len(args) > 2 {
 		l.Fail("expecting 1 or 2 arguments, got %d.", len(args))
 	}

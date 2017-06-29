@@ -13,7 +13,7 @@ var builders map[string]htparser.ConfigureFunc = map[string]htparser.ConfigureFu
 	"mysql": htparser_mysql.Configure,
 }
 
-func Configure(v *sx.Value) htparser.BuildFunc {
+func Configure(v *sx.Value) htparser.SetupFunc {
 	sourceType, sourceConfig := v.TaggedUnion()
 	configureFunc, ok := builders[sourceType]
 	if !ok {

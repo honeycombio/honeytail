@@ -13,6 +13,7 @@ import (
 	sx "github.com/honeycombio/honeytail/v2/struct_extractor"
 
 	htparser "github.com/honeycombio/honeytail/v2/parser"
+	htparser_structured "github.com/honeycombio/honeytail/v2/parser/structured"
 	htutil "github.com/honeycombio/honeytail/v2/util"
 )
 
@@ -118,15 +119,21 @@ type Config struct {
 	QueryInterval uint
 }
 
-func Configure(v *sx.Value) htparser.BuildFunc {
+func Configure(v *sx.Value) htparser.SetupFunc {
 	v.Map(func(m sx.Map) {})  // We don't have any configuration fields.
-	return Build
+	return Setup
 }
 
-func Build(channelSize int) (func(), htparser.PreParser, htparser.Parser, error) {
+func Setup() (htparser.StartFunc, error) {
+	// This parser doesn't have anything to set up.
+	return htparser_structured.NewStartFunc(Build), nil
+}
 
+func Build(channelSize int) htparser_structured.Components {
 	lineGroupChannel := make(chan []string, channelSize)
-	closeChannel := func() { close(lineGroupChannel) }
+	closeChannel := func() {
+		close(lineGroupChannel)
+	}
 
 	preParser := func(lineChannel <-chan string, sampler htparser.Sampler) {
 		grouper(lineChannel, lineGroupChannel, sampler)
@@ -137,7 +144,11 @@ func Build(channelSize int) (func(), htparser.PreParser, htparser.Parser, error)
 		for lineGroup := range lineGroupChannel {
 			data, timestamp := handleEvent(threadLocalNormalizer, lineGroup)
 
-			if data == nil {
+			if data == nil || len(data) == 0 {
+				continue
+			}
+			if q, ok := data["query"]; !ok || q == "" {
+				// skip events with no query field
 				continue
 			}
 
@@ -145,7 +156,7 @@ func Build(channelSize int) (func(), htparser.PreParser, htparser.Parser, error)
 		}
 	}
 
-	return closeChannel, preParser, parser, nil
+	return htparser_structured.Components{closeChannel, preParser, parser}
 }
 
 // A single log event can be multiple lines.  Read from 'lineChannel', find the group

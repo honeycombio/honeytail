@@ -13,7 +13,7 @@ import (
 	sx "github.com/honeycombio/honeytail/v2/struct_extractor"
 
 	htparser "github.com/honeycombio/honeytail/v2/parser"
-	htparser_structured "github.com/honeycombio/honeytail/v2/parser/structured"
+	htparser_line "github.com/honeycombio/honeytail/v2/parser/line"
 )
 
 const (
@@ -21,7 +21,7 @@ const (
 	iso8601TimeLayout         = "2006-01-02T15:04:05-07:00"
 )
 
-func Configure(v *sx.Value) htparser.SetupFunc {
+func Configure(v *sx.Value) htparser_line.SetupFunc {
 	var configFile string
 	var logFormatName string
 
@@ -30,7 +30,7 @@ func Configure(v *sx.Value) htparser.SetupFunc {
 		logFormatName = m.Pop("log_format_name").String()
 	})
 
-	return func() (htparser.StartFunc, error) {
+	return func() (htparser_line.ParserTLFactory, error) {
 		configFileH, err := os.Open(configFile)
 		if err != nil {
 			return nil, fmt.Errorf("couldn't open \"config_file\" %q: %s", configFile, err)
@@ -60,9 +60,7 @@ func Configure(v *sx.Value) htparser.SetupFunc {
 		}
 
 		// We don't have any thread-local setup, so just return the same instance.
-		lineParserTLFactory := func() htparser_structured.LineParser { return lineParser }
-
-		return htparser_structured.NewStartFuncForLineParser(lineParserTLFactory), nil
+		return func() htparser_line.Parser { return lineParser }, nil
 	}
 }
 

@@ -119,14 +119,14 @@ type Config struct {
 	QueryInterval uint
 }
 
-func Configure(v *sx.Value) htparser.SetupFunc {
+func Configure(v *sx.Value) htparser_structured.SetupFunc {
 	v.Map(func(m sx.Map) {})  // We don't have any configuration fields.
 	return Setup
 }
 
-func Setup() (htparser.StartFunc, error) {
+func Setup() (htparser_structured.BuildFunc, error) {
 	// This parser doesn't have anything to set up.
-	return htparser_structured.NewStartFunc(Build), nil
+	return Build, nil
 }
 
 func Build(channelSize int) htparser_structured.Components {

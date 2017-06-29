@@ -14,19 +14,19 @@ import (
 	htfilter_httprequestline "github.com/honeycombio/honeytail/v2/filter/httprequestline"
 )
 
-func Build(v *sx.Value) htfilter.TLFactory {
+func Build(v *sx.Value) htfilter.FilterTLFactory {
 	// If no filter config was provided, just return a function that does nothing.
 	if v == nil {
 		filterFunc := func(event *htevent.Event) bool {
 			return true
 		}
-		return func() htfilter.FilterFunc {
+		return func() htfilter.Filter {
 			return filterFunc
 		}
 	}
 
 	rulesV := v.List()
-	factories := make([]htfilter.TLFactory, 0, rulesV.Len())
+	factories := make([]htfilter.FilterTLFactory, 0, rulesV.Len())
 
 	for _, ruleRaw := range rulesV.All() {
 		ruleV := ruleRaw.List()
@@ -35,17 +35,17 @@ func Build(v *sx.Value) htfilter.TLFactory {
 			ruleV.Fail("list must not be empty")
 		}
 		ruleType := ruleParts[0].String()
-		ruleBuilder, ok := ruleBuilders[ruleType]
+		ruleConfigureFunc, ok := ruleConfigureFuncs[ruleType]
 		if !ok {
 			ruleParts[0].Fail("unknown rule type %q", ruleType)
 		}
 
-		factory := ruleBuilder(ruleV, ruleParts[1:])
+		factory := ruleConfigureFunc(ruleV, ruleParts[1:])
 		factories = append(factories, factory)
 	}
 
-	return func() htfilter.FilterFunc {
-		filters := make([]htfilter.FilterFunc, len(factories))
+	return func() htfilter.Filter {
+		filters := make([]htfilter.Filter, len(factories))
 		for i, factory := range factories {
 			filters[i] = factory()
 		}
@@ -61,7 +61,7 @@ func Build(v *sx.Value) htfilter.TLFactory {
 	}
 }
 
-var ruleBuilders map[string]htfilter.RuleBuilder = map[string]htfilter.RuleBuilder{
+var ruleConfigureFuncs map[string]htfilter.ConfigureFunc = map[string]htfilter.ConfigureFunc{
 	"add": ruleAdd,
 	"set": ruleSet,
 	"drop": ruleDrop,
@@ -71,7 +71,7 @@ var ruleBuilders map[string]htfilter.RuleBuilder = map[string]htfilter.RuleBuild
 	"http_request_line": htfilter_httprequestline.Rule,
 }
 
-func ruleAdd(l sx.List, args []*sx.Value) htfilter.TLFactory {
+func ruleAdd(l sx.List, args []*sx.Value) htfilter.FilterTLFactory {
 	if len(args) != 2 {
 		l.Fail("expecting 2 arguments, got %d.", len(args))
 	}
@@ -86,7 +86,7 @@ func ruleAdd(l sx.List, args []*sx.Value) htfilter.TLFactory {
 	})
 }
 
-func ruleSet(l sx.List, args []*sx.Value) htfilter.TLFactory {
+func ruleSet(l sx.List, args []*sx.Value) htfilter.FilterTLFactory {
 	if len(args) != 2 {
 		l.Fail("expecting 2 arguments, got %d.", len(args))
 	}
@@ -98,7 +98,7 @@ func ruleSet(l sx.List, args []*sx.Value) htfilter.TLFactory {
 	})
 }
 
-func ruleDrop(l sx.List, args []*sx.Value) htfilter.TLFactory {
+func ruleDrop(l sx.List, args []*sx.Value) htfilter.FilterTLFactory {
 	if len(args) != 1 {
 		l.Fail("expecting 1 argument, got %d.", len(args))
 	}
@@ -109,7 +109,7 @@ func ruleDrop(l sx.List, args []*sx.Value) htfilter.TLFactory {
 	})
 }
 
-func ruleSha256(l sx.List, args []*sx.Value) htfilter.TLFactory {
+func ruleSha256(l sx.List, args []*sx.Value) htfilter.FilterTLFactory {
 	if len(args) != 1 {
 		l.Fail("expecting 1 argument, got %d.", len(args))
 	}
@@ -124,7 +124,7 @@ func ruleSha256(l sx.List, args []*sx.Value) htfilter.TLFactory {
 	})
 }
 
-func ruleTimestamp(l sx.List, args []*sx.Value) htfilter.TLFactory {
+func ruleTimestamp(l sx.List, args []*sx.Value) htfilter.FilterTLFactory {
 	if len(args) != 2 {
 		l.Fail("expecting 2 arguments, got %d.", len(args))
 	}

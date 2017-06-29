@@ -48,7 +48,9 @@ import (
 //        v.Map(func(m Map) {
 //            p.color = ExtractColor(m.Pop("color"))
 //            p.x = m.Pop("x").Int32()
-//            p.y = m.Pop("y").Int32()
+//
+//            p.y = p.x  // defaults to the same as 'x'
+//            m.PopMaybeAnd("y", func(v *sx.Value) { p.y = v.Int32() })
 //        })
 //        return p
 //     }

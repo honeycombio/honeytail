@@ -14,7 +14,7 @@ import (
 	"fmt"
 )
 
-func Rule(l sx.List, args []*sx.Value) htfilter.TLFactory {
+func Rule(l sx.List, args []*sx.Value) htfilter.FilterTLFactory {
 	if len(args) < 2 || len(args) > 3 {
 		l.Fail("expecting 2 or 3 arguments, got %d.", len(args))
 	}
@@ -45,7 +45,7 @@ func Rule(l sx.List, args []*sx.Value) htfilter.TLFactory {
 		logrus.WithField("error", err).Fatal("dynsampler failed to start")
 	}
 
-	return func() htfilter.FilterFunc {
+	return func() htfilter.Filter {
 		randObj := *rand.New(rand.NewSource(rand.Int63()))  // Thread-local, to avoid contention overhead
 		return func(event *htevent.Event) bool {
 			key := makeKey(event.Data, fieldNames)

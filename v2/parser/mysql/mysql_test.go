@@ -9,7 +9,7 @@ import (
 
 	"github.com/honeycombio/mysqltools/query/normalizer"
 	htevent "github.com/honeycombio/honeytail/v2/event"
-	"github.com/honeycombio/honeytail/v2/parser/internal/test_utils"
+	htparser_test_utils "github.com/honeycombio/honeytail/v2/parser/internal/test_utils"
 )
 
 type slowQueryData struct {
@@ -713,7 +713,7 @@ func TestProcessLines(t *testing.T) {
 	for i, tt := range tsts {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			t.Parallel()
-			test_utils.Check(t, Build, tt.in, tt.expected)
+			htparser_test_utils.CheckStructuredParser(t, Build, tt.in, tt.expected)
 		})
 	}
 }

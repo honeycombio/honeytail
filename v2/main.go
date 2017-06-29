@@ -125,14 +125,14 @@ func setupSignalHandler(abort chan<- struct{}) {
 	}()
 }
 
-func startParser(config *ParserConfig, filterTLFactory htfilter.TLFactory,
+func startParser(config *ParserConfig, filterTLFactory htfilter.FilterTLFactory,
 	lineChannelChannel <-chan (<-chan string), eventChannel chan<- htevent.Event) error {
 
 	var doneWG sync.WaitGroup
 
 	// Instead of giving the parser a channel to write events to, we give them
-	// a function to call to send events.  We do this because function calls are
-	// a little more efficient than passing data via a channel.
+	// a function to call to send events.  That way we can just apply filtering
+	// on the same thread.
 	sendEventTLFactory := func() htparser.SendEvent {
 		filterFunc := filterTLFactory()
 
@@ -240,7 +240,7 @@ func sortedKeys(m map[string]interface{}) []string {
 type MainConfig struct {
 	sourceStartFunc htsource.StartFunc
 	parserConfig    *ParserConfig
-	filterTLFactory htfilter.TLFactory
+	filterTLFactory htfilter.FilterTLFactory
 	uploaderConfig  *htuploader.Config
 }
 

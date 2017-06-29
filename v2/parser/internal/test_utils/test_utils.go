@@ -18,13 +18,15 @@ import (
 //
 // If there are events that make it through the pre-parser, but are dropped by the parser, those
 // events should be represented by 'nil' entries in 'expectedOutput'.
-func Check(t *testing.T, buildFunc htparser_structured.BuildFunc, input []string, expectedOutput []*htevent.Event) {
+func CheckStructuredParser(t *testing.T, buildFunc htparser_structured.BuildFunc,
+	input []string, expectedOutput []*htevent.Event) {
+
 	run := func (name string, predicate func(int) bool) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			samplerReturnValues, sampledExpectedOutput := buildSamplerArrays(expectedOutput, predicate)
 			sampler := &controlledSampler{0, samplerReturnValues}
-			CheckSampled(t, buildFunc, input, sampledExpectedOutput, sampler)
+			CheckStructuredParserWithSampling(t, buildFunc, input, sampledExpectedOutput, sampler)
 			if sampler.index != len(sampler.returnValues) {
 				t.Fatalf("sampler wasn't called enough times; expected %d, got %d", len(sampler.returnValues), sampler.index)
 			}
@@ -35,7 +37,7 @@ func Check(t *testing.T, buildFunc htparser_structured.BuildFunc, input []string
 	// all expected output appears.
 	run("all", func(_ int) bool { return true })
 
-	// Try with different sampling.  Makes sure the parser is using the sampler correctly.
+	// Try with different sampling to make sure the parser is using the sampler correctly.
 	run("none", func(_ int) bool { return false })
 	run("evens", func(i int) bool { return i % 2 == 0 })
 	run("odds", func(i int) bool { return i % 2 == 1 })
@@ -44,7 +46,7 @@ func Check(t *testing.T, buildFunc htparser_structured.BuildFunc, input []string
 	run("third+2", func(i int) bool { return i % 3 == 2 })
 }
 
-func CheckSampled(
+func CheckStructuredParserWithSampling(
 	t *testing.T,
 	buildFunc htparser_structured.BuildFunc,
 	input []string,

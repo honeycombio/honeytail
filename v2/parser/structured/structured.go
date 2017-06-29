@@ -29,9 +29,9 @@ type Components struct {
 	CloseChannel func()
 	// Do minimal parsing to identify individual events.  This is also where
 	// pre-sampling is done.
-	PreParser    PreParser
+	PreParser PreParser
 	// Parse events based on objects passed from the pre-parser.
-	Parser       Parser
+	Parser Parser
 }
 
 // Do the minimum amount of parsing to identify a group of lines that is a single event,
@@ -74,7 +74,7 @@ func ToStandardStartFunc(buildFunc BuildFunc) htparser.StartFunc {
 				wg.Add(1)
 				go func() {
 					defer wg.Done()
-					sampler := samplerTLFactory()  // Thread-local, to avoid contention overhead.
+					sampler := samplerTLFactory() // Thread-local, to avoid contention overhead.
 					components.PreParser(lineChannel, sampler)
 				}()
 			}
@@ -87,10 +87,9 @@ func ToStandardStartFunc(buildFunc BuildFunc) htparser.StartFunc {
 			doneWG.Add(1)
 			go func() {
 				defer doneWG.Done()
-				sendEvent := sendEventTLFactory()  // Thread-local, to avoid contention overhead.
+				sendEvent := sendEventTLFactory() // Thread-local, to avoid contention overhead.
 				components.Parser(sendEvent)
 			}()
 		}
 	}
 }
-

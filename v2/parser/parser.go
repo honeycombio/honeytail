@@ -1,8 +1,8 @@
 package parser
 
 import (
-	"time"
 	"sync"
+	"time"
 
 	sx "github.com/honeycombio/honeytail/v2/struct_extractor"
 )

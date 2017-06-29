@@ -1,10 +1,10 @@
 package struct_extractor
 
 import (
-    "encoding/json"
-    "testing"
-	"reflect"
+	"encoding/json"
 	"fmt"
+	"reflect"
+	"testing"
 )
 
 func parse(serializedJson string) interface{} {
@@ -17,14 +17,14 @@ func parse(serializedJson string) interface{} {
 }
 
 type stuff struct {
-	name string
-	main *span
+	name       string
+	main       *span
 	alternates []*span
 }
 
 type span struct {
 	start int
-	end int
+	end   int
 }
 
 func extractStuff(v *Value) *stuff {

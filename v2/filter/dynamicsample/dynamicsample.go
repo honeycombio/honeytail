@@ -1,6 +1,7 @@
 package filter
 
 import (
+	"fmt"
 	"math/rand"
 	"strconv"
 	"strings"
@@ -11,7 +12,6 @@ import (
 
 	htevent "github.com/honeycombio/honeytail/v2/event"
 	htfilter "github.com/honeycombio/honeytail/v2/filter"
-	"fmt"
 )
 
 func Rule(l sx.List, args []*sx.Value) htfilter.FilterTLFactory {
@@ -46,7 +46,7 @@ func Rule(l sx.List, args []*sx.Value) htfilter.FilterTLFactory {
 	}
 
 	return func() htfilter.Filter {
-		randObj := *rand.New(rand.NewSource(rand.Int63()))  // Thread-local, to avoid contention overhead
+		randObj := *rand.New(rand.NewSource(rand.Int63())) // Thread-local, to avoid contention overhead
 		return func(event *htevent.Event) bool {
 			key := makeKey(event.Data, fieldNames)
 			rate := sampler.GetSampleRate(key)

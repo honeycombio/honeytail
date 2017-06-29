@@ -1,27 +1,28 @@
 package uploader
 
 import (
+	"fmt"
+	"io/ioutil"
+	"net/http"
 	"strings"
+	"sync"
 	"time"
 
-	htevent "github.com/honeycombio/honeytail/v2/event"
-	"github.com/honeycombio/libhoney-go"
 	"github.com/Sirupsen/logrus"
-	"sync"
 	sx "github.com/honeycombio/honeytail/v2/struct_extractor"
-	"fmt"
-	"net/http"
-	"io/ioutil"
+	"github.com/honeycombio/libhoney-go"
+
+	htevent "github.com/honeycombio/honeytail/v2/event"
 )
 
 type WriteKeyConfig struct {
 	WriteKey string
-	ApiUrl string
+	ApiUrl   string
 }
 
 type Config struct {
 	dataSet string
-	lhc *LibhoneyConfig
+	lhc     *LibhoneyConfig
 
 	// Whether we should retry sending data if we a rate limit response or 500 response.
 	retrySends bool
@@ -29,25 +30,25 @@ type Config struct {
 
 type LibhoneyConfig struct {
 	MaxConcurrentBatches uint
-	SendFrequency time.Duration
-	MaxBatchSize uint
+	SendFrequency        time.Duration
+	MaxBatchSize         uint
 }
 
 func ExtractLibhoneyConfig(v *sx.Value) *LibhoneyConfig {
 	// Passing in zeroes to libhoney causes it to use the defaults.
 	r := &LibhoneyConfig{
 		MaxConcurrentBatches: 0,
-		SendFrequency: 0,
-		MaxBatchSize: 0,
+		SendFrequency:        0,
+		MaxBatchSize:         0,
 	}
 
-	if (v != nil) {
+	if v != nil {
 		v.Map(func(m sx.Map) {
 			m.PopMaybeAnd("max_concurrent_batches", func(v *sx.Value) {
 				r.MaxConcurrentBatches = uint(v.UInt32B(1, 1000))
 			})
 			m.PopMaybeAnd("send_frequency_ms", func(v *sx.Value) {
-				r.SendFrequency = time.Duration(v.UInt32B(1, 10 * 1000)) * time.Millisecond
+				r.SendFrequency = time.Duration(v.UInt32B(1, 10*1000)) * time.Millisecond
 			})
 			m.PopMaybeAnd("max_batch_size", func(v *sx.Value) {
 				r.MaxBatchSize = uint(v.UInt32B(1, 10000))
@@ -92,7 +93,6 @@ func ExtractWriteKeyConfig(v *sx.Value) *WriteKeyConfig {
 	return r
 }
 
-
 func Start(userAgent string, config *Config, writeKeyConfig *WriteKeyConfig,
 	eventChannel <-chan htevent.Event, doneWG *sync.WaitGroup) error {
 
@@ -133,9 +133,9 @@ func Start(userAgent string, config *Config, writeKeyConfig *WriteKeyConfig,
 
 	// two channels to handle backing off when rate limited and resending failed
 	// send attempts that are recoverable
-	toBeResent := make(chan htevent.Event, 2 * config.lhc.MaxConcurrentBatches)
+	toBeResent := make(chan htevent.Event, 2*config.lhc.MaxConcurrentBatches)
 	// time in milliseconds to delay the send
-	delaySending := make(chan int, 2 * config.lhc.MaxConcurrentBatches)
+	delaySending := make(chan int, 2*config.lhc.MaxConcurrentBatches)
 
 	// start up the sender. all sources are either sampled when tailing or in-
 	// parser, so always tell libhoney events are pre-sampled
@@ -216,7 +216,7 @@ func sendEvent(ev htevent.Event) {
 // re-enqueues any events that failed to send in a retryable way
 func handleResponses(responses <-chan libhoney.Response, stats *responseStats,
 	toBeResent chan<- htevent.Event, delaySending chan int, retrySends bool) {
-	statusInterval := uint(1000)  // TODO: allow specifying in config file
+	statusInterval := uint(1000) // TODO: allow specifying in config file
 	go logStats(stats, statusInterval)
 
 	for rsp := range responses {
@@ -231,8 +231,8 @@ func handleResponses(responses <-chan libhoney.Response, stats *responseStats,
 		// if this is an error we should retry sending, re-enqueue the event
 		if retrySends && (rsp.StatusCode == 429 || rsp.StatusCode == 500) {
 			logfields["retry_send"] = true
-			delaySending <- 1000  // back off for a little bit
-			toBeResent <- rsp.Metadata.(htevent.Event)  // then retry sending the event
+			delaySending <- 1000                       // back off for a little bit
+			toBeResent <- rsp.Metadata.(htevent.Event) // then retry sending the event
 		} else {
 			logfields["retry_send"] = false
 		}
@@ -384,7 +384,7 @@ func verifyWriteKeyConfig(userAgent string, c *WriteKeyConfig) error {
 		// TODO: Ensure body is valid UTF-8?
 		// TODO: Maybe use "%s" instead of "%q" if message doesn't contain any special characters.
 		return fmt.Errorf("Couldn't verify write key with Honeycomb server (%q): HTTP %d: %q",
-			c.ApiUrl, resp.StatusCode, string(body));
+			c.ApiUrl, resp.StatusCode, string(body))
 	}
 	return nil
 }

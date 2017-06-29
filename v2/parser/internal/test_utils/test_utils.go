@@ -21,7 +21,7 @@ import (
 func CheckStructuredParser(t *testing.T, buildFunc htparser_structured.BuildFunc,
 	input []string, expectedOutput []*htevent.Event) {
 
-	run := func (name string, predicate func(int) bool) {
+	run := func(name string, predicate func(int) bool) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			samplerReturnValues, sampledExpectedOutput := buildSamplerArrays(expectedOutput, predicate)
@@ -39,11 +39,11 @@ func CheckStructuredParser(t *testing.T, buildFunc htparser_structured.BuildFunc
 
 	// Try with different sampling to make sure the parser is using the sampler correctly.
 	run("none", func(_ int) bool { return false })
-	run("evens", func(i int) bool { return i % 2 == 0 })
-	run("odds", func(i int) bool { return i % 2 == 1 })
-	run("third", func(i int) bool { return i % 3 == 0 })
-	run("third+1", func(i int) bool { return i % 3 == 1 })
-	run("third+2", func(i int) bool { return i % 3 == 2 })
+	run("evens", func(i int) bool { return i%2 == 0 })
+	run("odds", func(i int) bool { return i%2 == 1 })
+	run("third", func(i int) bool { return i%3 == 0 })
+	run("third+1", func(i int) bool { return i%3 == 1 })
+	run("third+2", func(i int) bool { return i%3 == 2 })
 }
 
 func CheckStructuredParserWithSampling(
@@ -72,7 +72,7 @@ func CheckStructuredParserWithSampling(
 	sendEvent := func(timestamp time.Time, data map[string]interface{}) {
 		output = append(output, &htevent.Event{
 			Timestamp: timestamp,
-			Data: data,
+			Data:      data,
 		})
 	}
 
@@ -110,7 +110,7 @@ func buildSamplerArrays(expectedOutput []*htevent.Event, predicate func(int) boo
 
 // A sampler that returns true/false according to our predetermined list of values.
 type controlledSampler struct {
-	index int
+	index        int
 	returnValues []bool
 }
 

@@ -2,15 +2,15 @@
 package mysql
 
 import (
+	"github.com/Sirupsen/logrus"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
-	"github.com/Sirupsen/logrus"
-	_ "github.com/go-sql-driver/mysql"
-	"github.com/honeycombio/mysqltools/query/normalizer"
 
+	_ "github.com/go-sql-driver/mysql"
 	sx "github.com/honeycombio/honeytail/v2/struct_extractor"
+	"github.com/honeycombio/mysqltools/query/normalizer"
 
 	htparser "github.com/honeycombio/honeytail/v2/parser"
 	htparser_structured "github.com/honeycombio/honeytail/v2/parser/structured"
@@ -120,7 +120,7 @@ type Config struct {
 }
 
 func Configure(v *sx.Value) htparser_structured.SetupFunc {
-	v.Map(func(m sx.Map) {})  // We don't have any configuration fields.
+	v.Map(func(m sx.Map) {}) // We don't have any configuration fields.
 	return Setup
 }
 

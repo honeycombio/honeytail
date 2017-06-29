@@ -3,14 +3,16 @@ package main
 import (
 	"errors"
 	"fmt"
+	"math/rand"
 	"os"
 	"os/signal"
+	"sort"
 	"sync"
 	"syscall"
 	"time"
 
-	flag "github.com/jessevdk/go-flags"
 	sx "github.com/honeycombio/honeytail/v2/struct_extractor"
+	flag "github.com/jessevdk/go-flags"
 
 	htevent "github.com/honeycombio/honeytail/v2/event"
 	htfilter "github.com/honeycombio/honeytail/v2/filter"
@@ -21,8 +23,6 @@ import (
 	htsource_registry "github.com/honeycombio/honeytail/v2/source/registry"
 	htuploader "github.com/honeycombio/honeytail/v2/uploader"
 	htutil "github.com/honeycombio/honeytail/v2/util"
-	"sort"
-	"math/rand"
 )
 
 // Set via linker flag "-X" by Travis CI
@@ -83,8 +83,8 @@ func die(exitCode int, format string, args ...interface{}) {
 type Flags struct {
 	ConfigFile   string `short:"c" long:"config-file" description:"Primary config; see https://github.com/honeycombio/honeytail/v2/config.md"`
 	WriteKeyFile string `long:"write-key-file" description:"JSON/JSON5 file with \"write_key\" field."`
-	TestMode     bool `long:"test" description:"Don't upload to Honeycomb server; print to stdout instead."`
-	Backfill     bool `long:"backfill" description:"Start from the beginning of the log files and don't keep watching."`
+	TestMode     bool   `long:"test" description:"Don't upload to Honeycomb server; print to stdout instead."`
+	Backfill     bool   `long:"backfill" description:"Start from the beginning of the log files and don't keep watching."`
 }
 
 func parseFlags(args []string) (*Flags, error) {
@@ -139,8 +139,8 @@ func startParser(config *ParserConfig, filterTLFactory htfilter.FilterTLFactory,
 		return func(timestamp time.Time, data map[string]interface{}) {
 			event := htevent.Event{
 				SampleRate: config.sampleRate,
-				Timestamp: timestamp,
-				Data: data,
+				Timestamp:  timestamp,
+				Data:       data,
 			}
 			keep := filterFunc(&event)
 			if keep {
@@ -171,7 +171,7 @@ type dummySampler struct{}
 
 type randSampler struct {
 	randObj rand.Rand
-	rate uint
+	rate    uint
 }
 
 func newSampler(rate uint) htparser.Sampler {
@@ -194,7 +194,6 @@ func (_ dummySampler) ShouldKeep() bool {
 func (s randSampler) ShouldKeep() bool {
 	return s.randObj.Intn(int(s.rate)) == 0
 }
-
 
 func startUploader(testMode bool, userAgent string, uploaderConfig *htuploader.Config,
 	writeKeyFilePath string, eventChannel <-chan htevent.Event, doneWG *sync.WaitGroup) error {
@@ -250,7 +249,7 @@ type ParserConfig struct {
 	setupFunc  htparser.SetupFunc
 }
 
-func ExtractMainConfig(v *sx.Value, backfill bool) *MainConfig{
+func ExtractMainConfig(v *sx.Value, backfill bool) *MainConfig {
 	r := &MainConfig{}
 	v.Map(func(m sx.Map) {
 		r.sourceStartFunc = htsource_registry.Build(m.Pop("source"), backfill)
@@ -279,7 +278,7 @@ func ExtractParserConfig(v *sx.Value) *ParserConfig {
 		})
 
 		m.PopMaybeAnd("sample_rate", func(v *sx.Value) {
-			r.sampleRate = uint(v.UInt32B(1, 1 * 1000 * 1000))
+			r.sampleRate = uint(v.UInt32B(1, 1*1000*1000))
 		})
 
 		r.setupFunc = htparser_registry.Configure(m.Pop("engine"))

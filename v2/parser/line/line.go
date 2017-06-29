@@ -54,7 +54,7 @@ func ToStructuredBuildFunc(f ParserTLFactory) htparser_structured.BuildFunc {
 		}
 
 		parser := func(sendEvent htparser.SendEvent) {
-			lineParser := f()  // Thread-local, to avoid contention overhead.
+			lineParser := f() // Thread-local, to avoid contention overhead.
 			for line := range combinedChannel {
 				lineParser(line, sendEvent)
 			}

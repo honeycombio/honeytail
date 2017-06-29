@@ -9,8 +9,8 @@ import (
 	htparser_line "github.com/honeycombio/honeytail/v2/parser/line"
 	htparser_structured "github.com/honeycombio/honeytail/v2/parser/structured"
 
+	htparser_mysql "github.com/honeycombio/honeytail/v2/parser/mysql"
 	htparser_nginx "github.com/honeycombio/honeytail/v2/parser/nginx"
-    htparser_mysql "github.com/honeycombio/honeytail/v2/parser/mysql"
 )
 
 var configureFuncs map[string]htparser.ConfigureFunc = buildParserRegistry()

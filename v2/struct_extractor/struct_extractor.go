@@ -1,10 +1,10 @@
 package struct_extractor
 
 import (
-	"fmt"
 	"errors"
-	"strings"
+	"fmt"
 	"math"
+	"strings"
 )
 
 // A library for validating dynamic list/map/string/int structures, e.g. the kind
@@ -77,13 +77,13 @@ import (
 // .Int32() to check if it's the shape you expect.
 type Value struct {
 	// Points to the value that this value is derived from.
-	parent    *Value
+	parent *Value
 	// If the parent value is a map: the field name that this value is under.
 	fieldName *string
 	// If the parent value is a list: the list index this value is under.
 	listIndex int
 	// The actual raw value.
-	inner     interface{}
+	inner interface{}
 }
 
 type Map struct {
@@ -98,7 +98,7 @@ type List struct {
 
 type wrappedError struct {
 	root *Value
-	err error
+	err  error
 }
 
 // All extraction work must be performed within a Run().  See the package
@@ -108,10 +108,10 @@ func Run(value interface{}, parser func(*Value)) (err error) {
 	err = nil
 
 	root := Value{
-		parent: nil,
+		parent:    nil,
 		fieldName: nil,
 		listIndex: -1,
-		inner: value,
+		inner:     value,
 	}
 	defer func() {
 		r := recover()
@@ -145,12 +145,12 @@ func Run(value interface{}, parser func(*Value)) (err error) {
 //         v.Fail("not a valid email address: %q", s)
 //     }
 func (v *Value) Fail(format string, args ...interface{}) interface{} {
-	parts := []string{ fmt.Sprintf(format, args...) }
+	parts := []string{fmt.Sprintf(format, args...)}
 
 	// Walk up the Value.parent chain and append the context of where 'v' is
 	// in the overall structure.
 	curr := v
-	for ; curr.parent != nil; {
+	for curr.parent != nil {
 
 		var part string
 		if curr.fieldName != nil {
@@ -278,7 +278,7 @@ func (v *Value) TryRawMap() (Map, bool) {
 	}
 	return Map{
 		source: v,
-		inner: m,
+		inner:  m,
 	}, true
 }
 
@@ -331,10 +331,10 @@ func (m Map) PopMaybe(fieldName string) *Value {
 	}
 	delete(m.inner, fieldName)
 	return &Value{
-		parent: m.source,
+		parent:    m.source,
 		fieldName: &fieldName,
 		listIndex: -1,
-		inner: v,
+		inner:     v,
 	}
 }
 
@@ -353,7 +353,7 @@ func (m Map) PopMaybeAnd(fieldName string, run func(*Value)) {
 }
 
 type KeyValue struct {
-	Key string
+	Key   string
 	Value *Value
 }
 
@@ -364,10 +364,10 @@ func (m Map) PopAll() []KeyValue {
 		r = append(r, KeyValue{
 			Key: k,
 			Value: &Value{
-				parent: m.source,
+				parent:    m.source,
 				fieldName: &k,
 				listIndex: -1,
-				inner: v,
+				inner:     v,
 			},
 		})
 	}
@@ -400,7 +400,7 @@ func (v *Value) TryList() (List, bool) {
 	}
 	return List{
 		source: v,
-		inner: l,
+		inner:  l,
 	}, true
 }
 
@@ -426,10 +426,10 @@ func (l List) All() []*Value {
 	r := make([]*Value, 0, len(l.inner))
 	for i, v := range l.inner {
 		r = append(r, &Value{
-			parent: l.source,
+			parent:    l.source,
 			fieldName: nil,
 			listIndex: i,
-			inner: v,
+			inner:     v,
 		})
 	}
 	return r
@@ -456,4 +456,3 @@ func DescribeValueType(v interface{}) string {
 		panic(fmt.Sprintf("bad value: %#v", v))
 	}
 }
-

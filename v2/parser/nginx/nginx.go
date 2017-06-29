@@ -2,10 +2,10 @@
 package nginx
 
 import (
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
-	"fmt"
 	"time"
 
 	"github.com/Sirupsen/logrus"

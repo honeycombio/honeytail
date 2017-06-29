@@ -1,11 +1,11 @@
 package event
 
 import (
-    "time"
+	"time"
 )
 
 type Event struct {
 	SampleRate uint
-	Timestamp time.Time
-	Data map[string]interface{}
+	Timestamp  time.Time
+	Data       map[string]interface{}
 }

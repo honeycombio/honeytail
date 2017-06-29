@@ -62,12 +62,12 @@ func Build(v *sx.Value) htfilter.FilterTLFactory {
 }
 
 var ruleConfigureFuncs map[string]htfilter.ConfigureFunc = map[string]htfilter.ConfigureFunc{
-	"add": ruleAdd,
-	"set": ruleSet,
-	"drop": ruleDrop,
-	"sha256": ruleSha256,
-	"timestamp": ruleTimestamp,
-	"dynamic_sample": htfilter_dynamicsample.Rule,
+	"add":               ruleAdd,
+	"set":               ruleSet,
+	"drop":              ruleDrop,
+	"sha256":            ruleSha256,
+	"timestamp":         ruleTimestamp,
+	"dynamic_sample":    htfilter_dynamicsample.Rule,
 	"http_request_line": htfilter_httprequestline.Rule,
 }
 
@@ -78,7 +78,7 @@ func ruleAdd(l sx.List, args []*sx.Value) htfilter.FilterTLFactory {
 	fieldName := args[0].String()
 	fieldValue := args[1].Any()
 	return htfilter.StatelessFactory(func(event *htevent.Event) bool {
-		_, present := event.Data[fieldName];
+		_, present := event.Data[fieldName]
 		if !present {
 			event.Data[fieldName] = fieldValue
 		}

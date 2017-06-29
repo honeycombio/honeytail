@@ -1,13 +1,14 @@
 package httprequestline
 
 import (
+	"sort"
+	"strings"
+
 	sx "github.com/honeycombio/honeytail/v2/struct_extractor"
+	"github.com/honeycombio/urlshaper"
 
 	htevent "github.com/honeycombio/honeytail/v2/event"
 	htfilter "github.com/honeycombio/honeytail/v2/filter"
-	"github.com/honeycombio/urlshaper"
-	"strings"
-	"sort"
 )
 
 func Rule(l sx.List, args []*sx.Value) htfilter.FilterTLFactory {

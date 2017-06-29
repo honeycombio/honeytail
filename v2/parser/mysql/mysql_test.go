@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/honeycombio/mysqltools/query/normalizer"
+
 	htevent "github.com/honeycombio/honeytail/v2/event"
 	htparser_test_utils "github.com/honeycombio/honeytail/v2/parser/internal/test_utils"
 )

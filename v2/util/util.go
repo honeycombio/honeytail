@@ -3,10 +3,10 @@ package util
 import (
 	"fmt"
 	"os"
-    "regexp"
+	"regexp"
 
-	"github.com/yosuke-furukawa/json5/encoding/json5"
 	sx "github.com/honeycombio/honeytail/v2/struct_extractor"
+	"github.com/yosuke-furukawa/json5/encoding/json5"
 )
 
 // ExtRegexp is a Regexp with one additional method to make it easier to work
@@ -35,24 +35,4 @@ func (r *ExtRegexp) FindStringSubmatchMap(s string) (string, map[string]string) 
 		}
 	}
 	return match[0], captures
-}
-
-func LoadTomlFileAndExtract(path string, extractor func(*sx.Value)) error {
-	f, err := os.Open(path)
-	if err != nil {
-		return fmt.Errorf("unable to read file %q: %s", path, err)
-	}
-
-	var raw interface{}
-	err = json5.NewDecoder(f).Decode(&raw)
-	if err != nil {
-		return fmt.Errorf("%q: not valid JSON5: %s", path, err)
-	}
-
-	err = sx.Run(raw, extractor)
-	if err != nil {
-		return fmt.Errorf("%q: %s", path, err)
-	}
-
-	return nil
 }

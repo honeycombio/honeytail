@@ -36,7 +36,10 @@ func main() {
 		die(2, "%s", err)
 	}
 
-	mc, err := loadMainConfig(flags.ConfigFile, flags.Backfill)
+	var mc *MainConfig
+	err = htutil.LoadConfigFileAndExtract(flags.ConfigFile, func(v *sx.Value) {
+		mc = ExtractMainConfig(v, flags.Backfill)
+	})
 	if err != nil {
 		die(2, "\"--config-file\": %s", err)
 	}
@@ -217,7 +220,11 @@ func startUploader(testMode bool, userAgent string, uploaderConfig *htuploader.C
 		if uploaderConfig == nil {
 			return errors.New("configuration is missing \"uploader\" section; to just test parsing, pass \"-test\".")
 		}
-		writeKeyConfig, err := loadWriteKeyConfig(writeKeyFilePath)
+
+		var writeKeyConfig *htuploader.WriteKeyConfig
+		err := htutil.LoadConfigFileAndExtract(writeKeyFilePath, func(v *sx.Value) {
+			writeKeyConfig = htuploader.ExtractWriteKeyConfig(v)
+		})
 		if err != nil {
 			return fmt.Errorf("\"--write-key-file\": %s", err)
 		}
@@ -284,32 +291,4 @@ func ExtractParserConfig(v *sx.Value) *ParserConfig {
 		r.engineSetupFunc = htparser_registry.Configure(m.Pop("engine"))
 	})
 	return r
-}
-
-func loadMainConfig(path string, backfill bool) (*MainConfig, error) {
-	var err error
-
-	var r *MainConfig
-	err = htutil.LoadConfigFileAndExtract(path, func(v *sx.Value) {
-		r = ExtractMainConfig(v, backfill)
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return r, nil
-}
-
-func loadWriteKeyConfig(path string) (*htuploader.WriteKeyConfig, error) {
-	var err error
-
-	var r *htuploader.WriteKeyConfig
-	err = htutil.LoadConfigFileAndExtract(path, func(v *sx.Value) {
-		r = htuploader.ExtractWriteKeyConfig(v)
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return r, nil
 }

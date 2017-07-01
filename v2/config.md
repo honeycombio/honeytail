@@ -1,6 +1,6 @@
 ## Honeytail "--config-file" format
 
-The file format is JSON/[JSON5](https://github.com/json5/json5/blob/master/README.md#features).
+Can be a ".json" or [".json5"](https://github.com/json5/json5/blob/master/README.md#features) file.
 
 ```json5
 {
@@ -11,11 +11,11 @@ The file format is JSON/[JSON5](https://github.com/json5/json5/blob/master/READM
     parser: {
         engine: { // one of...
             "nginx": {
-                config_file = path to nginx config file
+                config_file: path to nginx config file
                 // An Nginx config file can define multiple named log
                 // formats.  Use this to specify the name of the log
                 // format your source data is using.
-                log_format_name = string
+                log_format_name: string
             }
             "mysql": {
                 // No configuration options.
@@ -88,9 +88,9 @@ The file format is JSON/[JSON5](https://github.com/json5/json5/blob/master/READM
 
 ## Honeytail "--write-key-file" format
 
-The file format is JSON/[JSON5](https://github.com/json5/json5/blob/master/README.md#features).
+Can be a ".json" or [".json5"](https://github.com/json5/json5/blob/master/README.md#features) file.
 
-```
+```json5
 {
     write_key: string,
 

@@ -151,7 +151,7 @@ func startParser(config *ParserConfig, filterTLFactory htfilter.FilterTLFactory,
 
 	samplerTLFactory := func() htparser.Sampler { return newSampler(config.sampleRate) }
 
-	startFunc, err := config.setupFunc()
+	startFunc, err := config.engineSetupFunc()
 	if err != nil {
 		return fmt.Errorf("setting up parser: %s", err)
 	}
@@ -244,9 +244,9 @@ type MainConfig struct {
 }
 
 type ParserConfig struct {
-	numThreads int
-	sampleRate uint
-	setupFunc  htparser.SetupFunc
+	numThreads      int
+	sampleRate      uint
+	engineSetupFunc htparser.SetupFunc
 }
 
 func ExtractMainConfig(v *sx.Value, backfill bool) *MainConfig {
@@ -281,7 +281,7 @@ func ExtractParserConfig(v *sx.Value) *ParserConfig {
 			r.sampleRate = uint(v.UInt32B(1, 1*1000*1000))
 		})
 
-		r.setupFunc = htparser_registry.Configure(m.Pop("engine"))
+		r.engineSetupFunc = htparser_registry.Configure(m.Pop("engine"))
 	})
 	return r
 }
@@ -290,7 +290,7 @@ func loadMainConfig(path string, backfill bool) (*MainConfig, error) {
 	var err error
 
 	var r *MainConfig
-	err = htutil.LoadTomlFileAndExtract(path, func(v *sx.Value) {
+	err = htutil.LoadConfigFileAndExtract(path, func(v *sx.Value) {
 		r = ExtractMainConfig(v, backfill)
 	})
 	if err != nil {
@@ -304,7 +304,7 @@ func loadWriteKeyConfig(path string) (*htuploader.WriteKeyConfig, error) {
 	var err error
 
 	var r *htuploader.WriteKeyConfig
-	err = htutil.LoadTomlFileAndExtract(path, func(v *sx.Value) {
+	err = htutil.LoadConfigFileAndExtract(path, func(v *sx.Value) {
 		r = htuploader.ExtractWriteKeyConfig(v)
 	})
 	if err != nil {

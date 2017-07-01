@@ -7,7 +7,7 @@
 
     parser: {
         num_threads: 2,
-        pre_sample_rate: 2,
+        sample_rate: 2,
         engine: {
             nginx: {
                 config_file: "nginx.conf",

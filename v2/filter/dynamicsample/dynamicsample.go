@@ -30,15 +30,22 @@ func Rule(l sx.List, args []*sx.Value) htfilter.FilterTLFactory {
 	}
 
 	var windowSec int = 30
+	var minRate int = 1
 	if len(args) == 3 {
 		args[2].Map(func(m sx.Map) {
-			windowSec = int(m.Pop("window_sec").Int32B(1, 1000000))
+			m.PopMaybeAnd("window_sec", func(v *sx.Value) {
+				windowSec = int(v.Int32B(1, 1000000))
+			})
+			m.PopMaybeAnd("min_rate", func(v *sx.Value) {
+				minRate = int(v.Int32B(0, 1000000))
+			})
 		})
 	}
 
 	sampler := &dynsampler.AvgSampleWithMin{
 		GoalSampleRate:    int(goalRate),
 		ClearFrequencySec: windowSec,
+		MinEventsPerSec:   minRate,
 	}
 	if err := sampler.Start(); err != nil {
 		// TODO: should we panic?

@@ -68,7 +68,10 @@ Can be a ".json" or [".json5"](https://github.com/json5/json5/blob/master/README
         ["dynamic_sample", goal_rate, [field_names...], {
             // The size, in seconds, of the dynamic sampling window.
             // Defaults to 30.
-            "window_sec": int
+            window_sec: int
+            // If the rate falls below this, dynsampler won't sample.
+            // Defaults to 1.
+            min_rate: int
         }]
     ],
 

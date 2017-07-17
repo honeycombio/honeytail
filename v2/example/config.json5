@@ -21,7 +21,7 @@
         ["drop", "remote_user"],
         ["timestamp", "goose", "%s"],
         ["http_request_line", "request", {
-            "extract_query_args": "all",
+            extract_query_args: "all",
         }],
     ],
 

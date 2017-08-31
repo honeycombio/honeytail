@@ -569,6 +569,25 @@ func init() {
 			},
 			timestamp: t1.Truncate(time.Second),
 		},
+		{ /* 29 */
+			// query spans multiple lines, initial line blank, tabs and spaces
+			rawE: []string{
+				"# Time: not-a-parsable-time-stampZ",
+				"SET timestamp=1459470669;",
+				"",
+				"    SELECT *	",
+				"    	FROM orders WHERE   ",
+				"	total > 1000;",
+				"",
+			},
+			sq: map[string]interface{}{
+				queryKey: "SELECT *	     	FROM orders WHERE    	total > 1000",
+				normalizedQueryKey: "select * from orders where total > ?",
+				tablesKey:          "orders",
+				statementKey:       "select",
+			},
+			timestamp: t1.Truncate(time.Second),
+		},
 	}
 }
 
@@ -585,7 +604,7 @@ func TestHandleEvent(t *testing.T) {
 		}
 		for k, v := range sqd.sq {
 			if !reflect.DeepEqual(res[k], v) {
-				t.Errorf("case num %d, key %s:\n\texpected:\t%+v\n\tgot:\t\t%+v", i, k, v, res[k])
+				t.Errorf("case num %d, key %s:\n\texpected:\t%q\n\tgot:\t\t%q", i, k, v, res[k])
 			}
 		}
 		if timestamp.UnixNano() != sqd.timestamp.UnixNano() {

@@ -520,6 +520,7 @@ func (p *Parser) handleEvent(ptp *perThreadParser, rawE []string) (
 		} else if !strings.HasPrefix(line, "# ") {
 			// treat any other line that doesn't start with '# ' as part of the
 			// query
+			// line = strings.TrimSpace(line)
 			query = query + " " + line
 			if strings.HasSuffix(query, ";") {
 				q := strings.TrimSpace(strings.TrimSuffix(query, ";"))

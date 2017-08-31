@@ -483,7 +483,7 @@ func init() {
 			},
 			timestamp: time.Unix(1476901800, 0),
 		},
-		{ /* 25 */
+		{ /* 24 */
 			rawE: []string{
 				"# User@Host: rdsadmin[rdsadmin] @ localhost [127.0.0.1]  Id:     1",
 				"# Query_time: 0.000439  Lock_time: 0.000000 Rows_sent: 1  Rows_examined: 0",
@@ -504,7 +504,7 @@ func init() {
 			},
 			timestamp: time.Unix(1476901800, 0),
 		},
-		{ /* 24 */
+		{ /* 25 */
 			rawE: []string{
 				"# User@Host: rdsadmin[rdsadmin] @ localhost [127.0.0.1]  Id:     1",
 				"# Query_time: 0.000439  Lock_time: 0.000000 Rows_sent: 1  Rows_examined: 0",

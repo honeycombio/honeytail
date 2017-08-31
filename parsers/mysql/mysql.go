@@ -126,7 +126,7 @@ var (
 )
 
 const timeFormat = "2006-01-02T15:04:05.000000"
-const oldTimeFormat = "010206 15:04:05.000000"
+const oldTimeFormat = "010206 15:04:05.999999"
 
 type Options struct {
 	Host          string `long:"host" description:"MySQL host in the format (address:port)"`

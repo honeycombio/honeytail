@@ -538,6 +538,16 @@ func init() {
 			},
 			timestamp: t3,
 		},
+		{ /* 27 */
+			rawE: []string{
+				"# Time: 040116 00:31:09.817887",
+				"# Query_time: 0.008393",
+			},
+			sq: map[string]interface{}{
+				queryTimeKey: 0.008393,
+			},
+			timestamp: t1,
+		},
 	}
 }
 

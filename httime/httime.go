@@ -181,25 +181,25 @@ func tryTimeFormats(t, intendedFormat string) time.Time {
 	if intendedFormat != "" {
 		format := strings.Replace(intendedFormat, ",", ".", -1)
 		if strings.Contains(format, StrftimeChar) {
-			if ts, err := time.ParseInLocation(convertTimeFormat(format), t, Location); err == nil {
+			if ts, err := Parse(convertTimeFormat(format), t); err == nil {
 				return ts
 			}
 		}
 
 		// Still try Go style, just in case
-		if ts, err := time.ParseInLocation(format, t, Location); err == nil {
+		if ts, err := Parse(format, t); err == nil {
 			return ts
 		}
 	}
 
 	var ts time.Time
-	if tOther, err := time.ParseInLocation("2006-01-02 15:04:05.999999999 -0700 MST", t, Location); err == nil {
+	if tOther, err := Parse("2006-01-02 15:04:05.999999999 -0700 MST", t); err == nil {
 		ts = tOther
-	} else if tOther, err := time.ParseInLocation(time.RFC3339Nano, t, Location); err == nil {
+	} else if tOther, err := Parse(time.RFC3339Nano, t); err == nil {
 		ts = tOther
-	} else if tOther, err := time.ParseInLocation(time.RubyDate, t, Location); err == nil {
+	} else if tOther, err := Parse(time.RubyDate, t); err == nil {
 		ts = tOther
-	} else if tOther, err := time.ParseInLocation(time.UnixDate, t, Location); err == nil {
+	} else if tOther, err := Parse(time.UnixDate, t); err == nil {
 		ts = tOther
 	}
 	return ts

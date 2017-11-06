@@ -91,8 +91,7 @@ func run(options GlobalOptions) {
 			"Error occurred while trying to tail logfile")
 	}
 
-	// set up our signal handler, now that we know how many files we're tailing,
-	// we can send the right number of abort signals.
+	// set up our signal handler and support canceling
 	go func() {
 		sig := <-sigs
 		fmt.Fprintf(os.Stderr, "Aborting! Caught signal \"%s\"\n", sig)

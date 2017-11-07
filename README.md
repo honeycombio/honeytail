@@ -14,6 +14,7 @@ Our complete list of parsers can be found in the [`parsers/` directory](parsers/
 - [MongoDB](parsers/mongodb/)
 - [MySQL](parsers/mysql/)
 - [nginx](parsers/nginx/)
+- [regex](parsers/regex/)
 
 ## Installation
 

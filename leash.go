@@ -27,6 +27,7 @@ import (
 	"github.com/honeycombio/honeytail/parsers/mongodb"
 	"github.com/honeycombio/honeytail/parsers/mysql"
 	"github.com/honeycombio/honeytail/parsers/nginx"
+	"github.com/honeycombio/honeytail/parsers/regex"
 	"github.com/honeycombio/honeytail/tail"
 )
 
@@ -195,6 +196,10 @@ func getParserAndOptions(options GlobalOptions) (parsers.Parser, interface{}) {
 	var parser parsers.Parser
 	var opts interface{}
 	switch options.Reqs.ParserName {
+	case "regex":
+		parser = &regex.Parser{}
+		opts = &options.Regex
+		opts.(*regex.Options).NumParsers = int(options.NumSenders)
 	case "nginx":
 		parser = &nginx.Parser{}
 		opts = &options.Nginx

@@ -38,6 +38,7 @@ var validParsers = []string{
 	"mongo",
 	"mysql",
 	"nginx",
+	"postgresql",
 }
 
 // GlobalOptions has all the top level CLI flags that honeytail supports

@@ -58,9 +58,6 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 		go func() {
 			for line := range lines {
 				line = strings.TrimSpace(line)
-				logrus.WithFields(logrus.Fields{
-					"line": line,
-				}).Debug("Attempting to process json log line")
 
 				// take care of any headers on the line
 				var prefixFields map[string]string
@@ -75,8 +72,9 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 				if err != nil {
 					// skip lines that won't parse
 					logrus.WithFields(logrus.Fields{
-						"line": line,
-					}).Debug("skipping line; failed to parse.")
+						"line":  line,
+						"error": err,
+					}).Debugln("Skipped: log line failed to parse")
 					continue
 				}
 				timestamp := httime.GetTimestamp(parsedLine, p.conf.TimeFieldName, p.conf.TimeFieldFormat)
@@ -85,6 +83,12 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 				for k, v := range prefixFields {
 					parsedLine[k] = v
 				}
+
+				logrus.WithFields(logrus.Fields{
+					"line":      line,
+					"values":    parsedLine,
+					"timestamp": timestamp,
+				}).Debug("Success: parsed line")
 
 				// send an event to Transmission
 				e := event.Event{

@@ -96,26 +96,16 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 				if err == nil || (p.conf.LogPartials && logparser.IsPartialLogLine(err)) {
 					timestamp, err := p.parseTimestamp(values)
 					if err != nil {
-						logFailure(line, err, "couldn't parse logline timestamp, skipping")
+						logrus.WithFields(logrus.Fields{
+							"line":  line,
+							"error": err,
+						}).Debugln("Skipped: couldn't parse log line timestamp")
 						continue
 					}
-					if err = p.decomposeSharding(values); err != nil {
-						logFailure(line, err, "couldn't decompose sharding changelog, skipping")
-						continue
-					}
-					if err = p.decomposeNamespace(values); err != nil {
-						logFailure(line, err, "couldn't decompose logline namespace, skipping")
-						continue
-					}
-					if err = p.decomposeLocks(values); err != nil {
-						logFailure(line, err, "couldn't decompose logline locks, skipping")
-						continue
-					}
-					if err = p.decomposeLocksMicros(values); err != nil {
-						logFailure(line, err, "couldn't decompose logline locks(micros), skipping")
-						continue
-					}
-
+					p.decomposeSharding(values)
+					p.decomposeNamespace(values)
+					p.decomposeLocks(values)
+					p.decomposeLocksMicros(values)
 					p.getCommandQuery(values)
 
 					if q, ok := values["query"].(map[string]interface{}); ok {
@@ -149,9 +139,10 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 					}
 
 					logrus.WithFields(logrus.Fields{
-						"line":   line,
-						"values": values,
-					}).Debug("Successfully parsed line")
+						"line":      line,
+						"values":    values,
+						"timestamp": timestamp,
+					}).Debug("Success: parsed line")
 
 					// we'll be putting the timestamp in the Event
 					// itself, no need to also have it in the Data
@@ -162,7 +153,10 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 						Data:      values,
 					}
 				} else {
-					logFailure(line, err, "logline didn't parse, skipping.")
+					logrus.WithFields(logrus.Fields{
+						"line":  line,
+						"error": err,
+					}).Debugln("Skipped: log line failed to parse")
 				}
 			}
 			wg.Done()
@@ -203,14 +197,14 @@ func (p *Parser) parseTimestamp(values map[string]interface{}) (time.Time, error
 	return time.Time{}, errors.New("timestamp missing from logline")
 }
 
-func (p *Parser) decomposeSharding(values map[string]interface{}) error {
+func (p *Parser) decomposeSharding(values map[string]interface{}) {
 	clValue, ok := values[shardingChangelogFieldName]
 	if !ok {
-		return nil
+		return
 	}
 	clMap, ok := clValue.(map[string]interface{})
 	if !ok {
-		return nil
+		return
 	}
 
 	var val interface{}
@@ -239,32 +233,30 @@ func (p *Parser) decomposeSharding(values map[string]interface{}) error {
 	}
 
 	delete(values, shardingChangelogFieldName)
-	return nil
 }
 
-func (p *Parser) decomposeNamespace(values map[string]interface{}) error {
+func (p *Parser) decomposeNamespace(values map[string]interface{}) {
 	ns_value, ok := values[namespaceFieldName]
 	if !ok {
-		return nil
+		return
 	}
 
 	decomposed := strings.SplitN(ns_value.(string), ".", 2)
 	if len(decomposed) < 2 {
-		return nil
+		return
 	}
 	values[databaseFieldName] = decomposed[0]
 	values[collectionFieldName] = decomposed[1]
-	return nil
 }
 
-func (p *Parser) decomposeLocks(values map[string]interface{}) error {
+func (p *Parser) decomposeLocks(values map[string]interface{}) {
 	locks_value, ok := values[locksFieldName]
 	if !ok {
-		return nil
+		return
 	}
 	locks_map, ok := locks_value.(map[string]interface{})
 	if !ok {
-		return nil
+		return
 	}
 	for scope, v := range locks_map {
 		v_map, ok := v.(map[string]interface{})
@@ -298,17 +290,17 @@ func (p *Parser) decomposeLocks(values map[string]interface{}) error {
 		}
 	}
 	delete(values, locksFieldName)
-	return nil
+	return
 }
 
-func (p *Parser) decomposeLocksMicros(values map[string]interface{}) error {
+func (p *Parser) decomposeLocksMicros(values map[string]interface{}) {
 	locks_value, ok := values[locksMicrosFieldName]
 	if !ok {
-		return nil
+		return
 	}
 	locks_map, ok := locks_value.(map[string]int64)
 	if !ok {
-		return nil
+		return
 	}
 	for lockType, lockDuration := range locks_map {
 		if lockType == "r" {
@@ -324,7 +316,6 @@ func (p *Parser) decomposeLocksMicros(values map[string]interface{}) error {
 		values[lockType+"_lock_held_us"] = lockDuration
 	}
 	delete(values, locksMicrosFieldName)
-	return nil
 }
 
 func (p *Parser) getCommandQuery(values map[string]interface{}) {
@@ -408,8 +399,4 @@ func (p *Parser) getCommandQuery(values map[string]interface{}) {
 
 		}
 	}
-}
-
-func logFailure(line string, err error, msg string) {
-	logrus.WithFields(logrus.Fields{"line": line}).WithError(err).Debugln(msg)
 }

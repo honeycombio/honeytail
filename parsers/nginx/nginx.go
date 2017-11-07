@@ -64,9 +64,6 @@ type GonxLineParser struct {
 func (g *GonxLineParser) ParseLine(line string) (map[string]interface{}, error) {
 	gonxEvent, err := g.parser.ParseString(line)
 	if err != nil {
-		logrus.WithFields(logrus.Fields{
-			"logline": line,
-		}).Debug("failed to parse nginx log line")
 		return nil, err
 	}
 	return typeifyParsedLine(gonxEvent.Fields), nil
@@ -80,9 +77,6 @@ func (n *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 		go func() {
 			for line := range lines {
 				line = strings.TrimSpace(line)
-				logrus.WithFields(logrus.Fields{
-					"line": line,
-				}).Debug("Attempting to process nginx log line")
 
 				// take care of any headers on the line
 				var prefixFields map[string]interface{}
@@ -95,6 +89,10 @@ func (n *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 
 				parsedLine, err := n.lineParser.ParseLine(line)
 				if err != nil {
+					logrus.WithFields(logrus.Fields{
+						"line":  line,
+						"error": err,
+					}).Debugln("Skipped: log line failed to parse")
 					continue
 				}
 				// merge the prefix fields and the parsed line contents
@@ -102,6 +100,12 @@ func (n *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 					parsedLine[k] = v
 				}
 				timestamp := n.getTimestamp(parsedLine)
+
+				logrus.WithFields(logrus.Fields{
+					"line":      line,
+					"values":    parsedLine,
+					"timestamp": timestamp,
+				}).Debugln("Success: parsed line")
 
 				e := event.Event{
 					Timestamp: timestamp,

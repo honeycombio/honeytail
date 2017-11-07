@@ -81,7 +81,7 @@ func GetSampledEntries(ctx context.Context, conf Config, sampleRate uint) ([]cha
 					logrus.WithFields(logrus.Fields{
 						"line":       line,
 						"samplerate": sampleRate,
-					}).Debug("Sampler says skip this line")
+					}).Debug("Skipped: dropped line due to sampling")
 				} else {
 					sampledLines <- line
 				}

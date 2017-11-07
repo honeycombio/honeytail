@@ -187,7 +187,10 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 				if err == nil {
 					timestamp, err := p.parseTimestamp(values)
 					if err != nil {
-						logSkipped(line, "couldn't parse logline timestamp, skipping")
+						logrus.WithFields(logrus.Fields{
+							"line":  line,
+							"error": err,
+						}).Debugln("Skipped: couldn't parse log line timestamp")
 						continue
 					}
 
@@ -197,9 +200,10 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 					}
 
 					logrus.WithFields(logrus.Fields{
-						"line":   line,
-						"values": values,
-					}).Debug("Successfully parsed line")
+						"line":      line,
+						"values":    values,
+						"timestamp": timestamp,
+					}).Debug("Success: parsed line")
 
 					// we'll be putting the timestamp in the Event
 					// itself, no need to also have it in the Data
@@ -210,7 +214,10 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 						Data:      values,
 					}
 				} else {
-					logSkipped(line, "logline didn't parse, skipping.")
+					logrus.WithFields(logrus.Fields{
+						"line":  line,
+						"error": err,
+					}).Debugln("Skipped: log line failed to parse")
 				}
 			}
 			wg.Done()
@@ -234,9 +241,5 @@ func (p *Parser) parseTimestamp(values map[string]interface{}) (time.Time, error
 		return time.Time{}, err
 	}
 
-	return time.Time{}, errors.New("timestamp missing from logline")
-}
-
-func logSkipped(line string, msg string) {
-	logrus.WithFields(logrus.Fields{"line": line}).Debugln(msg)
+	return time.Time{}, errors.New("timestamp missing from log line")
 }

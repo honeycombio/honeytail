@@ -429,7 +429,7 @@ func (p *Parser) handleEvent(ptp *perThreadParser, rawE []string) (
 			logrus.WithFields(logrus.Fields{
 				"line":  line,
 				"event": rawE,
-			}).Debug("readmin ping detected; skipping this event")
+			}).Debug("Skipped: detected administrator ping")
 			return nil, time.Time{}
 		} else if _, mg := reUser.FindStringSubmatchMap(line); mg != nil {
 			query = ""
@@ -541,7 +541,7 @@ func (p *Parser) handleEvent(ptp *perThreadParser, rawE []string) (
 			// unknown row; log and skip
 			logrus.WithFields(logrus.Fields{
 				"line": line,
-			}).Debug("No regex match for line in the middle of a query. skipping")
+			}).Debug("Skipped: no regex match for line in the middle of a query")
 		}
 	}
 
@@ -563,6 +563,12 @@ func (p *Parser) handleEvent(ptp *perThreadParser, rawE []string) (
 	} else if timeFromSet > 0 {
 		combinedTime = time.Unix(timeFromSet, 0)
 	}
+
+	logrus.WithFields(logrus.Fields{
+		"lines":     rawE,
+		"values":    sq,
+		"timestamp": combinedTime,
+	}).Debug("Success: parsed lines")
 
 	return sq, combinedTime
 }

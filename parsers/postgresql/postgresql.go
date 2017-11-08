@@ -1,6 +1,56 @@
+// Package postgresql contains code for parsing PostgreSQL slow query logs.
+//
+// The Postgres slow query format
+// ------------------------------
+//
+// In general, Postgres logs consist of a prefix, a level, and a message:
+//
+// 2017-11-06 19:20:32 UTC [11534-2] LOG:  autovacuum launcher shutting down
+// |<-------------prefix----------->|level|<----------message-------------->|
+//
+// 2017-11-07 01:43:39 UTC [3542-7] postgres@test LOG:  duration: 15.577 ms  statement: SELECT * FROM test;
+// |<-------------prefix------------------------>|level|<-------------------message---------------------->|
+//
+// The format of the configuration prefix is configurable as `log_line_prefix` in postgresql.conf
+// using the following format specifiers:
+//
+//   %a = application name
+//   %u = user name
+//   %d = database name
+//   %r = remote host and port
+//   %h = remote host
+//   %p = process ID
+//   %t = timestamp without milliseconds
+//   %m = timestamp with milliseconds
+//   %i = command tag
+//   %e = SQL state
+//   %c = session ID
+//   %l = session line number
+//   %s = session start timestamp
+//   %v = virtual transaction ID
+//   %x = transaction ID (0 if none)
+//   %q = stop here in non-session
+//        processes
+//   %% = '%'
+//
+// For example, the prefix format for the lines above is:
+// %t [%p-%l] %q%u@%d
+// We currently require users to pass the prefix format as a parser option.
+//
+// Slow query logs specifically have the following format:
+// 2017-11-07 01:43:39 UTC [3542-7] postgres@test LOG:  duration: 15.577 ms  statement: SELECT * FROM test;
+// |<-------------prefix------------------------>|<----------header-------------------->|<-----query----->|
+//
+// For convenience, we call everything after the prefix but before the actual query string the "header".
+//
+// The query may span multiple lines; continuations are indented. For example:
+//
+// 2017-11-07 01:43:39 UTC [3542-7] postgres@test LOG:  duration: 15.577 ms  statement: SELECT * FROM test
+//		WHERE id=1;
 package postgresql
 
 import (
+	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
@@ -12,23 +62,64 @@ import (
 	"github.com/honeycombio/mysqltools/query/normalizer"
 )
 
-var (
-	timestamp = `^(?P<time>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC)`
-	connIDs   = `\s+\[(?P<pid>\d+)-(?P<session_id>\d+)\]`
-	connInfo  = `\s+(?P<user>\S+)@(?P<database>\S+)`
-	level     = `\s+(?P<level>[A-Z0-9]+):`
-	duration  = `\s+duration: (?P<duration>[0-9\.]+) ms`
-	statement = `\s+statement: `
-
-	reLinePrefix = parsers.ExtRegexp{regexp.MustCompile(
-		strings.Join([]string{timestamp, connIDs, connInfo, level, duration, statement}, ""),
-	)}
+const (
+	// Regex string that matches timestamps in log
+	timestampRe   = "\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}[\\.0-9]* [A-Z]+"
+	defaultPrefix = "%t [%p-%l] %u@%d"
+	// Regex string that matches the header of a slow query log line
+	slowQueryHeader = `\s*(?P<level>[A-Z0-9]+):\s+duration: (?P<duration>[0-9\.]+) ms\s+statement: `
 )
 
-type Parser struct{}
+var slowQueryHeaderRegex = &parsers.ExtRegexp{regexp.MustCompile(slowQueryHeader)}
 
-func (p *Parser) Init(options interface{}) error {
-	return nil
+// prefixField represents a specific format specifier in the log_line_prefix string
+// (see module comment for details).
+type prefixField struct {
+	Name    string
+	Pattern string
+}
+
+func (p *prefixField) ReString() string {
+	return fmt.Sprintf("(?P<%s>%s)", p.Name, p.Pattern)
+}
+
+var prefixValues = map[string]prefixField{
+	"%a": prefixField{Name: "application", Pattern: "\\S+"},
+	"%u": prefixField{Name: "user", Pattern: "\\S+"},
+	"%d": prefixField{Name: "database", Pattern: "\\S+"},
+	"%r": prefixField{Name: "host_port", Pattern: "\\S+"},
+	"%h": prefixField{Name: "host", Pattern: "\\S+"},
+	"%p": prefixField{Name: "pid", Pattern: "\\d+"},
+	"%t": prefixField{Name: "timestamp", Pattern: timestampRe},
+	"%m": prefixField{Name: "timestamp_millis", Pattern: timestampRe},
+	"%n": prefixField{Name: "timestamp_unix", Pattern: "\\d+"},
+	"%i": prefixField{Name: "command_tag", Pattern: "\\S+"},
+	"%e": prefixField{Name: "sql_state", Pattern: "\\S+"},
+	"%c": prefixField{Name: "session_id", Pattern: "\\d+"},
+	"%l": prefixField{Name: "session_line_number", Pattern: "\\d+"},
+	"%s": prefixField{Name: "session_start", Pattern: timestampRe},
+	"%v": prefixField{Name: "virtual_transaction_id", Pattern: "\\S+"},
+	"%x": prefixField{Name: "transaction_id", Pattern: "\\S+"},
+}
+
+type Options struct {
+	PrefixFormat string
+}
+
+type Parser struct {
+	prefixRegex *parsers.ExtRegexp
+}
+
+func (p *Parser) Init(options interface{}) (err error) {
+	var prefixFormat string
+	conf, ok := options.(*Options)
+	if !ok || conf.PrefixFormat == "" {
+		prefixFormat = defaultPrefix
+	} else {
+		prefixFormat = conf.PrefixFormat
+	}
+	p.prefixRegex, err = buildPrefixRegexp(prefixFormat)
+	return err
 }
 
 func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, prefixRegex *parsers.ExtRegexp) {
@@ -42,6 +133,8 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 			line = strings.TrimPrefix(line, prefix)
 		}
 		if !isContinuationLine(line) && len(groupedLines) > 0 {
+			// If the line we just parsed is the start of a new log statement,
+			// send off the previously accumulated group.
 			rawEvents <- groupedLines
 			groupedLines = make([]string, 0, 1)
 		}
@@ -52,6 +145,9 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 	close(rawEvents)
 }
 
+// handleEvents receives sets of grouped log lines, each representing a single
+// log statement. It attempts to parse them, and sends the events it constructs
+// down the send channel.
 func (p *Parser) handleEvents(rawEvents <-chan []string, send chan<- event.Event) {
 	// TODO: spin up a group of goroutines to do this
 	for rawEvent := range rawEvents {
@@ -62,6 +158,8 @@ func (p *Parser) handleEvents(rawEvents <-chan []string, send chan<- event.Event
 	}
 }
 
+// handleEvent takes a single grouped log statement (an array of lines) and attempts to parse it.
+// It returns a pointer to an Event if successful, and nil if not.
 func (p *Parser) handleEvent(rawEvent []string) *event.Event {
 	normalizer := normalizer.Parser{}
 	if len(rawEvent) == 0 {
@@ -69,54 +167,98 @@ func (p *Parser) handleEvent(rawEvent []string) *event.Event {
 	}
 	firstLine := rawEvent[0]
 
-	prefix, meta := reLinePrefix.FindStringSubmatchMap(firstLine)
-	if prefix == "" {
+	// First, parse the prefix
+	suffix, generalMeta := parsePrefix(p.prefixRegex, firstLine)
+	if len(suffix) == len(firstLine) {
 		// Note: this may be noisy when debug logging is turned on, since the
 		// postgres general log contains lots of other statements as well.
 		logrus.WithField("line", firstLine).Debug("Log line didn't match expected format")
 		return nil
 	}
 
-	data := make(map[string]interface{}, len(meta))
+	ev := &event.Event{
+		Data: make(map[string]interface{}, 0),
+	}
 
-	sessionId, _ := strconv.Atoi(meta["session_id"])
-	pid, _ := strconv.Atoi(meta["pid"])
-	duration, _ := strconv.ParseFloat(meta["duration"], 64)
+	addFieldsToEvent(generalMeta, ev)
 
-	data["pid"] = pid
-	data["session_id"] = sessionId
-	data["duration"] = duration
-	data["user"] = meta["user"]
-	data["database"] = meta["database"]
+	// Now, parse the slow query header
+	query, slowQueryMeta := parsePrefix(slowQueryHeaderRegex, suffix)
 
-	query := firstLine[len(prefix):]
+	if rawDuration, ok := slowQueryMeta["duration"]; ok {
+		duration, _ := strconv.ParseFloat(rawDuration, 64)
+		ev.Data["duration"] = duration
+	} else {
+		logrus.WithField("query", query).Debug("Failed to find query duration in log line")
+	}
+
+	// Finally, concatenate the remaining text to form the query, and attempt to
+	// normalize it.
 	for _, line := range rawEvent[1:] {
 		query += " " + strings.TrimLeft(line, " \t")
 	}
 	normalizedQuery := normalizer.NormalizeQuery(query)
 
-	data["query"] = query
-	data["normalized_query"] = normalizedQuery
+	ev.Data["query"] = query
+	ev.Data["normalized_query"] = normalizedQuery
 	if len(normalizer.LastTables) > 0 {
-		data["tables"] = strings.Join(normalizer.LastTables, " ")
+		ev.Data["tables"] = strings.Join(normalizer.LastTables, " ")
 	}
 	if len(normalizer.LastComments) > 0 {
-		data["comments"] = "/* " + strings.Join(normalizer.LastComments, " */ /* ") + " */"
+		ev.Data["comments"] = "/* " + strings.Join(normalizer.LastComments, " */ /* ") + " */"
 	}
 
-	timestamp, err := time.Parse("2006-01-02 03:04:05 MST", meta["time"])
-	if err != nil {
-		logrus.WithError(err).WithField("time", meta["time"]).Debug("Error parsing timestamp")
-		timestamp = time.Now()
-	}
-
-	return &event.Event{
-		Data:      data,
-		Timestamp: timestamp,
-	}
-
+	return ev
 }
 
 func isContinuationLine(line string) bool {
 	return strings.HasPrefix(line, "\t")
+}
+
+func addFieldsToEvent(fields map[string]string, ev *event.Event) {
+	for k, v := range fields {
+		// Try to convert values to integer types where sensible, and extract
+		// timestamp for event
+		switch k {
+		case "session_id", "pid", "session_line_number":
+			if typed, err := strconv.Atoi(v); err == nil {
+				ev.Data[k] = typed
+			} else {
+				ev.Data[k] = v
+			}
+		case "timestamp", "timestamp_millis":
+			if timestamp, err := time.Parse("2006-01-02 03:04:05.999 MST", v); err == nil {
+				ev.Timestamp = timestamp
+			} else {
+				logrus.WithField("timestamp", timestamp).WithError(err).Debug("Error parsing query timestamp")
+			}
+		// TODO: parse other times as well
+
+		default:
+			ev.Data[k] = v
+		}
+	}
+}
+
+func parsePrefix(re *parsers.ExtRegexp, line string) (suffix string, fields map[string]string) {
+	prefix, fields := re.FindStringSubmatchMap(line)
+	return line[len(prefix):], fields
+}
+
+func buildPrefixRegexp(prefixFormat string) (*parsers.ExtRegexp, error) {
+	prefixFormat = strings.Replace(prefixFormat, "%%", "%", -1)
+	// The %q format specifier means "if this log line isn't part of a session,
+	// stop here." The slow query logs that we care about always come from
+	// sessions, so ignore this.
+	prefixFormat = strings.Replace(prefixFormat, "%q", "", -1)
+	prefixFormat = regexp.QuoteMeta(prefixFormat)
+	for k, v := range prefixValues {
+		prefixFormat = strings.Replace(prefixFormat, k, v.ReString(), -1)
+	}
+
+	re, err := regexp.Compile(prefixFormat)
+	if err != nil {
+		return nil, err
+	}
+	return &parsers.ExtRegexp{re}, nil
 }

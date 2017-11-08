@@ -219,6 +219,7 @@ func getParserAndOptions(options GlobalOptions) (parsers.Parser, interface{}) {
 		opts = &options.MySQL
 		opts.(*mysql.Options).NumParsers = int(options.NumSenders)
 	case "postgresql":
+		opts = &options.PostgreSQL
 		parser = &postgresql.Parser{}
 	case "arangodb":
 		parser = &arangodb.Parser{}

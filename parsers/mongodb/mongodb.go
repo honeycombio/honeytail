@@ -2,6 +2,7 @@
 package mongodb
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"sync"
@@ -14,6 +15,7 @@ import (
 	"github.com/honeycombio/honeytail/event"
 	"github.com/honeycombio/honeytail/httime"
 	"github.com/honeycombio/honeytail/parsers"
+	"github.com/honeycombio/honeytail/reporting"
 )
 
 const (
@@ -48,9 +50,9 @@ var timestampFormats = []string{
 }
 
 type Options struct {
-	LogPartials bool `long:"log_partials" description:"Send what was successfully parsed from a line (only if the error occured in the log line's message)."`
+	LogPartials bool `long:"log_partials" description:"Send what was successfully parsed from a line (only if the error occured in the log line's message)." json:",omitempty"`
 
-	NumParsers int `hidden:"true" description:"number of mongo parsers to spin up"`
+	NumParsers int `hidden:"true" description:"number of mongo parsers to spin up" json:",omitempty"`
 }
 
 type Parser struct {
@@ -72,7 +74,7 @@ func (p *Parser) Init(options interface{}) error {
 	return nil
 }
 
-func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, prefixRegex *parsers.ExtRegexp) {
+func (p *Parser) ProcessLines(ctx context.Context, lines <-chan string, send chan<- event.Event, prefixRegex *parsers.ExtRegexp) {
 	wg := sync.WaitGroup{}
 	numParsers := 1
 	if p.conf.NumParsers > 0 {
@@ -96,10 +98,7 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 				if err == nil || (p.conf.LogPartials && logparser.IsPartialLogLine(err)) {
 					timestamp, err := p.parseTimestamp(values)
 					if err != nil {
-						logrus.WithFields(logrus.Fields{
-							"line":  line,
-							"error": err,
-						}).Debugln("Skipped: couldn't parse log line timestamp")
+						reporting.ParseError(ctx, line, err)
 						continue
 					}
 					p.decomposeSharding(values)
@@ -153,10 +152,7 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 						Data:      values,
 					}
 				} else {
-					logrus.WithFields(logrus.Fields{
-						"line":  line,
-						"error": err,
-					}).Debugln("Skipped: log line failed to parse")
+					reporting.ParseError(ctx, line, err)
 				}
 			}
 			wg.Done()

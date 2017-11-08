@@ -4,7 +4,8 @@ package event
 
 import "time"
 
-// Event is a single log event
+// Event is a single log event that we use in lieu of libhoney.Event because it
+// supports manipulation of the Data map (e.g. for scrubbing/manipulation)
 type Event struct {
 	// Timestamp is the time of the event (may be different from current time)
 	Timestamp time.Time

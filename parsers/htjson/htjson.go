@@ -3,6 +3,7 @@
 package htjson
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"sync"
@@ -12,13 +13,14 @@ import (
 	"github.com/honeycombio/honeytail/event"
 	"github.com/honeycombio/honeytail/httime"
 	"github.com/honeycombio/honeytail/parsers"
+	"github.com/honeycombio/honeytail/reporting"
 )
 
 type Options struct {
-	TimeFieldName   string `long:"timefield" description:"Name of the field that contains a timestamp"`
-	TimeFieldFormat string `long:"format" description:"Format of the timestamp found in timefield (supports strftime and Golang time formats)"`
+	TimeFieldName   string `long:"timefield" description:"Name of the field that contains a timestamp" json:",omitempty"`
+	TimeFieldFormat string `long:"format" description:"Format of the timestamp found in timefield (supports strftime and Golang time formats)" json:",omitempty"`
 
-	NumParsers int `hidden:"true" description:"number of htjson parsers to spin up"`
+	NumParsers int `hidden:"true" description:"number of htjson parsers to spin up" json:",omitempty"`
 }
 
 type Parser struct {
@@ -47,7 +49,7 @@ func (j *JSONLineParser) ParseLine(line string) (map[string]interface{}, error) 
 	return parsed, err
 }
 
-func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, prefixRegex *parsers.ExtRegexp) {
+func (p *Parser) ProcessLines(ctx context.Context, lines <-chan string, send chan<- event.Event, prefixRegex *parsers.ExtRegexp) {
 	wg := sync.WaitGroup{}
 	numParsers := 1
 	if p.conf.NumParsers > 0 {
@@ -71,10 +73,7 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 
 				if err != nil {
 					// skip lines that won't parse
-					logrus.WithFields(logrus.Fields{
-						"line":  line,
-						"error": err,
-					}).Debugln("Skipped: log line failed to parse")
+					reporting.ParseError(ctx, line, err)
 					continue
 				}
 				timestamp := httime.GetTimestamp(parsedLine, p.conf.TimeFieldName, p.conf.TimeFieldFormat)

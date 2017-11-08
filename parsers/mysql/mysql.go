@@ -2,6 +2,7 @@
 package mysql
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"math/rand"
@@ -18,6 +19,7 @@ import (
 	"github.com/honeycombio/honeytail/event"
 	"github.com/honeycombio/honeytail/httime"
 	"github.com/honeycombio/honeytail/parsers"
+	"github.com/honeycombio/honeytail/reporting"
 )
 
 // See mysql_test for example log entries
@@ -129,12 +131,12 @@ const timeFormat = "2006-01-02T15:04:05.000000"
 const oldTimeFormat = "010206 15:04:05.999999"
 
 type Options struct {
-	Host          string `long:"host" description:"MySQL host in the format (address:port)"`
-	User          string `long:"user" description:"MySQL username"`
-	Pass          string `long:"pass" description:"MySQL password"`
-	QueryInterval uint   `long:"interval" description:"interval for querying the MySQL DB in seconds" default:"30"`
+	Host          string `long:"host" description:"MySQL host in the format (address:port)" json:",omitempty"`
+	User          string `long:"user" description:"MySQL username" json:",omitempty"`
+	Pass          string `long:"pass" description:"MySQL password" json:",omitempty"`
+	QueryInterval uint   `long:"interval" description:"interval for querying the MySQL DB in seconds" default:"30" json:",omitempty"`
 
-	NumParsers int `hidden:"true" description:"number of MySQL parsers to spin up"`
+	NumParsers int `hidden:"true" description:"number of MySQL parsers to spin up" json:",omitempty"`
 }
 
 type Parser struct {
@@ -307,12 +309,12 @@ func isMySQLHeaderLine(line string) bool {
 		(first == 'T' && reMySQLColumnHeaders.MatchString(line))
 }
 
-func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, prefixRegex *parsers.ExtRegexp) {
+func (p *Parser) ProcessLines(ctx context.Context, lines <-chan string, send chan<- event.Event, prefixRegex *parsers.ExtRegexp) {
 	// start up a goroutine to handle grouped sets of lines
 	rawEvents := make(chan []string)
 	defer p.wg.Wait()
 	p.wg.Add(1)
-	go p.handleEvents(rawEvents, send)
+	go p.handleEvents(ctx, rawEvents, send)
 
 	// flag to indicate when we've got a complete event to send
 	var foundStatement bool
@@ -356,7 +358,7 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 	close(rawEvents)
 }
 
-func (p *Parser) handleEvents(rawEvents <-chan []string, send chan<- event.Event) {
+func (p *Parser) handleEvents(ctx context.Context, rawEvents <-chan []string, send chan<- event.Event) {
 	defer p.wg.Done()
 	wg := sync.WaitGroup{}
 	numParsers := 1
@@ -370,7 +372,7 @@ func (p *Parser) handleEvents(rawEvents <-chan []string, send chan<- event.Event
 		wg.Add(1)
 		go func() {
 			for rawE := range rawEvents {
-				sq, timestamp := p.handleEvent(&ptp, rawE)
+				sq, timestamp := p.handleEvent(ctx, &ptp, rawE)
 				if len(sq) == 0 {
 					continue
 				}
@@ -406,7 +408,7 @@ func (p *Parser) handleEvents(rawEvents <-chan []string, send chan<- event.Event
 // Parse a set of MySQL log lines that seem to represent a single event and
 // return a struct of extracted data as well as the highest-resolution timestamp
 // available.
-func (p *Parser) handleEvent(ptp *perThreadParser, rawE []string) (
+func (p *Parser) handleEvent(ctx context.Context, ptp *perThreadParser, rawE []string) (
 	map[string]interface{}, time.Time) {
 	sq := map[string]interface{}{}
 	if len(rawE) == 0 {
@@ -426,10 +428,8 @@ func (p *Parser) handleEvent(ptp *perThreadParser, rawE []string) (
 		} else if reAdminPing.MatchString(line) {
 			// this event is an administrative ping and we should
 			// ignore the entire event
-			logrus.WithFields(logrus.Fields{
-				"line":  line,
-				"event": rawE,
-			}).Debug("Skipped: detected administrator ping")
+			reporting.SkipWithFields(ctx, line, "detected administrator ping",
+				logrus.Fields{"event": rawE})
 			return nil, time.Time{}
 		} else if _, mg := reUser.FindStringSubmatchMap(line); mg != nil {
 			query = ""
@@ -539,9 +539,7 @@ func (p *Parser) handleEvent(ptp *perThreadParser, rawE []string) (
 			}
 		} else {
 			// unknown row; log and skip
-			logrus.WithFields(logrus.Fields{
-				"line": line,
-			}).Debug("Skipped: no regex match for line in the middle of a query")
+			reporting.Skip(ctx, line, "no regex match for line in the middle of a query")
 		}
 	}
 

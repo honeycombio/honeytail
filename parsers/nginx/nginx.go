@@ -2,6 +2,7 @@
 package nginx
 
 import (
+	"context"
 	"os"
 	"strconv"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"github.com/honeycombio/honeytail/event"
 	"github.com/honeycombio/honeytail/httime"
 	"github.com/honeycombio/honeytail/parsers"
+	"github.com/honeycombio/honeytail/reporting"
 )
 
 const (
@@ -22,12 +24,12 @@ const (
 )
 
 type Options struct {
-	ConfigFile      string `long:"conf" description:"Path to Nginx config file"`
-	LogFormatName   string `long:"format" description:"Log format name to look for in the Nginx config file"`
-	TimeFieldName   string `long:"timefield" description:"Name of the field that contains a timestamp"`
-	TimeFieldFormat string `long:"time_format" description:"Timestamp format to use (strftime and Golang time.Parse supported)"`
+	ConfigFile      string `long:"conf" description:"Path to Nginx config file" json:",omitempty"`
+	LogFormatName   string `long:"format" description:"Log format name to look for in the Nginx config file" json:",omitempty"`
+	TimeFieldName   string `long:"timefield" description:"Name of the field that contains a timestamp" json:",omitempty"`
+	TimeFieldFormat string `long:"time_format" description:"Timestamp format to use (strftime and Golang time.Parse supported)" json:",omitempty"`
 
-	NumParsers int `hidden:"true" description:"number of nginx parsers to spin up"`
+	NumParsers int `hidden:"true" description:"number of nginx parsers to spin up" json:",omitempty"`
 }
 
 type Parser struct {
@@ -69,7 +71,7 @@ func (g *GonxLineParser) ParseLine(line string) (map[string]interface{}, error) 
 	return typeifyParsedLine(gonxEvent.Fields), nil
 }
 
-func (n *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, prefixRegex *parsers.ExtRegexp) {
+func (n *Parser) ProcessLines(ctx context.Context, lines <-chan string, send chan<- event.Event, prefixRegex *parsers.ExtRegexp) {
 	// parse lines one by one
 	wg := sync.WaitGroup{}
 	for i := 0; i < n.conf.NumParsers; i++ {
@@ -89,10 +91,7 @@ func (n *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 
 				parsedLine, err := n.lineParser.ParseLine(line)
 				if err != nil {
-					logrus.WithFields(logrus.Fields{
-						"line":  line,
-						"error": err,
-					}).Debugln("Skipped: log line failed to parse")
+					reporting.ParseError(ctx, line, err)
 					continue
 				}
 				// merge the prefix fields and the parsed line contents

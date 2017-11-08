@@ -2,6 +2,7 @@
 package keyval
 
 import (
+	"context"
 	"regexp"
 	"strconv"
 	"strings"
@@ -13,15 +14,16 @@ import (
 	"github.com/honeycombio/honeytail/event"
 	"github.com/honeycombio/honeytail/httime"
 	"github.com/honeycombio/honeytail/parsers"
+	"github.com/honeycombio/honeytail/reporting"
 )
 
 type Options struct {
-	TimeFieldName   string `long:"timefield" description:"Name of the field that contains a timestamp"`
-	TimeFieldFormat string `long:"format" description:"Format of the timestamp found in timefield (supports strftime and Golang time formats)"`
-	FilterRegex     string `long:"filter_regex" description:"a regular expression that will filter the input stream and only parse lines that match"`
-	InvertFilter    bool   `long:"invert_filter" description:"change the filter_regex to only process lines that do *not* match"`
+	TimeFieldName   string `long:"timefield" description:"Name of the field that contains a timestamp" json:"omitempty"`
+	TimeFieldFormat string `long:"format" description:"Format of the timestamp found in timefield (supports strftime and Golang time formats)" json:"omitempty"`
+	FilterRegex     string `long:"filter_regex" description:"a regular expression that will filter the input stream and only parse lines that match" json:"omitempty"`
+	InvertFilter    bool   `long:"invert_filter" description:"change the filter_regex to only process lines that do *not* match" json:"omitempty"`
 
-	NumParsers int `hidden:"true" description:"number of keyval parsers to spin up"`
+	NumParsers int `hidden:"true" description:"number of keyval parsers to spin up" json:"omitempty"`
 }
 
 type Parser struct {
@@ -72,7 +74,7 @@ func (j *KeyValLineParser) ParseLine(line string) (map[string]interface{}, error
 	return parsed, err
 }
 
-func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, prefixRegex *parsers.ExtRegexp) {
+func (p *Parser) ProcessLines(ctx context.Context, lines <-chan string, send chan<- event.Event, prefixRegex *parsers.ExtRegexp) {
 	wg := sync.WaitGroup{}
 	numParsers := 1
 	if p.conf.NumParsers > 0 {
@@ -89,10 +91,8 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 					matched := p.filterRegex.MatchString(line)
 					// if both are true or both are false, skip. else continue
 					if matched == p.conf.InvertFilter {
-						logrus.WithFields(logrus.Fields{
-							"line":    line,
-							"matched": matched,
-						}).Debug("Skipped: due to provided filter_regex")
+						reporting.SkipWithFields(ctx, line, "due to provided filter_regex",
+							logrus.Fields{"matched": matched})
 						continue
 					}
 				}
@@ -108,27 +108,18 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 				parsedLine, err := p.lineParser.ParseLine(line)
 				if err != nil {
 					// skip lines that won't parse
-					logrus.WithFields(logrus.Fields{
-						"line":  line,
-						"error": err,
-					}).Debug("Skipped: log line failed to parse")
+					reporting.ParseError(ctx, line, err)
 					continue
 				}
 				if len(parsedLine) == 0 {
 					// skip empty lines, as determined by the parser
-					logrus.WithFields(logrus.Fields{
-						"line":  line,
-						"error": err,
-					}).Debug("Skipped: no key/val pairs found")
+					reporting.Skip(ctx, line, "no key/val pairs found")
 					continue
 				}
 				if allEmpty(parsedLine) {
 					// skip events for which all fields are the empty string, because that's
 					// probably broken
-					logrus.WithFields(logrus.Fields{
-						"line":  line,
-						"error": err,
-					}).Debug("Skipped: all values are the empty string")
+					reporting.Skip(ctx, line, "all values are the empty string")
 					continue
 				}
 				// merge the prefix fields and the parsed line contents

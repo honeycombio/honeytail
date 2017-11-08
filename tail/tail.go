@@ -19,6 +19,8 @@ import (
 	"github.com/Sirupsen/logrus"
 	"github.com/hpcloud/tail"
 	"golang.org/x/sys/unix"
+
+	"github.com/honeycombio/honeytail/reporting"
 )
 
 type RotateStyle int
@@ -32,10 +34,10 @@ const (
 )
 
 type TailOptions struct {
-	ReadFrom  string `long:"read_from" description:"Location in the file from which to start reading. Values: beginning, end, last. Last picks up where it left off, if the file has not been rotated, otherwise beginning. When --backfill is set, it will override this option=beginning" default:"last"`
-	Stop      bool   `long:"stop" description:"Stop reading the file after reaching the end rather than continuing to tail. When --backfill is set, it will override this option=true"`
-	Poll      bool   `long:"poll" description:"use poll instead of inotify to tail files"`
-	StateFile string `long:"statefile" description:"File in which to store the last read position. Defaults to a file in /tmp named $logfile.leash.state. If tailing multiple files, default is forced."`
+	ReadFrom  string `long:"read_from" description:"Location in the file from which to start reading. Values: beginning, end, last. Last picks up where it left off, if the file has not been rotated, otherwise beginning. When --backfill is set, it will override this option=beginning" default:"last" json:",omitempty"`
+	Stop      bool   `long:"stop" description:"Stop reading the file after reaching the end rather than continuing to tail. When --backfill is set, it will override this option=true" json:",omitempty"`
+	Poll      bool   `long:"poll" description:"use poll instead of inotify to tail files" json:",omitempty"`
+	StateFile string `long:"statefile" description:"File in which to store the last read position. Defaults to a file in /tmp named $logfile.leash.state. If tailing multiple files, default is forced." json:",omitempty"`
 }
 
 // Statefile mechanics when ReadFrom is 'last'
@@ -78,10 +80,8 @@ func GetSampledEntries(ctx context.Context, conf Config, sampleRate uint) ([]cha
 			defer close(sampledLines)
 			for line := range pLines {
 				if shouldDrop(sampleRate) {
-					logrus.WithFields(logrus.Fields{
-						"line":       line,
-						"samplerate": sampleRate,
-					}).Debug("Skipped: dropped line due to sampling")
+					reporting.SkipWithFields(ctx, line, "dropped line due to sampling",
+						logrus.Fields{"samplerate": sampleRate})
 				} else {
 					sampledLines <- line
 				}
@@ -187,7 +187,7 @@ func tailSingleFile(ctx context.Context, tailer *tail.Tail, file string, stateFi
 	state := State{}
 	go func() {
 		for range ticker.C {
-			updateStateFile(&state, tailer, file, stateFh)
+			updateStateFile(ctx, &state, tailer, file, stateFh)
 		}
 	}()
 
@@ -212,7 +212,7 @@ func tailSingleFile(ctx context.Context, tailer *tail.Tail, file string, stateFi
 		}
 		close(lines)
 		ticker.Stop()
-		updateStateFile(&state, tailer, file, stateFh)
+		updateStateFile(ctx, &state, tailer, file, stateFh)
 		stateFh.Close()
 	}()
 	return lines
@@ -387,7 +387,7 @@ func getStateFile(conf Config, filename string, numFiles int) string {
 
 // updateStateFile updates the state file once per second with the current
 // values for the logfile's inode number and offset
-func updateStateFile(state *State, t *tail.Tail, file string, stateFh *os.File) {
+func updateStateFile(ctx context.Context, state *State, t *tail.Tail, file string, stateFh *os.File) {
 	logStat := unix.Stat_t{}
 	unix.Stat(file, &logStat)
 	currentPos, err := t.Tell()
@@ -396,6 +396,7 @@ func updateStateFile(state *State, t *tail.Tail, file string, stateFh *os.File) 
 	}
 	state.INode = logStat.Ino
 	state.Offset = currentPos
+	reporting.TailState(ctx, file, logStat.Ino, currentPos, logStat.Size)
 	out, err := json.Marshal(state)
 	if err != nil {
 		return

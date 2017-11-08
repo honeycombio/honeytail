@@ -30,6 +30,7 @@ import (
 	"github.com/honeycombio/honeytail/parsers/nginx"
 	"github.com/honeycombio/honeytail/parsers/postgresql"
 	"github.com/honeycombio/honeytail/parsers/regex"
+	"github.com/honeycombio/honeytail/reporting"
 	"github.com/honeycombio/honeytail/tail"
 )
 
@@ -66,6 +67,11 @@ func run(options GlobalOptions) {
 		logrus.WithFields(logrus.Fields{"err": err}).Fatal(
 			"Error occured while spinning up Transimission")
 	}
+
+	if options.Report.Telemetry {
+		ctx = reporting.NewContext(ctx)
+	}
+	reporting.Options(ctx, options)
 
 	// compile the prefix regex once for use on all channels
 	var prefixRegex *parsers.ExtRegexp
@@ -164,14 +170,14 @@ func run(options GlobalOptions) {
 		responses := libhoney.Responses()
 		responsesWG.Add(1)
 		go func() {
-			handleResponses(responses, stats, toBeResent, delaySending, options)
+			handleResponses(ctx, responses, stats, toBeResent, delaySending, options)
 			responsesWG.Done()
 		}()
 
 		parsersWG.Add(1)
 		go func(plines chan string) {
 			// ProcessLines won't return until lines is closed
-			parser.ProcessLines(plines, toBeSent, prefixRegex)
+			parser.ProcessLines(ctx, plines, toBeSent, prefixRegex)
 			// trigger the sending goroutine to finish up
 			close(toBeSent)
 			// wait for all the events in toBeSent to be handed to libhoney
@@ -437,7 +443,7 @@ func sendToLibhoney(ctx context.Context, toBeSent chan event.Event, toBeResent c
 		case ev := <-toBeResent:
 			// retransmitted events have already been sampled; always use
 			// SendPresampled() for these
-			sendEvent(ev)
+			sendEvent(ctx, ev)
 			continue
 		default:
 		}
@@ -450,7 +456,7 @@ func sendToLibhoney(ctx context.Context, toBeSent chan event.Event, toBeResent c
 				doneSending <- true
 				return
 			}
-			sendEvent(ev)
+			sendEvent(ctx, ev)
 			continue
 		default:
 		}
@@ -460,7 +466,7 @@ func sendToLibhoney(ctx context.Context, toBeSent chan event.Event, toBeResent c
 }
 
 // sendEvent does the actual handoff to libhoney
-func sendEvent(ev event.Event) {
+func sendEvent(ctx context.Context, ev event.Event) {
 	if ev.SampleRate == -1 {
 		// drop the event!
 		logrus.WithFields(logrus.Fields{
@@ -479,37 +485,31 @@ func sendEvent(ev event.Event) {
 		}).Error("Unexpected error adding data to libhoney event")
 	}
 	if err := libhEv.SendPresampled(); err != nil {
-		logrus.WithFields(logrus.Fields{
-			"event": ev,
-			"error": err,
-		}).Error("Unexpected error event to libhoney send")
+		reporting.SendError(ctx, &ev, err)
 	}
 }
 
 // handleResponses reads from the response queue, logging a summary and debug
 // re-enqueues any events that failed to send in a retryable way
-func handleResponses(responses chan libhoney.Response, stats *responseStats,
-	toBeResent chan event.Event, delaySending chan int,
-	options GlobalOptions) {
-	go logStats(stats, options.StatusInterval)
+func handleResponses(ctx context.Context, responses chan libhoney.Response, stats *responseStats,
+	toBeResent chan event.Event, delaySending chan int, options GlobalOptions) {
+	go logStats(stats, options.Report.StatusInterval)
 
 	for rsp := range responses {
-		stats.update(rsp)
-		logfields := logrus.Fields{
-			"status_code": rsp.StatusCode,
-			"body":        strings.TrimSpace(string(rsp.Body)),
-			"duration":    rsp.Duration,
-			"error":       rsp.Err,
-			"timestamp":   rsp.Metadata.(event.Event).Timestamp,
+		if rsp.Metadata == nil {
+			// Telemetry events end up on the same responses queue
+			continue
 		}
+		stats.update(rsp)
 		// if this is an error we should retry sending, re-enqueue the event
+		willRetry := false
 		if options.BackOff && (rsp.StatusCode == 429 || rsp.StatusCode == 500) {
-			logfields["retry_send"] = true
+			willRetry = true
 			delaySending <- 1000 / int(options.NumSenders) // back off for a little bit
 			toBeResent <- rsp.Metadata.(event.Event)       // then retry sending the event
-		} else {
-			logfields["retry_send"] = false
 		}
+
+		reporting.Response(ctx, &rsp, willRetry)
 	}
 }
 

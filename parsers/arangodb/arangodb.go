@@ -2,6 +2,7 @@
 package arangodb
 
 import (
+	"context"
 	"errors"
 	"strconv"
 	"strings"
@@ -9,9 +10,11 @@ import (
 	"time"
 
 	"github.com/Sirupsen/logrus"
+
 	"github.com/honeycombio/honeytail/event"
 	"github.com/honeycombio/honeytail/httime"
 	"github.com/honeycombio/honeytail/parsers"
+	"github.com/honeycombio/honeytail/reporting"
 )
 
 const numParsers = 20
@@ -167,7 +170,7 @@ func (p *Parser) Init(options interface{}) error {
 }
 
 // ProcessLines method for Parser.
-func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, prefixRegex *parsers.ExtRegexp) {
+func (p *Parser) ProcessLines(ctx context.Context, lines <-chan string, send chan<- event.Event, prefixRegex *parsers.ExtRegexp) {
 	wg := sync.WaitGroup{}
 	for i := 0; i < numParsers; i++ {
 		wg.Add(1)
@@ -187,10 +190,7 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 				if err == nil {
 					timestamp, err := p.parseTimestamp(values)
 					if err != nil {
-						logrus.WithFields(logrus.Fields{
-							"line":  line,
-							"error": err,
-						}).Debugln("Skipped: couldn't parse log line timestamp")
+						reporting.ParseError(ctx, line, err)
 						continue
 					}
 
@@ -214,10 +214,7 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 						Data:      values,
 					}
 				} else {
-					logrus.WithFields(logrus.Fields{
-						"line":  line,
-						"error": err,
-					}).Debugln("Skipped: log line failed to parse")
+					reporting.ParseError(ctx, line, err)
 				}
 			}
 			wg.Done()

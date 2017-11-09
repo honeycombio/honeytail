@@ -42,8 +42,7 @@ var defaultOptions = GlobalOptions{
 		// LogFiles:   []string{tmpdir + ""},
 		Dataset: "pika",
 	},
-	Tail:           tailOptions,
-	StatusInterval: 1,
+	Tail: tailOptions,
 }
 
 // test testing framework

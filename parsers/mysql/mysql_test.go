@@ -1,6 +1,7 @@
 package mysql
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"math/rand"
@@ -597,7 +598,7 @@ func TestHandleEvent(t *testing.T) {
 		normalizer: &normalizer.Parser{},
 	}
 	for i, sqd := range sqds {
-		res, timestamp := p.handleEvent(ptp, sqd.rawE)
+		res, timestamp := p.handleEvent(context.TODO(), ptp, sqd.rawE)
 		if len(res) != len(sqd.sq) {
 			t.Errorf("case num %d: expected to parse %d fields, got %d", i, len(sqd.sq), len(res))
 			fmt.Printf("res is %+v\n", res)
@@ -638,7 +639,7 @@ func TestTimeProcessing(t *testing.T) {
 	}
 
 	for _, tt := range tsts {
-		_, timestamp := p.handleEvent(ptp, tt.lines)
+		_, timestamp := p.handleEvent(context.TODO(), ptp, tt.lines)
 		if timestamp.Unix() != tt.expected.Unix() {
 			t.Errorf("Didn't capture unix ts from lines:\n%+v\n\tExpected: %d, Actual: %d",
 				strings.Join(tt.lines, "\n"), tt.expected.Unix(), timestamp.Unix())
@@ -850,7 +851,7 @@ func TestProcessLines(t *testing.T) {
 		lines := make(chan string, 10)
 		send := make(chan event.Event, 5)
 		go func() {
-			p.ProcessLines(lines, send, nil)
+			p.ProcessLines(context.TODO(), lines, send, nil)
 			close(send)
 		}()
 		for _, line := range tt.in {
@@ -890,7 +891,7 @@ func TestProcessLines(t *testing.T) {
 		lines := make(chan string, 10)
 		send := make(chan event.Event, 5)
 		go func() {
-			p.ProcessLines(lines, send, nil)
+			p.ProcessLines(context.TODO(), lines, send, nil)
 			close(send)
 		}()
 		for _, line := range tt.in {

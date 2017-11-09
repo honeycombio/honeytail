@@ -12,11 +12,13 @@ import (
 // Test parsing individual log statements with different prefix formats.
 func TestSingleQueryParsing(t *testing.T) {
 	testcases := []struct {
+		description  string
 		in           string
 		prefixFormat string
 		expected     event.Event
 	}{
 		{
+			description: "parse a multiline log statement from a default postgres 9.5 log",
 			in: `2017-11-07 00:05:16 UTC [3053-3] postgres@postgres LOG:  duration: 0.681 ms  statement: SELECT d.datname as "Name",
 	       pg_catalog.pg_get_userbyid(d.datdba) as "Owner",
 	       pg_catalog.pg_encoding_to_char(d.encoding) as "Encoding",
@@ -40,6 +42,7 @@ func TestSingleQueryParsing(t *testing.T) {
 			},
 		},
 		{
+			description:  "extract everything you can put in a line prefix",
 			in:           `2017-11-08 03:02:49.314 UTC [8544-1] postgres@test (3/0) (0) (00000) (2017-11-08 03:02:38 UTC) (psql)LOG:  duration: 2.753 ms  statement: select * from test;`,
 			prefixFormat: `%m [%p-%l] %q%u@%d (%v) (%x) (%e) (%s) (%a)`,
 			expected: event.Event{
@@ -61,6 +64,7 @@ func TestSingleQueryParsing(t *testing.T) {
 			},
 		},
 		{
+			description:  "extract the event timestamp from a unix time",
 			in:           `1510258541402 [8544-1] postgres@test LOG:  duration: 2.753 ms  statement: select * from test;`,
 			prefixFormat: "%n [%p-%l] %u@%d",
 			expected: event.Event{
@@ -79,15 +83,17 @@ func TestSingleQueryParsing(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		in := make(chan []string)
-		out := make(chan event.Event)
-		p := Parser{}
-		p.Init(&Options{LogLinePrefix: tc.prefixFormat})
-		go p.handleEvents(in, out)
-		in <- strings.Split(tc.in, "\n")
-		close(in)
-		got := <-out
-		assert.Equal(t, got, tc.expected)
+		t.Run(tc.description, func(t *testing.T) {
+			in := make(chan []string)
+			out := make(chan event.Event)
+			p := Parser{}
+			p.Init(&Options{LogLinePrefix: tc.prefixFormat})
+			go p.handleEvents(in, out)
+			in <- strings.Split(tc.in, "\n")
+			close(in)
+			got := <-out
+			assert.Equal(t, got, tc.expected)
+		})
 	}
 }
 

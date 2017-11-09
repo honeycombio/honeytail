@@ -42,11 +42,13 @@ type Parser struct {
 func (p *Parser) Init(options interface{}) error {
 	p.conf = *options.(*Options)
 
+	// Regex can't be blank
 	if p.conf.LineRegex == "" {
 		logrus.Debug("LineRegex is blank")
 		return errors.New("LineRegex is blank")
 	}
 
+	// Compile regex
 	if p.conf.LineRegex != "" {
 		lineRegex, err := regexp.Compile(p.conf.LineRegex)
 		if err != nil {
@@ -55,6 +57,21 @@ func (p *Parser) Init(options interface{}) error {
 			}).Debug("Could not compile LineRegex")
 			return err
 		}
+
+		// Require at least one named group
+		var numNamedGroups int
+		for _, groupName := range lineRegex.SubexpNames() {
+			if groupName != "" {
+				numNamedGroups++
+			}
+		}
+		if numNamedGroups == 0 {
+			logrus.WithFields(logrus.Fields{
+				"LineRegex": p.conf.LineRegex,
+			}).Error("No named capture groups")
+			return errors.New("No named capture groups found; must provide at least one named group")
+		}
+
 		p.lineParser = &RegexLineParser{lineRegex}
 	}
 

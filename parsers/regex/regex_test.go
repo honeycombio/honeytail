@@ -51,6 +51,24 @@ var testInitCases = []testInitMap{
 			LineRegex:       `(?P<foo>[A-Za-`, // Broken regex should fail
 		},
 	},
+	{
+		expectedPass: false,
+		options: &Options{
+			NumParsers:      5,
+			TimeFieldName:   "local_time",
+			TimeFieldFormat: "%d/%b/%Y:%H:%M:%S %z",
+			LineRegex:       `[a-z]+`, // Require at least one named group
+		},
+	},
+	{
+		expectedPass: false,
+		options: &Options{
+			NumParsers:      5,
+			TimeFieldName:   "local_time",
+			TimeFieldFormat: "%d/%b/%Y:%H:%M:%S %z",
+			LineRegex:       `(?P[a-z]+)`, // Require at least one named group
+		},
+	},
 }
 
 func TestInit(t *testing.T) {
@@ -118,7 +136,7 @@ var tlms = []testLineMap{
 		},
 	},
 	{
-		// Sample nginx log line
+		// Sample nginx error log line
 		lineRegex: `(?P<time>\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}) \[(?P<status>.*)\].* request: "(?P<request>[^"]*)"`,
 		input:     `2017/11/07 22:59:46 [error] 5812#0: *777536449 connect() failed (111: Connection refused) while connecting to upstream, client: 127.0.0.1, server: localhost, request: "GET /isbns HTTP/1.1", upstream: "http://127.0.0.1:8080/isbns", host: "localhost"`,
 		expected: map[string]interface{}{

@@ -1,15 +1,7 @@
 // Package regex consumes logs given user-defined regex format for lines
 
-/* Example usage (from honeytail root)
-  		go install . && \
- 			honeytail -p regex -k $HONEYTAIL_WRITEKEY \
-			-f /private/var/system.log \
-			--dataset 'MY_TEST_DATASET' \
-			--backfill \
-			--regex.line_regex="(?P<time>\d{2}:\d{2}:\d{2})" \
-			--regex.timefield="time" \
-			--regex.time_format="%H:%M:%S"
-*/
+// RE2 regex syntax reference: https://github.com/google/re2/wiki/Syntax
+// Example format for a named capture group: `(?P<name>re)`
 
 package regex
 

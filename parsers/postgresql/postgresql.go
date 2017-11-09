@@ -167,12 +167,12 @@ func (p *Parser) handleEvent(rawEvent []string) *event.Event {
 	}
 	firstLine := rawEvent[0]
 
-	// First, parse the prefix
-	suffix, generalMeta := parsePrefix(p.prefixRegex, firstLine)
-	if len(suffix) == len(firstLine) {
+	// First, try to parse the prefix
+	match, suffix, generalMeta := parsePrefix(p.prefixRegex, firstLine)
+	if !match {
 		// Note: this may be noisy when debug logging is turned on, since the
 		// postgres general log contains lots of other statements as well.
-		logrus.WithField("line", firstLine).Debug("Log line didn't match expected format")
+		logrus.WithField("line", firstLine).Debug("Log line prefix didn't match expected format")
 		return nil
 	}
 
@@ -183,7 +183,12 @@ func (p *Parser) handleEvent(rawEvent []string) *event.Event {
 	addFieldsToEvent(generalMeta, ev)
 
 	// Now, parse the slow query header
-	query, slowQueryMeta := parsePrefix(slowQueryHeaderRegex, suffix)
+	match, query, slowQueryMeta := parsePrefix(slowQueryHeaderRegex, suffix)
+
+	if !match {
+		logrus.WithField("line", firstLine).Debug("didn't find slow query header, skipping line")
+		return nil
+	}
 
 	if rawDuration, ok := slowQueryMeta["duration"]; ok {
 		duration, _ := strconv.ParseFloat(rawDuration, 64)
@@ -215,6 +220,9 @@ func isContinuationLine(line string) bool {
 	return strings.HasPrefix(line, "\t")
 }
 
+// addFieldsToEvent takes a map of key-value metadata extracted from a log
+// line, and adds them to the given event. It'll convert values to integer
+// types where possible, and try to populate the event's timestamp.
 func addFieldsToEvent(fields map[string]string, ev *event.Event) {
 	for k, v := range fields {
 		// Try to convert values to integer types where sensible, and extract
@@ -230,19 +238,29 @@ func addFieldsToEvent(fields map[string]string, ev *event.Event) {
 			if timestamp, err := time.Parse("2006-01-02 03:04:05.999 MST", v); err == nil {
 				ev.Timestamp = timestamp
 			} else {
-				logrus.WithField("timestamp", timestamp).WithError(err).Debug("Error parsing query timestamp")
+				logrus.WithField("timestamp", v).WithError(err).Debug("Error parsing query timestamp")
 			}
-		// TODO: parse other times as well
-
+		case "timestamp_unix":
+			if typed, err := strconv.Atoi(v); err == nil {
+				// Convert millisecond-resolution Unix timestamp to time.Time
+				// object
+				timestamp := time.Unix(int64(typed/1000), int64((1000*1000)*(typed%1000))).UTC()
+				ev.Timestamp = timestamp
+			} else {
+				logrus.WithField("timestamp", v).WithError(err).Debug("Error parsing query timestamp")
+			}
 		default:
 			ev.Data[k] = v
 		}
 	}
 }
 
-func parsePrefix(re *parsers.ExtRegexp, line string) (suffix string, fields map[string]string) {
+func parsePrefix(re *parsers.ExtRegexp, line string) (matched bool, suffix string, fields map[string]string) {
 	prefix, fields := re.FindStringSubmatchMap(line)
-	return line[len(prefix):], fields
+	if prefix == "" {
+		return false, "", nil
+	}
+	return true, line[len(prefix):], fields
 }
 
 func buildPrefixRegexp(prefixFormat string) (*parsers.ExtRegexp, error) {

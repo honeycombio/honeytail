@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// Test parsing individual log statements with different prefix formats.
 func TestSingleQueryParsing(t *testing.T) {
 	testcases := []struct {
 		in           string
@@ -59,6 +60,22 @@ func TestSingleQueryParsing(t *testing.T) {
 				},
 			},
 		},
+		{
+			in:           `1510258541402 [8544-1] postgres@test LOG:  duration: 2.753 ms  statement: select * from test;`,
+			prefixFormat: "%n [%p-%l] %u@%d",
+			expected: event.Event{
+				Timestamp: time.Date(2017, 11, 9, 20, 15, 41, 402000000, time.UTC),
+				Data: map[string]interface{}{
+					"user":     "postgres",
+					"database": "test",
+					"duration": 2.753,
+					"pid":      8544,
+					"session_line_number": 1,
+					"query":               "select * from test;",
+					"normalized_query":    "select * from test;",
+				},
+			},
+		},
 	}
 
 	for _, tc := range testcases {
@@ -74,6 +91,7 @@ func TestSingleQueryParsing(t *testing.T) {
 	}
 }
 
+// Test grouping and parsing multiple log statements.
 func TestMultipleQueryParsing(t *testing.T) {
 	in := `
 2017-11-07 01:43:18 UTC [3542-5] postgres@test LOG:  duration: 9.263 ms  statement: INSERT INTO test (id, name, value) VALUES (1, 'Alice', 'foo');
@@ -146,5 +164,22 @@ func TestMultipleQueryParsing(t *testing.T) {
 	for _, expected := range out {
 		got := <-sendChan
 		assert.Equal(t, got, expected)
+	}
+}
+
+// Test handling log statements that aren't slow query logs
+func TestSkipNonQueryLogLines(t *testing.T) {
+	parser := Parser{}
+	parser.Init(nil)
+	testcases := []string{
+		"la la la",
+		"2017-11-06 19:20:32 UTC [11534-2] LOG:  autovacuum launcher shutting down",
+		"2017-11-07 01:43:39 UTC [3542-7] postgres@test ERROR: relation \"test\" does not exist at character 15",
+	}
+
+	for _, tc := range testcases {
+		lineGroup := []string{tc}
+		ev := parser.handleEvent(lineGroup)
+		assert.Nil(t, ev)
 	}
 }

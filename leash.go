@@ -434,9 +434,6 @@ func sendToLibhoney(ctx context.Context, toBeSent chan event.Event, toBeResent c
 		}
 		// otherwise pick something up off the regular queue and send it
 		select {
-		case <-ctx.Done():
-			doneSending <- true
-			return
 		case ev, ok := <-toBeSent:
 			if !ok {
 				// channel is closed

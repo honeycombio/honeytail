@@ -16,12 +16,14 @@ import (
 const (
 	contextKeyBuilder = "builder"
 	contextKeySampler = "sampler"
-	reportingSuffix   = "-reports"
+	Suffix            = "-reports"
 )
 
+// NewContext returns a context with a builder attached. This enables any
+// successive reporting.* fns to send to Honeycomb
 func NewContext(ctx context.Context) context.Context {
 	builder := libhoney.NewBuilder()
-	builder.Dataset += reportingSuffix
+	builder.Dataset += Suffix
 	if hostname, err := os.Hostname(); err == nil {
 		builder.AddField("hostname", hostname)
 	}
@@ -38,6 +40,8 @@ func NewContext(ctx context.Context) context.Context {
 	return context.WithValue(ctx, contextKeySampler, sampler)
 }
 
+// Options sends a Honeycomb event containing the Options received by the
+// honeytail binary.
 func Options(ctx context.Context, options interface{}) {
 	if ev := getEvent(ctx, "options"); ev != nil {
 		ev.AddField("config_json", options)

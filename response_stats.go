@@ -101,17 +101,24 @@ func (r *responseStats) log() {
 }
 
 // log the total count on its own
-func (r *responseStats) logFinal() {
+func (r *responseStats) logFinal() (int, int) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 	r.totalCount += r.count
+	successes := 0
 	for code, count := range r.statusCodes {
 		r.totalStatusCodes[code] += count
+		if code >= 200 && code < 300 {
+			successes += r.totalStatusCodes[code]
+		}
 	}
 	logrus.WithFields(logrus.Fields{
-		"total attempted sends":               r.totalCount,
-		"number sent by response status code": r.totalStatusCodes,
+		"total attempted sends":                   r.totalCount,
+		"total successful sends":                  successes,
+		"ultimate # of responses, by status code": r.totalStatusCodes,
 	}).Info("Total number of events sent")
+
+	return r.totalCount, successes
 }
 
 // reset the counters to zero.

@@ -5,8 +5,10 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"math/rand"
+	"net/url"
 	"os"
 	"os/signal"
+	"path"
 	"regexp"
 	"sort"
 	"strconv"
@@ -35,7 +37,7 @@ import (
 )
 
 // actually go and be leashy
-func run(options GlobalOptions) {
+func run(options GlobalOptions, teamSlug string) {
 	logrus.Info("Starting honeytail")
 
 	stats := newResponseStats()
@@ -191,10 +193,9 @@ func run(options GlobalOptions) {
 	// print out what we've done one last time
 	responsesWG.Wait()
 	stats.log()
-	stats.logFinal()
+	totalAttempted, totalSuccesses := stats.logFinal()
 
-	// Nothing bad happened, yay
-	logrus.Info("Honeytail is all done, goodbye!")
+	outputHelp(options, totalAttempted, totalSuccesses, teamSlug)
 }
 
 // getParserOptions takes a parser name and the global options struct
@@ -501,6 +502,10 @@ func handleResponses(ctx context.Context, responses chan libhoney.Response, stat
 			continue
 		}
 		stats.update(rsp)
+		// TODO: or we could calculate the moving average here of event_timestamp_lag_sec
+		// and warn if the moving average stays very high
+		// https://en.wikipedia.org/wiki/Moving_average#Cumulative_moving_average
+
 		// if this is an error we should retry sending, re-enqueue the event
 		willRetry := false
 		if options.BackOff && (rsp.StatusCode == 429 || rsp.StatusCode == 500) {
@@ -523,5 +528,58 @@ func logStats(stats *responseStats, interval uint) {
 	ticker := time.NewTicker(time.Second * time.Duration(interval))
 	for range ticker.C {
 		stats.logAndReset()
+	}
+}
+
+func outputHelp(options GlobalOptions, totalAttempted, totalSuccesses int, teamSlug string) {
+	// Build up Honeycomb URL for nicer logs
+	u, _ := url.Parse("https://ui.honeycomb.io")
+	u.Path = path.Join(u.Path, teamSlug, "datasets", options.Reqs.Dataset)
+
+	// Nothing bad happened, yay
+	if totalSuccesses > 0 {
+		logrus.Info("Honeytail is all done, goodbye!\n")
+		logrus.Infof("    You can now query your dataset at %s\n", u.String())
+		if !options.Report.Telemetry {
+			logrus.Info("The --report and --debug flags are available to inspect honeytail operation if something doesn't look quite right.")
+			logrus.Info("    Using --report will enable a telemetry dataset containing detailed information about honeytail's execution")
+			logrus.Info("    Using --debug will output detailed, per-line debug information to STDOUT.")
+		} else {
+			logrus.Info("Tip: Take a look at your telemetry dataset to get an overview of what was sent (break down by `response_status_code`):")
+			u.Path += reporting.Suffix
+			logrus.Infof("     %s\n", u.String())
+			logrus.Info("     (And don't forget you can delete it when you're done!)")
+			u.Path = path.Join(u.Path, "delete")
+			logrus.Infof("     %s\n", u.String())
+		}
+	} else if totalAttempted > 0 {
+		logrus.Warn("Honeytail is done sending, but it looks like we didn't successfully send any events to Honeycomb!\n")
+		if !options.Report.Telemetry {
+			logrus.Info("Tip: Check for server errors or other reasons Honeycomb servers may have rejected your events.")
+			logrus.Info("     Turn on a telemetry dataset by re-running honeytail with the --report flag,")
+			logrus.Infof("     and Honeycomb will create a '%s' dataset for you.\n",
+				options.Reqs.Dataset+reporting.Suffix)
+		} else {
+			logrus.Info("Tip: Take a look at your telemetry dataset (search for events with a 'response_status_code' >= 400):")
+			u.Path += reporting.Suffix
+			logrus.Infof("     %s\n", u.String())
+		}
+	} else {
+		logrus.Warn("Honeytail is all done! But it looks like we didn't find any events to send to Honeycomb.\n")
+		if !options.Report.Telemetry {
+			logrus.Info("Tip: Check for parsing errors or other reasons to have skipped rows.")
+			logrus.Info("     Turn on a telemetry dataset by re-running honeytail with the --report flag,")
+			logrus.Infof("     and Honeycomb will create a '%s' dataset for you.\n",
+				options.Reqs.Dataset+reporting.Suffix)
+		} else {
+			logrus.Info("Tip: Take a look at your telemetry dataset (search for events where 'parse_error' or 'skip' exists):")
+			u.Path += reporting.Suffix
+			logrus.Infof("     %s\n", u.String())
+
+		}
+	}
+
+	if options.Report.Telemetry && !options.Report.Debug {
+		logrus.Info("    If that isn't enough, use the --debug flag to get detailed, per-line debug output.\n")
 	}
 }

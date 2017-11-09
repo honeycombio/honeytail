@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"os"
@@ -172,14 +173,16 @@ func main() {
 	addParserDefaultOptions(&options)
 	sanityCheckOptions(&options)
 
-	if err := libhoney.VerifyWriteKey(libhoney.Config{
+	teamSlug, err := libhoney.VerifyWriteKey(libhoney.Config{
 		APIHost:  options.APIHost,
 		WriteKey: options.Reqs.WriteKey,
-	}); err != nil {
+	})
+
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "Could not verify Honeycomb write key: ", err)
 		os.Exit(1)
 	}
-	run(options)
+	run(options, teamSlug)
 }
 
 // setVersion sets the internal version ID and updates libhoney's user-agent

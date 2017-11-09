@@ -42,13 +42,17 @@ type Parser struct {
 func (p *Parser) Init(options interface{}) error {
 	p.conf = *options.(*Options)
 
+	if p.conf.LineRegex == "" {
+		logrus.Debug("LineRegex is blank")
+		return errors.New("LineRegex is blank")
+	}
+
 	if p.conf.LineRegex != "" {
-		var err error
 		lineRegex, err := regexp.Compile(p.conf.LineRegex)
 		if err != nil {
 			logrus.WithFields(logrus.Fields{
 				"LineRegex": p.conf.LineRegex,
-			}).Debug("Could not compile line regex")
+			}).Debug("Could not compile LineRegex")
 			return err
 		}
 		p.lineParser = &RegexLineParser{lineRegex}
@@ -68,7 +72,7 @@ type RegexLineParser struct {
 func (p *RegexLineParser) ParseLine(line string) (map[string]interface{}, error) {
 	parsed := make(map[string]interface{})
 	if p.lineRegex == nil {
-		logrus.Debug("RegexLineParser", p, "has no lineRegex")
+		logrus.Error("RegexLineParser", p, "has no lineRegex")
 		return parsed, errors.New("RegexLineParser instance has no lineRegex")
 	}
 	match := p.lineRegex.FindAllStringSubmatch(line, -1)
@@ -145,14 +149,4 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 	}
 	wg.Wait()
 	logrus.Debug("lines channel is closed, ending regex processor")
-}
-
-type NoopLineParser struct {
-	incomingLine string
-	outgoingMap  map[string]interface{}
-}
-
-func (n *NoopLineParser) ParseLine(line string) (map[string]interface{}, error) {
-	n.incomingLine = line
-	return n.outgoingMap, nil
 }

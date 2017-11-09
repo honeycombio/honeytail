@@ -1,7 +1,7 @@
 package regex
 
 import (
-	"errors"
+	//"errors"
 	"reflect"
 	"regexp"
 	"testing"
@@ -16,13 +16,67 @@ const (
 	iso8601TimeLayout         = "2006-01-02T15:04:05-07:00"
 )
 
+// Test Init(...) success/fail
+
+type testInitMap struct {
+	options      *Options
+	expectedPass bool
+}
+
+var testInitCases = []testInitMap{
+	{
+		expectedPass: true,
+		options: &Options{
+			NumParsers:      5,
+			TimeFieldName:   "local_time",
+			TimeFieldFormat: "%d/%b/%Y:%H:%M:%S %z",
+			LineRegex:       `(?P<foo>[A-Za-z]+)`,
+		},
+	},
+	{
+		expectedPass: false,
+		options: &Options{
+			NumParsers:      5,
+			TimeFieldName:   "local_time",
+			TimeFieldFormat: "%d/%b/%Y:%H:%M:%S %z",
+			LineRegex:       ``, // Empty regex should fail
+		},
+	},
+	{
+		expectedPass: false,
+		options: &Options{
+			NumParsers:      5,
+			TimeFieldName:   "local_time",
+			TimeFieldFormat: "%d/%b/%Y:%H:%M:%S %z",
+			LineRegex:       `(?P<foo>[A-Za-`, // Broken regex should fail
+		},
+	},
+}
+
+func TestInit(t *testing.T) {
+	for _, testCase := range testInitCases {
+		p := &Parser{}
+		err := p.Init(testCase.options)
+		if (err == nil) != testCase.expectedPass {
+			if err == nil {
+				t.Error("Parser Init(...) passed; expected it to fail.")
+			} else {
+				t.Error("Parser Init(...) failed; expected it to pass. Error:", err)
+			}
+		} else {
+			t.Logf("Init pass status is %t as expected", (err == nil))
+		}
+	}
+}
+
+// Test cases for RegexLineParser.ParseLine
+
 type testLineMap struct {
 	lineRegex string
 	input     string
 	expected  map[string]interface{}
 }
 
-// Test cases for RegexLineParser.ParseLine
 var tlms = []testLineMap{
 	{
 		// Simple word parsing
@@ -103,19 +157,6 @@ type testLineMaps struct {
 	ev          event.Event
 }
 
-type FakeLineParser struct {
-	tlm []testLineMaps
-}
-
-func (f *FakeLineParser) ParseLine(line string) (map[string]interface{}, error) {
-	for _, pair := range f.tlm {
-		if pair.trimmedLine == line {
-			return pair.resp, nil
-		}
-	}
-	return nil, errors.New("failed to parse line")
-}
-
 // Test event emitted from ProcessLines
 func TestProcessLines(t *testing.T) {
 	t1, _ := time.ParseInLocation(commonLogFormatTimeLayout, "08/Oct/2015:00:26:26 -0000", time.UTC)
@@ -123,11 +164,6 @@ func TestProcessLines(t *testing.T) {
 	tlm := []testLineMaps{
 		{
 			line: "https - 10.252.4.24 - - [08/Oct/2015:00:26:26 +0000] 200 174 0.099",
-			resp: map[string]interface{}{
-				"http_x_forwarded_proto": "https",
-				"remote_addr":            "10.252.4.24",
-				"time_local":             "08/Oct/2015:00:26:26 +0000",
-			},
 			ev: event.Event{
 				Timestamp: t1,
 				Data: map[string]interface{}{

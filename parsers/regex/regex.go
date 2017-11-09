@@ -7,6 +7,7 @@ package regex
 
 import (
 	"errors"
+	"fmt"
 	"regexp"
 	"strings"
 	"sync"
@@ -19,7 +20,7 @@ import (
 )
 
 type Options struct {
-	LineRegex       string `long:"line_regex" description:"a regular expression with named capture groups representing the fields you want parsed"`
+	LineRegex       string `long:"line_regex" description:"a regular expression with named capture groups representing the fields you want parsed (RE2 syntax)"`
 	TimeFieldName   string `long:"timefield" description:"Name of the field that contains a timestamp"`
 	TimeFieldFormat string `long:"time_format" description:"Timestamp format to use (strftime and Golang time.Parse supported)"`
 
@@ -36,8 +37,8 @@ func (p *Parser) Init(options interface{}) error {
 
 	// Regex can't be blank
 	if p.conf.LineRegex == "" {
-		logrus.Debug("LineRegex is blank")
-		return errors.New("LineRegex is blank")
+		logrus.Debug("LineRegex is blank; required field")
+		return errors.New("Must provide a regex for parsing log lines; use `--regex.line_regex` flag.")
 	}
 
 	// Compile regex
@@ -61,7 +62,7 @@ func (p *Parser) Init(options interface{}) error {
 			logrus.WithFields(logrus.Fields{
 				"LineRegex": p.conf.LineRegex,
 			}).Error("No named capture groups")
-			return errors.New("No named capture groups found; must provide at least one named group")
+			return errors.New(fmt.Sprintf("No named capture groups found in regex: '%s'. Must provide at least one named group with line regex. Example: `(?P<name>re)`", p.conf.LineRegex))
 		}
 
 		p.lineParser = &RegexLineParser{lineRegex}

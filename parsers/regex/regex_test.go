@@ -1,7 +1,6 @@
 package regex
 
 import (
-	//"errors"
 	"reflect"
 	"regexp"
 	"testing"

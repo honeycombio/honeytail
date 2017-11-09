@@ -36,7 +36,7 @@ type Options struct {
 
 type Parser struct {
 	conf       Options
-	lineParser LineParser
+	lineParser parsers.LineParser
 }
 
 func (p *Parser) Init(options interface{}) error {
@@ -59,10 +59,6 @@ func (p *Parser) Init(options interface{}) error {
 	}
 
 	return nil
-}
-
-type LineParser interface {
-	ParseLine(line string) (map[string]interface{}, error)
 }
 
 type RegexLineParser struct {

@@ -82,7 +82,7 @@ func TestSingleQueryParsing(t *testing.T) {
 		in := make(chan []string)
 		out := make(chan event.Event)
 		p := Parser{}
-		p.Init(&Options{PrefixFormat: tc.prefixFormat})
+		p.Init(&Options{LogLinePrefix: tc.prefixFormat})
 		go p.handleEvents(in, out)
 		in <- strings.Split(tc.in, "\n")
 		close(in)

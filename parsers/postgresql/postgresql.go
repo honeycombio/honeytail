@@ -64,7 +64,7 @@ import (
 
 const (
 	// Regex string that matches timestamps in log
-	timestampRe   = "\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}[\\.0-9]* [A-Z]+"
+	timestampRe   = `\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}[.0-9]* [A-Z]+`
 	defaultPrefix = "%t [%p-%l] %u@%d"
 	// Regex string that matches the header of a slow query log line
 	slowQueryHeader = `\s*(?P<level>[A-Z0-9]+):\s+duration: (?P<duration>[0-9\.]+) ms\s+statement: `
@@ -103,22 +103,23 @@ var prefixValues = map[string]prefixField{
 }
 
 type Options struct {
-	PrefixFormat string
+	LogLinePrefix string
 }
 
 type Parser struct {
-	prefixRegex *parsers.ExtRegexp
+	// regex to match the log_line_prefix format specified by the user
+	pgPrefixRegex *parsers.ExtRegexp
 }
 
 func (p *Parser) Init(options interface{}) (err error) {
-	var prefixFormat string
+	var logLinePrefixFormat string
 	conf, ok := options.(*Options)
-	if !ok || conf.PrefixFormat == "" {
-		prefixFormat = defaultPrefix
+	if !ok || conf.LogLinePrefix == "" {
+		logLinePrefixFormat = defaultPrefix
 	} else {
-		prefixFormat = conf.PrefixFormat
+		logLinePrefixFormat = conf.LogLinePrefix
 	}
-	p.prefixRegex, err = buildPrefixRegexp(prefixFormat)
+	p.pgPrefixRegex, err = buildPrefixRegexp(logLinePrefixFormat)
 	return err
 }
 
@@ -128,6 +129,12 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 	var groupedLines []string
 	for line := range lines {
 		if prefixRegex != nil {
+			// This is the "global" prefix regex as specified by the
+			// --log_prefix option, for stripping prefixes added by syslog or
+			// the like. It's unlikely that it'll actually be set by consumers
+			// of database logs. Don't confuse this with p.pgPrefixRegex, which
+			// is a compiled regex for parsing the postgres-specific line
+			// prefix.
 			var prefix string
 			prefix = prefixRegex.FindString(line)
 			line = strings.TrimPrefix(line, prefix)
@@ -168,7 +175,7 @@ func (p *Parser) handleEvent(rawEvent []string) *event.Event {
 	firstLine := rawEvent[0]
 
 	// First, try to parse the prefix
-	match, suffix, generalMeta := parsePrefix(p.prefixRegex, firstLine)
+	match, suffix, generalMeta := parsePrefix(p.pgPrefixRegex, firstLine)
 	if !match {
 		// Note: this may be noisy when debug logging is turned on, since the
 		// postgres general log contains lots of other statements as well.

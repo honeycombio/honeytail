@@ -2,7 +2,6 @@ package reporting
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 	"time"
 
@@ -19,16 +18,13 @@ const (
 
 func NewContext(ctx context.Context) context.Context {
 	builder := libhoney.NewBuilder()
+	builder.Dataset += reportingSuffix
 	return context.WithValue(ctx, contextKeyBuilder, builder)
 }
 
 func Options(ctx context.Context, options interface{}) {
 	if ev := getEvent(ctx); ev != nil {
-		optj, err := json.Marshal(options)
-		if err != nil {
-			return
-		}
-		ev.AddField("config_json", string(optj))
+		ev.AddField("config_json", options)
 		ev.Send()
 	}
 }
@@ -121,7 +117,5 @@ func getEvent(ctx context.Context) *libhoney.Event {
 		return nil
 	}
 
-	ev := builder.NewEvent()
-	ev.Dataset += reportingSuffix
-	return ev
+	return builder.NewEvent()
 }

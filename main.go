@@ -108,7 +108,7 @@ type OtherModes struct {
 type ReportingOptions struct {
 	Debug          bool `long:"debug" description:"Print debugging output" json:",omitempty"`
 	StatusInterval uint `long:"status_interval" description:"How frequently, in seconds, to print out summary info" default:"60" json:",omitempty"`
-	Telemetry      bool `long:"report" description:"Report honeytail debug output back to Honeycomb, in a parallel dataset TODO CLEAN ME UP" json:",omitempty"`
+	Telemetry      bool `long:"report" description:"Report honeytail debug output back to Honeycomb, in a parallel (sampled) dataset" json:",omitempty"`
 }
 
 func main() {

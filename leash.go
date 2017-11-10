@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"fmt"
 	"math/rand"
@@ -27,6 +28,7 @@ import (
 	"github.com/honeycombio/honeytail/parsers/mongodb"
 	"github.com/honeycombio/honeytail/parsers/mysql"
 	"github.com/honeycombio/honeytail/parsers/nginx"
+	"github.com/honeycombio/honeytail/parsers/postgresql"
 	"github.com/honeycombio/honeytail/parsers/regex"
 	"github.com/honeycombio/honeytail/tail"
 )
@@ -38,7 +40,7 @@ func run(options GlobalOptions) {
 	stats := newResponseStats()
 
 	sigs := make(chan os.Signal, 1)
-	abort := make(chan struct{})
+	ctx, cancel := context.WithCancel(context.Background())
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 
 	// spin up our transmission to send events to Honeycomb
@@ -82,22 +84,21 @@ func run(options GlobalOptions) {
 		Options: options.Tail,
 	}
 	if options.TailSample {
-		linesChans, err = tail.GetSampledEntries(tc, options.SampleRate, abort)
+		linesChans, err = tail.GetSampledEntries(ctx, tc, options.SampleRate)
 	} else {
-		linesChans, err = tail.GetEntries(tc, abort)
+		linesChans, err = tail.GetEntries(ctx, tc)
 	}
 	if err != nil {
 		logrus.WithFields(logrus.Fields{"err": err}).Fatal(
 			"Error occurred while trying to tail logfile")
 	}
 
-	// set up our signal handler, now that we know how many files we're tailing,
-	// we can send the right number of abort signals.
+	// set up our signal handler and support canceling
 	go func() {
 		sig := <-sigs
 		fmt.Fprintf(os.Stderr, "Aborting! Caught signal \"%s\"\n", sig)
 		fmt.Fprintf(os.Stderr, "Cleaning up...\n")
-		close(abort)
+		cancel()
 		// and if they insist, catch a second CTRL-C or timeout on 10sec
 		select {
 		case <-sigs:
@@ -157,7 +158,7 @@ func run(options GlobalOptions) {
 
 		// start up the sender. all sources are either sampled when tailing or in-
 		// parser, so always tell libhoney events are pre-sampled
-		go sendToLibhoney(realToBeSent, toBeResent, delaySending, doneSending)
+		go sendToLibhoney(ctx, realToBeSent, toBeResent, delaySending, doneSending)
 
 		// start a goroutine that reads from responses and logs.
 		responses := libhoney.Responses()
@@ -222,6 +223,9 @@ func getParserAndOptions(options GlobalOptions) (parsers.Parser, interface{}) {
 		}
 		opts = &options.MySQL
 		opts.(*mysql.Options).NumParsers = int(options.NumSenders)
+	case "postgresql":
+		opts = &options.PostgreSQL
+		parser = &postgresql.Parser{}
 	case "arangodb":
 		parser = &arangodb.Parser{}
 		opts = &options.ArangoDB
@@ -419,7 +423,7 @@ func whitelistKey(whiteKeys []string, key string) bool {
 
 // sendToLibhoney reads from the toBeSent channel and shoves the events into
 // libhoney events, sending them on their way.
-func sendToLibhoney(toBeSent chan event.Event, toBeResent chan event.Event,
+func sendToLibhoney(ctx context.Context, toBeSent chan event.Event, toBeResent chan event.Event,
 	delaySending chan int, doneSending chan bool) {
 	for {
 		// check and see if we need to back off the API because of rate limiting

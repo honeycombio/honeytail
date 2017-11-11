@@ -28,8 +28,9 @@ type responseStats struct {
 	minDuration time.Duration
 	event       *event.Event
 
-	totalCount       int
-	totalStatusCodes map[int]int
+	totalCount         int
+	totalStatusCodes   map[int]int
+	finalAvgLagSeconds float64 // cumulative moving avg
 }
 
 // newResponseStats initializes the struct's complex data types
@@ -47,6 +48,9 @@ func (r *responseStats) update(rsp libhoney.Response) {
 	defer r.lock.Unlock()
 	r.count += 1
 	r.statusCodes[rsp.StatusCode] += 1
+	r.totalCount += 1
+	r.totalStatusCodes[rsp.StatusCode] += 1
+
 	r.bodies[strings.TrimSpace(string(rsp.Body))] += 1
 	if rsp.Err != nil {
 		r.errors[rsp.Err.Error()] += 1
@@ -62,6 +66,7 @@ func (r *responseStats) update(rsp libhoney.Response) {
 	r.sumDuration += rsp.Duration
 	ev := rsp.Metadata.(event.Event)
 	r.event = &ev
+	r.finalAvgLagSeconds += (ev.LagSeconds() - r.finalAvgLagSeconds) / float64(r.totalCount)
 }
 
 // log the current stats and reset them all to zero.
@@ -84,7 +89,7 @@ func (r *responseStats) log() {
 	}
 	logrus.WithFields(logrus.Fields{
 		"count":            r.count,
-		"lifetime_count":   r.totalCount + r.count,
+		"lifetime_count":   r.totalCount,
 		"slowest":          r.maxDuration,
 		"fastest":          r.minDuration,
 		"avg_duration":     avg,
@@ -101,33 +106,18 @@ func (r *responseStats) log() {
 }
 
 // log the total count on its own
-func (r *responseStats) logFinal() (int, int) {
+func (r *responseStats) logFinal() {
 	r.lock.Lock()
 	defer r.lock.Unlock()
-	r.totalCount += r.count
-	successes := 0
-	for code, count := range r.statusCodes {
-		r.totalStatusCodes[code] += count
-		if code >= 200 && code < 300 {
-			successes += r.totalStatusCodes[code]
-		}
-	}
 	logrus.WithFields(logrus.Fields{
 		"total attempted sends":                   r.totalCount,
-		"total successful sends":                  successes,
 		"ultimate # of responses, by status code": r.totalStatusCodes,
 	}).Info("Total number of events sent")
-
-	return r.totalCount, successes
 }
 
 // reset the counters to zero.
 // NOT thread safe
 func (r *responseStats) reset() {
-	r.totalCount += r.count
-	for code, count := range r.statusCodes {
-		r.totalStatusCodes[code] += count
-	}
 	r.count = 0
 	r.statusCodes = make(map[int]int)
 	r.bodies = make(map[string]int)

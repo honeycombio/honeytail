@@ -193,9 +193,9 @@ func run(options GlobalOptions, teamSlug string) {
 	// print out what we've done one last time
 	responsesWG.Wait()
 	stats.log()
-	totalAttempted, totalSuccesses := stats.logFinal()
+	stats.logFinal()
 
-	outputHelp(options, totalAttempted, totalSuccesses, teamSlug)
+	outputHelp(options, stats, teamSlug)
 }
 
 // getParserOptions takes a parser name and the global options struct
@@ -502,18 +502,16 @@ func handleResponses(ctx context.Context, responses chan libhoney.Response, stat
 			continue
 		}
 		stats.update(rsp)
-		// TODO: or we could calculate the moving average here of event_timestamp_lag_sec
-		// and warn if the moving average stays very high
-		// https://en.wikipedia.org/wiki/Moving_average#Cumulative_moving_average
+
+		ev := rsp.Metadata.(event.Event)
 
 		// if this is an error we should retry sending, re-enqueue the event
 		willRetry := false
 		if options.BackOff && (rsp.StatusCode == 429 || rsp.StatusCode == 500) {
 			willRetry = true
 			delaySending <- 1000 / int(options.NumSenders) // back off for a little bit
-			toBeResent <- rsp.Metadata.(event.Event)       // then retry sending the event
+			toBeResent <- ev                               // then retry sending the event
 		}
-
 		reporting.Response(ctx, &rsp, willRetry)
 	}
 }
@@ -531,13 +529,30 @@ func logStats(stats *responseStats, interval uint) {
 	}
 }
 
-func outputHelp(options GlobalOptions, totalAttempted, totalSuccesses int, teamSlug string) {
+// Final helper for outputting helpful log lines at the end of honeytail
+// execution. Calls private `responseStats` members indiscriminately
+// because we know this is only called at the end, after all goroutines
+// have exited.
+func outputHelp(options GlobalOptions, stats *responseStats, teamSlug string) {
 	// Build up Honeycomb URL for nicer logs
 	u, _ := url.Parse("https://ui.honeycomb.io")
 	u.Path = path.Join(u.Path, teamSlug, "datasets", options.Reqs.Dataset)
 
+	successes := 0
+	for code, count := range stats.totalStatusCodes {
+		if code >= 200 && code < 300 {
+			successes += count
+		}
+	}
+
+	if !options.Backfill && stats.finalAvgLagSeconds > 60*60 {
+		logrus.Warn("Psst -- it looks like you transmitted a lot of events with old timestamps!")
+		logrus.Warnf("(The average was around %.2f seconds)", stats.finalAvgLagSeconds)
+		logrus.Warn("Sometimes this happens when honeytail isn't able to keep up with the input stream.\n")
+	}
+
 	// Nothing bad happened, yay
-	if totalSuccesses > 0 {
+	if successes > 0 {
 		logrus.Info("Honeytail is all done, goodbye!\n")
 		logrus.Infof("    You can now query your dataset at %s\n", u.String())
 		if !options.Report.Telemetry {
@@ -552,7 +567,7 @@ func outputHelp(options GlobalOptions, totalAttempted, totalSuccesses int, teamS
 			u.Path = path.Join(u.Path, "delete")
 			logrus.Infof("     %s\n", u.String())
 		}
-	} else if totalAttempted > 0 {
+	} else if stats.totalCount > 0 {
 		logrus.Warn("Honeytail is done sending, but it looks like we didn't successfully send any events to Honeycomb!\n")
 		if !options.Report.Telemetry {
 			logrus.Info("Tip: Check for server errors or other reasons Honeycomb servers may have rejected your events.")
@@ -575,7 +590,6 @@ func outputHelp(options GlobalOptions, totalAttempted, totalSuccesses int, teamS
 			logrus.Info("Tip: Take a look at your telemetry dataset (search for events where 'parse_error' or 'skip' exists):")
 			u.Path += reporting.Suffix
 			logrus.Infof("     %s\n", u.String())
-
 		}
 	}
 

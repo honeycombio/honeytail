@@ -18,3 +18,7 @@ type Event struct {
 	// metrics to submit in this event
 	Data map[string]interface{}
 }
+
+func (e *Event) LagSeconds() float64 {
+	return float64(time.Since(e.Timestamp)) / float64(time.Second)
+}

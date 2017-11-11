@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/honeycombio/honeytail/event"
 	"github.com/honeycombio/honeytail/parsers"
 )
@@ -123,6 +125,14 @@ var tlms = []testLineMap{
 		},
 	},
 	{
+		// Matches no lines
+		lineRegexes: []string{
+			`(?P<word1>[a-zA-Z]+)`,
+		},
+		input:    `123456 654321`,
+		expected: map[string]interface{}{},
+	},
+	{
 		// Simple time parsing
 		lineRegexes: []string{
 			`(?P<Year>\d{4})-(?P<Month>\d{2})-(?P<Day>\d{2})`,
@@ -202,14 +212,10 @@ func TestParseLine(t *testing.T) {
 			NumParsers: 5,
 			LineRegex:  tlm.lineRegexes,
 		})
-		if err != nil {
-			t.Error("Could not instantiate parser with regexes", tlm.lineRegexes)
-		}
+		assert.NoError(t, err, "Could not instantiate parser with regexes: %v", tlm.lineRegexes)
 		resp, err := p.lineParser.ParseLine(tlm.input)
 		t.Logf("%+v", resp)
-		if err != nil {
-			t.Error("p.ParseLine unexpectedly returned error ", err)
-		}
+		assert.NoError(t, err, "p.ParseLine unexpectedly returned error %v", err)
 		if !reflect.DeepEqual(resp, tlm.expected) {
 			t.Errorf("response %+v didn't match expected %+v", resp, tlm.expected)
 		}
@@ -249,9 +255,7 @@ func TestProcessLines(t *testing.T) {
 			`(?P<http_x_forwarded_proto>\w+) - (?P<remote_addr>\d{1,4}\.\d{1,4}\.\d{1,4}\.\d{1,4}) - - \[(?P<local_time>\d{2}\/[A-Za-z]+\/\d{4}:\d{2}:\d{2}:\d{2}.*)\]`,
 		},
 	})
-	if err != nil {
-		t.Errorf("Couldn't instantiate Parser")
-	}
+	assert.NoError(t, err, "Couldn't instantiate Parser")
 
 	lines := make(chan string)
 	send := make(chan event.Event)

@@ -2,6 +2,7 @@ package reporting
 
 import (
 	"context"
+	"os"
 	"strings"
 	"time"
 
@@ -21,9 +22,13 @@ const (
 func NewContext(ctx context.Context) context.Context {
 	builder := libhoney.NewBuilder()
 	builder.Dataset += reportingSuffix
+	if hostname, err := os.Hostname(); err == nil {
+		builder.AddField("hostname", hostname)
+	}
+
 	sampler := &dynsampler.PerKeyThroughput{
 		ClearFrequencySec:      1,
-		PerKeyThroughputPerSec: 1000,
+		PerKeyThroughputPerSec: 10,
 	}
 	ctx = context.WithValue(ctx, contextKeyBuilder, builder)
 	if err := sampler.Start(); err != nil {

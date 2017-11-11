@@ -1,7 +1,6 @@
 package httime
 
 import (
-	"fmt"
 	"math"
 	"strconv"
 	"strings"
@@ -176,7 +175,6 @@ func tryTimeFormats(t, intendedFormat string) time.Time {
 	// https://github.com/golang/go/issues/6189
 	t = strings.Replace(t, ",", ".", -1)
 	if intendedFormat == UnixTimestampFmt {
-		fmt.Println("trytimeformats: t=", t)
 		if unix, err := strconv.ParseInt(t, 0, 64); err == nil {
 			return time.Unix(unix, 0)
 		}

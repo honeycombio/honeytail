@@ -1,6 +1,7 @@
 package postgresql
 
 import (
+	"context"
 	"strings"
 	"sync"
 	"testing"
@@ -165,7 +166,7 @@ func TestMultipleQueryParsing(t *testing.T) {
 	parser.Init(nil)
 	inChan := make(chan string)
 	sendChan := make(chan event.Event, 4)
-	go parser.ProcessLines(inChan, sendChan, nil)
+	go parser.ProcessLines(context.TODO(), inChan, sendChan, nil)
 	for _, line := range strings.Split(in, "\n") {
 		inChan <- line
 	}

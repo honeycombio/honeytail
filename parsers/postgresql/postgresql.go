@@ -50,6 +50,7 @@
 package postgresql
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -124,7 +125,7 @@ func (p *Parser) Init(options interface{}) (err error) {
 	return err
 }
 
-func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, prefixRegex *parsers.ExtRegexp) {
+func (p *Parser) ProcessLines(ctx context.Context, lines <-chan string, send chan<- event.Event, prefixRegex *parsers.ExtRegexp) {
 	rawEvents := make(chan []string)
 	wg := &sync.WaitGroup{}
 	wg.Add(1)

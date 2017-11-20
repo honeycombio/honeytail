@@ -1,6 +1,7 @@
 package regex
 
 import (
+	"context"
 	"reflect"
 	"regexp"
 	"testing"
@@ -265,7 +266,7 @@ func TestProcessLines(t *testing.T) {
 		}
 		close(lines)
 	}()
-	go p.ProcessLines(lines, send, preReg)
+	go p.ProcessLines(context.TODO(), lines, send, preReg)
 	for _, pair := range tlm {
 		resp := <-send
 		if !reflect.DeepEqual(resp, pair.ev) {

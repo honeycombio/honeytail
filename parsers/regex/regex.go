@@ -6,6 +6,7 @@
 package regex
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"regexp"
@@ -17,6 +18,7 @@ import (
 	"github.com/honeycombio/honeytail/event"
 	"github.com/honeycombio/honeytail/httime"
 	"github.com/honeycombio/honeytail/parsers"
+	"github.com/honeycombio/honeytail/reporting"
 )
 
 type Options struct {
@@ -142,7 +144,7 @@ func (p *RegexLineParser) ParseLine(line string) (map[string]interface{}, error)
 	return make(map[string]interface{}), nil
 }
 
-func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, prefixRegex *parsers.ExtRegexp) {
+func (p *Parser) ProcessLines(ctx context.Context, lines <-chan string, send chan<- event.Event, prefixRegex *parsers.ExtRegexp) {
 	// parse lines one by one
 	wg := sync.WaitGroup{}
 	numParsers := 1
@@ -153,10 +155,6 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 		wg.Add(1)
 		go func() {
 			for line := range lines {
-				logrus.WithFields(logrus.Fields{
-					"line": line,
-				}).Debug("Attempting to process regex log line")
-
 				// take care of any headers on the line
 				var prefixFields map[string]string
 				if prefixRegex != nil {
@@ -167,6 +165,7 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 
 				parsedLine, err := p.lineParser.ParseLine(line)
 				if err != nil {
+					reporting.ParseError(ctx, line, err)
 					continue
 				}
 
@@ -176,9 +175,7 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 				}
 
 				if len(parsedLine) == 0 {
-					logrus.WithFields(logrus.Fields{
-						"line": line,
-					}).Debug("Skipping line; no capture groups found")
+					reporting.Skip(ctx, line, "no capture groups found")
 					continue
 				}
 

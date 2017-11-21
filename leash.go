@@ -545,7 +545,7 @@ func outputHelp(options GlobalOptions, stats *responseStats, teamSlug string) {
 		}
 	}
 
-	if !options.Backfill && stats.finalAvgLagSeconds > 60*60 {
+	if !options.Backfill && stats.finalAvgLagSeconds > reporting.AvgLagThreshold {
 		logrus.Warn("Psst -- it looks like you transmitted a lot of events with old timestamps!")
 		logrus.Warnf("(The average was around %.2f seconds)", stats.finalAvgLagSeconds)
 		logrus.Warn("Sometimes this happens when honeytail isn't able to keep up with the input stream.\n")

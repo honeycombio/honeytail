@@ -19,6 +19,6 @@ type Event struct {
 	Data map[string]interface{}
 }
 
-func (e *Event) LagSeconds() float64 {
-	return float64(time.Since(e.Timestamp)) / float64(time.Second)
+func (e *Event) LagSeconds() time.Duration {
+	return time.Since(e.Timestamp) / time.Second
 }

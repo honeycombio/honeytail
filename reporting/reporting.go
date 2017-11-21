@@ -14,9 +14,11 @@ import (
 )
 
 const (
+	Suffix          = "-reports"
+	AvgLagThreshold = 60 * 60 * time.Second
+
 	contextKeyBuilder = "builder"
 	contextKeySampler = "sampler"
-	Suffix            = "-reports"
 )
 
 // NewContext returns a context with a builder attached. This enables any

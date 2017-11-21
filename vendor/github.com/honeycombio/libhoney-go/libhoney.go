@@ -133,40 +133,44 @@ type Config struct {
 // VerifyWriteKey calls out to the Honeycomb API to validate the write key, so
 // we can exit immediately if desired instead of happily sending events that
 // are all rejected.
-func VerifyWriteKey(config Config) error {
+func VerifyWriteKey(config Config) (string, error) {
 	if config.WriteKey == "" {
-		return errors.New("Write key is empty")
+		return "", errors.New("Write key is empty")
 	}
 	if config.APIHost == "" {
 		config.APIHost = defaultAPIHost
 	}
 	u, err := url.Parse(config.APIHost)
 	if err != nil {
-		return fmt.Errorf("Error parsing API URL: %s", err)
+		return "", fmt.Errorf("Error parsing API URL: %s", err)
 	}
 	u.Path = path.Join(u.Path, "1", "team_slug")
 	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
-		return err
+		return "", err
 	}
 	req.Header.Set("User-Agent", UserAgentAddition)
 	req.Header.Add("X-Honeycomb-Team", config.WriteKey)
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusUnauthorized {
-		return errors.New("Write key provided is invalid")
+		return "", errors.New("Write key provided is invalid")
 	}
+	body, _ := ioutil.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		body, _ := ioutil.ReadAll(resp.Body)
-		return fmt.Errorf(`Abnormal non-200 response verifying Honeycomb write key: %d
+		return "", fmt.Errorf(`Abnormal non-200 response verifying Honeycomb write key: %d
 Response body: %s`, resp.StatusCode, string(body))
 	}
+	ret := map[string]string{}
+	if err := json.Unmarshal(body, &ret); err != nil {
+		return "", err
+	}
 
-	return nil
+	return ret["team_slug"], nil
 }
 
 // Event is used to hold data that can be sent to Honeycomb. It can also

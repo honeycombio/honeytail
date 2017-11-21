@@ -15,7 +15,7 @@ import (
 
 const (
 	Suffix          = "-reports"
-	AvgLagThreshold = 60 * 60 * time.Second
+	AvgLagThreshold = 30 * 60 * time.Second
 
 	contextKeyBuilder = "builder"
 	contextKeySampler = "sampler"
@@ -97,7 +97,7 @@ func SendError(ctx context.Context, sentEvent *event.Event, err error) {
 
 	if ev := getEvent(ctx, "send error"); ev != nil {
 		ev.AddField("event_timestamp", sentEvent.Timestamp)
-		ev.AddField("event_timestamp_lag_sec", sentEvent.LagSeconds())
+		ev.AddField("event_timestamp_lag_sec", sentEvent.Lag()/time.Second)
 		ev.AddField("event_data", sentEvent.Data)
 		ev.AddField("honeycomb_error", err.Error())
 		ev.Send()
@@ -122,7 +122,7 @@ func Response(ctx context.Context, rsp *libhoney.Response, willRetry bool) {
 
 		sentEvent := rsp.Metadata.(event.Event)
 		ev.AddField("event_timestamp", sentEvent.Timestamp)
-		ev.AddField("event_timestamp_lag_sec", sentEvent.LagSeconds())
+		ev.AddField("event_timestamp_lag_sec", sentEvent.Lag()/time.Second)
 		ev.AddField("event_data", sentEvent.Data)
 		ev.AddField("response_status_code", rsp.StatusCode)
 		ev.AddField("response_latency_ms", rsp.Duration/time.Millisecond)

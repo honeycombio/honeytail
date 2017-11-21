@@ -27,10 +27,11 @@ type responseStats struct {
 	sumDuration time.Duration
 	minDuration time.Duration
 	event       *event.Event
+	cumulAvgLag time.Duration // cumulative moving avg
 
-	totalCount         int
-	totalStatusCodes   map[int]int
-	finalAvgLagSeconds time.Duration // cumulative moving avg
+	totalCount        int
+	totalStatusCodes  map[int]int
+	lastAvgLagSeconds time.Duration
 }
 
 // newResponseStats initializes the struct's complex data types
@@ -66,7 +67,7 @@ func (r *responseStats) update(rsp libhoney.Response) {
 	r.sumDuration += rsp.Duration
 	ev := rsp.Metadata.(event.Event)
 	r.event = &ev
-	r.finalAvgLagSeconds += (ev.LagSeconds() - r.finalAvgLagSeconds) / time.Duration(r.totalCount)
+	r.cumulAvgLag += (ev.Lag() - r.cumulAvgLag) / time.Duration(r.count)
 }
 
 // log the current stats and reset them all to zero.

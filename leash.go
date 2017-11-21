@@ -545,10 +545,12 @@ func outputHelp(options GlobalOptions, stats *responseStats, teamSlug string) {
 		}
 	}
 
-	if !options.Backfill && stats.finalAvgLagSeconds > reporting.AvgLagThreshold {
-		logrus.Warn("Psst -- it looks like you transmitted a lot of events with old timestamps!")
-		logrus.Warnf("(The average was around %.2f seconds)", stats.finalAvgLagSeconds)
-		logrus.Warn("Sometimes this happens when honeytail isn't able to keep up with the input stream.\n")
+	// Check the average lag for the last interval. If it's over the
+	// AvgLagThreshold, warn the user.
+	if !options.Backfill && stats.cumulAvgLag > reporting.AvgLagThreshold {
+		logrus.Warn("Psst -- looks like you transmitted a lot of events with old timestamps!")
+		logrus.Warn("  (The average was around ", stats.cumulAvgLag, ")")
+		logrus.Warn("If you didn't mean to send events timestamped over ", reporting.AvgLagThreshold, " ago, this process may be failing to keep up with the input stream.\n")
 	}
 
 	// Nothing bad happened, yay

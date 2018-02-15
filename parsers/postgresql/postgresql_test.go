@@ -112,7 +112,7 @@ func TestSingleQueryParsing(t *testing.T) {
 			in <- strings.Split(tc.in, "\n")
 			close(in)
 			got := <-out
-			assert.Equal(t, got, tc.expected)
+			assert.Equal(t, tc.expected, got)
 		})
 	}
 }
@@ -189,7 +189,7 @@ func TestMultipleQueryParsing(t *testing.T) {
 	close(inChan)
 	for _, expected := range out {
 		got := <-sendChan
-		assert.Equal(t, got, expected)
+		assert.Equal(t, expected, got)
 	}
 }
 
@@ -208,4 +208,41 @@ func TestSkipNonQueryLogLines(t *testing.T) {
 		ev := parser.handleEvent(lineGroup)
 		assert.Nil(t, ev)
 	}
+}
+
+func TestEnsureRegexMatchesBeginningOfLine(t *testing.T) {
+	parser := Parser{}
+	parser.Init(&Options{
+		// missing "[PUCE] " prefix
+		LogLinePrefix: "[%p-%l]  sql_error_code = %e",
+	})
+	line := "[PUCE] [200-1]  sql_error_code = 00000 LOG:  duration: 1050.729 ms  execute <unnamed>: UPDATE \"repositories\" SET \"current_build_id\" = 341933279, \"updated_at\" = '2018-02-15 15:21:55.174858' WHERE \"repositories\".\"id\" = 16235973"
+
+	lineGroup := []string{line}
+	got := parser.handleEvent(lineGroup)
+	assert.Nil(t, got)
+}
+
+func TestCustomLogLinePrefix(t *testing.T) {
+	parser := Parser{}
+	parser.Init(&Options{
+		// missing "[PUCE] " prefix
+		LogLinePrefix: "[PUCE] [%p-%l]  sql_error_code = %e",
+	})
+	line := "[PUCE] [200-1]  sql_error_code = 00000 LOG:  duration: 1050.729 ms  execute <unnamed>: UPDATE \"repositories\" SET \"current_build_id\" = 341933279, \"updated_at\" = '2018-02-15 15:21:55.174858' WHERE \"repositories\".\"id\" = 16235973"
+	expected := &event.Event{
+		Timestamp: time.Date(0001, 1, 1, 0, 0, 0, 0, time.UTC),
+		Data: map[string]interface{}{
+			"duration": 1050.729,
+			"pid":      200,
+			"session_line_number": 1,
+			"query":               "UPDATE \"repositories\" SET \"current_build_id\" = 341933279, \"updated_at\" = '2018-02-15 15:21:55.174858' WHERE \"repositories\".\"id\" = 16235973",
+			"normalized_query":    "update ? set ? = ?, ? = ? where ?.? = ?",
+			"sql_state":           "00000",
+		},
+	}
+
+	lineGroup := []string{line}
+	got := parser.handleEvent(lineGroup)
+	assert.Equal(t, expected, got)
 }

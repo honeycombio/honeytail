@@ -285,6 +285,7 @@ func buildPrefixRegexp(prefixFormat string) (*parsers.ExtRegexp, error) {
 	for k, v := range prefixValues {
 		prefixFormat = strings.Replace(prefixFormat, k, v.ReString(), -1)
 	}
+	prefixFormat = "^" + prefixFormat
 
 	re, err := regexp.Compile(prefixFormat)
 	if err != nil {

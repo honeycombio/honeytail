@@ -226,7 +226,6 @@ func TestEnsureRegexMatchesBeginningOfLine(t *testing.T) {
 func TestCustomLogLinePrefix(t *testing.T) {
 	parser := Parser{}
 	parser.Init(&Options{
-		// missing "[PUCE] " prefix
 		LogLinePrefix: "[PUCE] [%p-%l]  sql_error_code = %e",
 	})
 	line := "[PUCE] [200-1]  sql_error_code = 00000 LOG:  duration: 1050.729 ms  execute <unnamed>: UPDATE \"repositories\" SET \"current_build_id\" = 341933279, \"updated_at\" = '2018-02-15 15:21:55.174858' WHERE \"repositories\".\"id\" = 16235973"

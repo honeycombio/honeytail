@@ -75,7 +75,8 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 				if err != nil {
 					// skip lines that won't parse
 					logrus.WithFields(logrus.Fields{
-						"line": line,
+						"line":  line,
+						"error": err,
 					}).Debug("skipping line; failed to parse.")
 					continue
 				}

@@ -72,6 +72,7 @@ func (g *GonxLineParser) ParseLine(line string) (map[string]interface{}, error) 
 	if err != nil {
 		logrus.WithFields(logrus.Fields{
 			"logline": line,
+			"error":   err,
 		}).Debug("failed to parse nginx log line")
 		return nil, err
 	}

@@ -16,7 +16,8 @@ Our complete list of parsers can be found in the [`parsers/` directory](parsers/
 - [PostgreSQL](parsers/postgresql/)
 - [nginx](parsers/nginx/)
 - [regex](parsers/regex/)
-- [keyval](parsers/keyval/) ([logfmt](https://brandur.org/logfmt))
+- [keyval](parsers/keyval/)([logfmt](https://brandur.org/logfmt))
+- [csv](parsers/csv/)
 
 ## Installation
 

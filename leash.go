@@ -23,6 +23,7 @@ import (
 	"github.com/honeycombio/honeytail/event"
 	"github.com/honeycombio/honeytail/parsers"
 	"github.com/honeycombio/honeytail/parsers/arangodb"
+	"github.com/honeycombio/honeytail/parsers/csv"
 	"github.com/honeycombio/honeytail/parsers/htjson"
 	"github.com/honeycombio/honeytail/parsers/keyval"
 	"github.com/honeycombio/honeytail/parsers/mongodb"
@@ -229,6 +230,10 @@ func getParserAndOptions(options GlobalOptions) (parsers.Parser, interface{}) {
 	case "arangodb":
 		parser = &arangodb.Parser{}
 		opts = &options.ArangoDB
+	case "csv":
+		parser = &csv.Parser{}
+		opts = &options.CSV
+		opts.(*csv.Options).NumParsers = int(options.NumSenders)
 	}
 	parser, _ = parser.(parsers.Parser)
 	return parser, opts

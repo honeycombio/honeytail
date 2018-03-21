@@ -16,6 +16,7 @@ import (
 
 	"github.com/honeycombio/honeytail/httime"
 	"github.com/honeycombio/honeytail/parsers/arangodb"
+	"github.com/honeycombio/honeytail/parsers/csv"
 	"github.com/honeycombio/honeytail/parsers/htjson"
 	"github.com/honeycombio/honeytail/parsers/keyval"
 	"github.com/honeycombio/honeytail/parsers/mongodb"
@@ -34,6 +35,7 @@ var version string
 
 var validParsers = []string{
 	"arangodb",
+	"csv",
 	"json",
 	"keyval",
 	"mongo",
@@ -81,6 +83,7 @@ type GlobalOptions struct {
 	Tail tail.TailOptions `group:"Tail Options" namespace:"tail"`
 
 	ArangoDB   arangodb.Options   `group:"ArangoDB Parser Options" namespace:"arangodb"`
+	CSV        csv.Options        `group:"CSV Parser Options" namespace:"csv"`
 	JSON       htjson.Options     `group:"JSON Parser Options" namespace:"json"`
 	KeyVal     keyval.Options     `group:"KeyVal Parser Options" namespace:"keyval"`
 	Mongo      mongodb.Options    `group:"MongoDB Parser Options" namespace:"mongo"`

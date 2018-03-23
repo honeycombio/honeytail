@@ -19,7 +19,7 @@ import (
 // Options defines the options relevant to the syslog parser
 type Options struct {
 	Mode        string `long:"mode" description:"Syslog mode. Supported values are rfc3164 and rfc5424"`
-	ProcessList string `long:"processes" description:"comma separated list of processes to filter for. example: sshd,sudo"`
+	ProcessList string `long:"processes" description:"comma separated list of processes to filter for. example: 'sshd,sudo' - by default all are consumed"`
 	NumParsers  int    `hidden:"true" description:"number of parsers to spin up"`
 }
 
@@ -46,11 +46,14 @@ type SyslogLineParser struct {
 }
 
 func normalizeLogFields(fields map[string]interface{}) {
-	// convert "tag" and "app_name" to "process"
+	// The RFC3164 and RFC5424 parsers use different fields to refer to the
+	// process - normalize to "process" for consistency and clarity
+	// RFC3164
 	if process, ok := fields["tag"].(string); ok {
 		fields["process"] = process
 		delete(fields, "tag")
 	}
+	// RFC5424
 	if process, ok := fields["app_name"].(string); ok {
 		fields["process"] = process
 		delete(fields, "app_name")
@@ -69,7 +72,7 @@ func NewSyslogLineParser(mode string, processList string) (*SyslogLineParser, er
 	if processList != "" {
 		supportedProcesses = make(map[string]struct{})
 		for _, process := range strings.Split(processList, ",") {
-			supportedProcesses[process] = struct{}{}
+			supportedProcesses[strings.TrimSpace(process)] = struct{}{}
 		}
 	}
 	if mode == "rfc3164" || mode == "rfc5424" {

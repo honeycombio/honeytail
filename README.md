@@ -18,6 +18,7 @@ Our complete list of parsers can be found in the [`parsers/` directory](parsers/
 - [regex](parsers/regex/)
 - [keyval](parsers/keyval/)([logfmt](https://brandur.org/logfmt))
 - [csv](parsers/csv/)
+- [syslog](parsers/syslog/)
 
 ## Installation
 

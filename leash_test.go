@@ -212,6 +212,40 @@ func TestSetVersion(t *testing.T) {
 	assert.Contains(t, userAgent, "fancyParser backfill")
 }
 
+func TestAugmentField(t *testing.T) {
+	opts := defaultOptions
+	ts := &testSetup{}
+	ts.start(t, &opts)
+	defer ts.close()
+	logFileName := ts.tmpdir + "/augment.log"
+	logfh, _ := os.Create(logFileName)
+	defer logfh.Close()
+	damapFileName := ts.tmpdir + "/damap.json"
+	damapfh, _ := os.Create(damapFileName)
+	defer damapfh.Close()
+	fmt.Fprintf(logfh, `{"format":"json"}
+{"format":"freetext"}
+{"format":"csv","delimiter":"comma"}`)
+	fmt.Fprintf(damapfh, `{"format":{
+		"json":{"structured":true},
+		"freetext":{"structured":false,"annoyance":5}
+	},
+	"color":{
+		"red":{"nomatch":"wontappear"}
+	}
+}`)
+	opts.Reqs.LogFiles = []string{logFileName}
+	opts.DAMapFile = damapFileName
+	run(context.Background(), opts)
+	assert.Equal(t, ts.rsp.reqCounter, 1, "failed count")
+	// json should be identified as structured
+	assert.Contains(t, ts.rsp.reqBody, `{"format":"json","structured":true}`, "faild content")
+	// free text gets two additional fields
+	assert.Contains(t, ts.rsp.reqBody, `{"annoyance":5,"format":"freetext","structured":false}`, "faild content")
+	// csv doesn't exist in the damap, so no change
+	assert.Contains(t, ts.rsp.reqBody, `{"delimiter":"comma","format":"csv"}`, "faild content")
+}
+
 func TestDropField(t *testing.T) {
 	opts := defaultOptions
 	ts := &testSetup{}

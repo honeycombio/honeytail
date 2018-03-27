@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"math/rand"
 	"os"
 	"os/signal"
@@ -62,6 +64,9 @@ func run(ctx context.Context, options GlobalOptions) {
 		// limit pending work capacity so that we get backpressure from libhoney
 		// and block instead of sleeping inside sendToLibHoney.
 		PendingWorkCapacity: 20 * options.NumSenders,
+	}
+	if options.DebugOut {
+		libhConfig.Output = &libhoney.WriterOutput{}
 	}
 	if err := libhoney.Init(libhConfig); err != nil {
 		logrus.WithFields(logrus.Fields{"err": err}).Fatal(
@@ -283,6 +288,21 @@ func modifyEventContents(toBeSent chan event.Event, options GlobalOptions) chan 
 			logrus.WithField("error", err).Fatal("dynsampler failed to start")
 		}
 	}
+	// initialize the data augmentation map
+	// map contents are sourceFieldValue -> object containing new keys and values
+	// {"sourceField":{"val1":{"newKey1":"newVal1","newKey2":"newVal2"},"val2":{"newKey1":"newValA"}}}
+	type DataAugmentationMap map[string]map[string]map[string]interface{}
+	var daMap DataAugmentationMap
+	if options.DAMapFile != "" {
+		raw, err := ioutil.ReadFile(options.DAMapFile)
+		if err != nil {
+			logrus.WithField("error", err).Fatal("failed to read Data Augmentation Map file")
+		}
+		err = json.Unmarshal(raw, &daMap)
+		if err != nil {
+			logrus.WithField("error", err).Fatal("failed to unmarshal Data Augmentation Map from JSON")
+		}
+	}
 	// ok, we need to munge events. Sing up enough goroutines to handle this
 	newSent := make(chan event.Event, options.NumSenders)
 	go func() {
@@ -291,6 +311,26 @@ func modifyEventContents(toBeSent chan event.Event, options GlobalOptions) chan 
 			wg.Add(1)
 			go func() {
 				for ev := range toBeSent {
+					// do request shaping
+					for _, field := range options.RequestShape {
+						shaper.requestShape(field, &ev, options)
+					}
+					// do data augmentation. For each source column
+					for sourceField, augmentableVals := range daMap {
+						// does that column exist in the event?
+						if val, ok := ev.Data[sourceField]; ok {
+							// if it does exist, is it a string?
+							if val, ok := val.(string); ok {
+								// if we have fields to augment this value
+								if newFields, ok := augmentableVals[val]; ok {
+									// go ahead and insert new fields
+									for k, v := range newFields {
+										ev.Data[k] = v
+									}
+								}
+							}
+						}
+					}
 					// do dropping
 					for _, field := range options.DropFields {
 						delete(ev.Data, field)
@@ -306,10 +346,6 @@ func modifyEventContents(toBeSent chan event.Event, options GlobalOptions) chan 
 					// do adding
 					for k, v := range parsedAddFields {
 						ev.Data[k] = v
-					}
-					// do request shaping
-					for _, field := range options.RequestShape {
-						shaper.requestShape(field, &ev, options)
 					}
 					// do dynsampling last so it can use request shaped fields
 					if sampler == nil {

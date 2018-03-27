@@ -57,6 +57,7 @@ type GlobalOptions struct {
 	BatchFrequencyMs uint `long:"send_frequency_ms" description:"How frequently to flush batches" default:"100"`
 	BatchSize        uint `long:"send_batch_size" description:"Maximum number of messages to put in a batch" default:"50"`
 	Debug            bool `long:"debug" description:"Print debugging output"`
+	DebugOut         bool `long:"debug_stdout" description:"Instead of sending events to Honeycomb, print them to STDOUT for debugging"`
 	StatusInterval   uint `long:"status_interval" description:"How frequently, in seconds, to print out summary info" default:"60"`
 	Backfill         bool `long:"backfill" description:"Configure honeytail to ingest old data in order to backfill Honeycomb. Sets the correct values for --backoff, --tail.read_from, and --tail.stop"`
 
@@ -65,6 +66,7 @@ type GlobalOptions struct {
 	ScrubFields       []string `long:"scrub_field" description:"For the field listed, apply a one-way hash to the field content. May be specified multiple times"`
 	DropFields        []string `long:"drop_field" description:"Do not send the field to Honeycomb. May be specified multiple times"`
 	AddFields         []string `long:"add_field" description:"Add the field to every event. Field should be key=val. May be specified multiple times"`
+	DAMapFile         string   `long:"da_map_file" description:"Data Augmentation Map file. Path to a file that contains JSON mapping of columns to augment, the values of the column, and new objects to be inserted into the event, eg to add hostname based on IP address or username based on user ID"`
 	RequestShape      []string `long:"request_shape" description:"Identify a field that contains an HTTP request of the form 'METHOD /path HTTP/1.x' or just the request path. Break apart that field into subfields that contain components. May be specified multiple times. Defaults to 'request' when using the nginx parser"`
 	ShapePrefix       string   `long:"shape_prefix" description:"Prefix to use on fields generated from request_shape to prevent field collision"`
 	RequestPattern    []string `long:"request_pattern" description:"A pattern for the request path on which to base the derived request_shape. May be specified multiple times. Patterns are considered in order; first match wins."`
@@ -171,7 +173,7 @@ func main() {
 	addParserDefaultOptions(&options)
 	sanityCheckOptions(&options)
 
-	if err := libhoney.VerifyWriteKey(libhoney.Config{
+	if _, err := libhoney.VerifyWriteKey(libhoney.Config{
 		APIHost:  options.APIHost,
 		WriteKey: options.Reqs.WriteKey,
 	}); err != nil {

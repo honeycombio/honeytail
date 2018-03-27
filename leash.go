@@ -33,6 +33,7 @@ import (
 	"github.com/honeycombio/honeytail/parsers/nginx"
 	"github.com/honeycombio/honeytail/parsers/postgresql"
 	"github.com/honeycombio/honeytail/parsers/regex"
+	"github.com/honeycombio/honeytail/parsers/syslog"
 	"github.com/honeycombio/honeytail/tail"
 )
 
@@ -239,6 +240,10 @@ func getParserAndOptions(options GlobalOptions) (parsers.Parser, interface{}) {
 		parser = &csv.Parser{}
 		opts = &options.CSV
 		opts.(*csv.Options).NumParsers = int(options.NumSenders)
+	case "syslog":
+		parser = &syslog.Parser{}
+		opts = &options.Syslog
+		opts.(*syslog.Options).NumParsers = int(options.NumSenders)
 	}
 	parser, _ = parser.(parsers.Parser)
 	return parser, opts

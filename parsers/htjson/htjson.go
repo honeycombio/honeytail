@@ -15,8 +15,10 @@ import (
 )
 
 type Options struct {
-	TimeFieldName   string `long:"timefield" description:"Name of the field that contains a timestamp"`
-	TimeFieldFormat string `long:"format" description:"Format of the timestamp found in timefield (supports strftime and Golang time formats)"`
+	TimeFieldName    string `long:"timefield" description:"Name of the field that contains a timestamp"`
+	TimeFieldFormat  string `long:"format" description:"Format of the timestamp found in timefield (supports strftime and Golang time formats)"`
+	FlattenDepth     int    `long:"depth" description:"If set, will flatten json structure up to the specified depth."`
+	FlattenDelimiter string `long:"flatten_delimiter" description:"Set the delimiter used by flatten. Default is '.'" default:"."`
 
 	NumParsers int `hidden:"true" description:"number of htjson parsers to spin up"`
 }
@@ -35,8 +37,7 @@ func (p *Parser) Init(options interface{}) error {
 	return nil
 }
 
-type JSONLineParser struct {
-}
+type JSONLineParser struct{}
 
 // ParseLine will unmarshal the thing it read in to detect errors in the JSON
 // (by failing to parse) and give us an object that can be mutated by the
@@ -82,6 +83,10 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 				}
 				timestamp := httime.GetTimestamp(parsedLine, p.conf.TimeFieldName, p.conf.TimeFieldFormat)
 
+				if p.conf.FlattenDepth != 0 {
+					flatten(parsedLine, p.conf.FlattenDelimiter, p.conf.FlattenDepth)
+				}
+
 				// merge the prefix fields and the parsed line contents
 				for k, v := range prefixFields {
 					parsedLine[k] = v
@@ -100,4 +105,31 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 	}
 	wg.Wait()
 	logrus.Debug("lines channel is closed, ending json processor")
+}
+
+func flatten(data map[string]interface{}, delimiter string, depth int) {
+	if depth == 0 {
+		return
+	}
+	var toDelete []string
+	toAppend := make(map[string]interface{})
+	for key := range data {
+		if child, ok := data[key].(map[string]interface{}); ok {
+			flatten(child, delimiter, depth-1)
+
+			for childKey := range child {
+				newKey := key + delimiter + childKey
+				toAppend[newKey] = child[childKey]
+			}
+			toDelete = append(toDelete, key)
+		}
+	}
+
+	for k, v := range toAppend {
+		data[k] = v
+	}
+
+	for _, key := range toDelete {
+		delete(data, key)
+	}
 }

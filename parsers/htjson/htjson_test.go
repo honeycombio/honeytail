@@ -49,3 +49,143 @@ func TestParseLine(t *testing.T) {
 		}
 	}
 }
+
+type testFlattenMap struct {
+	input     map[string]interface{}
+	expected  map[string]interface{}
+	depth     int
+	delimiter string
+}
+
+var tfms = []testFlattenMap{
+	testFlattenMap{
+		// depth is nonzero but there's nothing to do
+		input: map[string]interface{}{
+			"a": 1,
+			"b": 2,
+			"c": 3,
+		},
+		expected: map[string]interface{}{
+			"a": 1,
+			"b": 2,
+			"c": 3,
+		},
+		depth:     3,
+		delimiter: ".",
+	},
+	testFlattenMap{
+		// there's a nested map but depth is 0, so we should get the map back
+		input: map[string]interface{}{
+			"a": 1,
+			"b": 2,
+			"c": map[string]interface{}{
+				"d": 4,
+				"e": 5,
+			},
+		},
+		expected: map[string]interface{}{
+			"a": 1,
+			"b": 2,
+			"c": map[string]interface{}{
+				"d": 4,
+				"e": 5,
+			},
+		},
+		depth:     0,
+		delimiter: ".",
+	},
+	testFlattenMap{
+		// there's a nested map and depth is 1, so expect a flat map
+		input: map[string]interface{}{
+			"a": 1,
+			"b": 2,
+			"c": map[string]interface{}{
+				"d": 4,
+				"e": 5,
+			},
+		},
+		expected: map[string]interface{}{
+			"a":   1,
+			"b":   2,
+			"c.d": 4,
+			"c.e": 5,
+		},
+		depth:     1,
+		delimiter: ".",
+	},
+	testFlattenMap{
+		// there's are multiple levels of nesting, but depth is 1,
+		// so we should only go one level deep
+		input: map[string]interface{}{
+			"a": 1,
+			"b": 2,
+			"c": map[string]interface{}{
+				"d": map[string]interface{}{"f": 6},
+				"e": 5,
+			},
+		},
+		expected: map[string]interface{}{
+			"a":   1,
+			"b":   2,
+			"c.d": map[string]interface{}{"f": 6},
+			"c.e": 5,
+		},
+		depth:     1,
+		delimiter: ".",
+	},
+	testFlattenMap{
+		// test mutliple nested maps with varying levels of depth
+		input: map[string]interface{}{
+			"a": 1,
+			"b": 2,
+			"c": map[string]interface{}{
+				"d": map[string]interface{}{"f": 6},
+				"e": 5,
+			},
+			"x": map[string]interface{}{
+				"y": map[string]interface{}{
+					"z1": 100,
+					"z2": 200,
+				},
+			},
+		},
+		expected: map[string]interface{}{
+			"a":      1,
+			"b":      2,
+			"c.d.f":  6,
+			"c.e":    5,
+			"x.y.z1": 100,
+			"x.y.z2": 200,
+		},
+		depth:     10,
+		delimiter: ".",
+	},
+	testFlattenMap{
+		// test alternate delimiters
+		input: map[string]interface{}{
+			"a": 1,
+			"b": 2,
+			"c": map[string]interface{}{
+				"d": 4,
+				"e": 5,
+			},
+		},
+		expected: map[string]interface{}{
+			"a":     1,
+			"b":     2,
+			"c---d": 4,
+			"c---e": 5,
+		},
+		depth:     1,
+		delimiter: "---",
+	},
+}
+
+func TestFlatten(t *testing.T) {
+	for _, tfm := range tfms {
+		flatten(tfm.input, tfm.delimiter, tfm.depth)
+		if !reflect.DeepEqual(tfm.input, tfm.expected) {
+			t.Errorf("flattened input %+v didn't match expected %+v", tfm.input, tfm.expected)
+		}
+	}
+}

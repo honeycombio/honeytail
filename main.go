@@ -63,23 +63,24 @@ type GlobalOptions struct {
 	StatusInterval   uint `long:"status_interval" description:"How frequently, in seconds, to print out summary info" default:"60"`
 	Backfill         bool `long:"backfill" description:"Configure honeytail to ingest old data in order to backfill Honeycomb. Sets the correct values for --backoff, --tail.read_from, and --tail.stop"`
 
-	Localtime         bool     `long:"localtime" description:"When parsing a timestamp that has no time zone, assume it is in the same timezone as localhost instead of UTC (the default)"`
-	Timezone          string   `long:"timezone" description:"When parsing a timestamp use this time zone instead of UTC (the default). Must be specified in TZ format as seen here: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones"`
-	ScrubFields       []string `long:"scrub_field" description:"For the field listed, apply a one-way hash to the field content. May be specified multiple times"`
-	DropFields        []string `long:"drop_field" description:"Do not send the field to Honeycomb. May be specified multiple times"`
-	AddFields         []string `long:"add_field" description:"Add the field to every event. Field should be key=val. May be specified multiple times"`
-	DAMapFile         string   `long:"da_map_file" description:"Data Augmentation Map file. Path to a file that contains JSON mapping of columns to augment, the values of the column, and new objects to be inserted into the event, eg to add hostname based on IP address or username based on user ID"`
-	RequestShape      []string `long:"request_shape" description:"Identify a field that contains an HTTP request of the form 'METHOD /path HTTP/1.x' or just the request path. Break apart that field into subfields that contain components. May be specified multiple times. Defaults to 'request' when using the nginx parser"`
-	ShapePrefix       string   `long:"shape_prefix" description:"Prefix to use on fields generated from request_shape to prevent field collision"`
-	RequestPattern    []string `long:"request_pattern" description:"A pattern for the request path on which to base the derived request_shape. May be specified multiple times. Patterns are considered in order; first match wins."`
-	RequestParseQuery string   `long:"request_parse_query" description:"How to parse the request query parameters. 'whitelist' means only extract listed query keys. 'all' means to extract all query parameters as individual columns" default:"whitelist"`
-	RequestQueryKeys  []string `long:"request_query_keys" description:"Request query parameter key names to extract, when request_parse_query is 'whitelist'. May be specified multiple times."`
-	BackOff           bool     `long:"backoff" description:"When rate limited by the API, back off and retry sending failed events. Otherwise failed events are dropped. When --backfill is set, it will override this option=true"`
-	PrefixRegex       string   `long:"log_prefix" description:"pass a regex to this flag to strip the matching prefix from the line before handing to the parser. Useful when log aggregation prepends a line header. Use named groups to extract fields into the event."`
-	DynSample         []string `long:"dynsampling" description:"enable dynamic sampling using the field listed in this option. May be specified multiple times; fields will be concatenated to form the dynsample key. WARNING increases CPU utilization dramatically over normal sampling"`
-	DynWindowSec      int      `long:"dynsample_window" description:"measurement window size for the dynsampler, in seconds" default:"30"`
-	GoalSampleRate    int      `hidden:"true" description:"used to hold the desired sample rate and set tailing sample rate to 1"`
-	MinSampleRate     int      `long:"dynsample_minimum" description:"if the rate of traffic falls below this, dynsampler won't sample" default:"1"`
+	Localtime           bool     `long:"localtime" description:"When parsing a timestamp that has no time zone, assume it is in the same timezone as localhost instead of UTC (the default)"`
+	Timezone            string   `long:"timezone" description:"When parsing a timestamp use this time zone instead of UTC (the default). Must be specified in TZ format as seen here: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones"`
+	ScrubFields         []string `long:"scrub_field" description:"For the field listed, apply a one-way hash to the field content. May be specified multiple times"`
+	DropFields          []string `long:"drop_field" description:"Do not send the field to Honeycomb. May be specified multiple times"`
+	AddFields           []string `long:"add_field" description:"Add the field to every event. Field should be key=val. May be specified multiple times"`
+	DAMapFile           string   `long:"da_map_file" description:"Data Augmentation Map file. Path to a file that contains JSON mapping of columns to augment, the values of the column, and new objects to be inserted into the event, eg to add hostname based on IP address or username based on user ID"`
+	RequestShape        []string `long:"request_shape" description:"Identify a field that contains an HTTP request of the form 'METHOD /path HTTP/1.x' or just the request path. Break apart that field into subfields that contain components. May be specified multiple times. Defaults to 'request' when using the nginx parser"`
+	ShapePrefix         string   `long:"shape_prefix" description:"Prefix to use on fields generated from request_shape to prevent field collision"`
+	RequestPattern      []string `long:"request_pattern" description:"A pattern for the request path on which to base the derived request_shape. May be specified multiple times. Patterns are considered in order; first match wins."`
+	RequestParseQuery   string   `long:"request_parse_query" description:"How to parse the request query parameters. 'whitelist' means only extract listed query keys. 'all' means to extract all query parameters as individual columns" default:"whitelist"`
+	RequestQueryKeys    []string `long:"request_query_keys" description:"Request query parameter key names to extract, when request_parse_query is 'whitelist'. May be specified multiple times."`
+	BackOff             bool     `long:"backoff" description:"When rate limited by the API, back off and retry sending failed events. Otherwise failed events are dropped. When --backfill is set, it will override this option=true"`
+	PrefixRegex         string   `long:"log_prefix" description:"pass a regex to this flag to strip the matching prefix from the line before handing to the parser. Useful when log aggregation prepends a line header. Use named groups to extract fields into the event."`
+	DeterministicSample string   `long:"deterministic_sampling" description:"Specify a field to deterministically sample on, i.e., every concurrent Honeytail instance will sample 1/N based on content."`
+	DynSample           []string `long:"dynsampling" description:"enable dynamic sampling using the field listed in this option. May be specified multiple times; fields will be concatenated to form the dynsample key. WARNING increases CPU utilization dramatically over normal sampling"`
+	DynWindowSec        int      `long:"dynsample_window" description:"measurement window size for the dynsampler, in seconds" default:"30"`
+	GoalSampleRate      int      `hidden:"true" description:"used to hold the desired sample rate and set tailing sample rate to 1"`
+	MinSampleRate       int      `long:"dynsample_minimum" description:"if the rate of traffic falls below this, dynsampler won't sample" default:"1"`
 
 	Reqs  RequiredOptions `group:"Required Options"`
 	Modes OtherModes      `group:"Other Modes"`
@@ -246,6 +247,9 @@ func addParserDefaultOptions(options *GlobalOptions) {
 	} else {
 		options.TailSample = false
 	}
+	if options.DeterministicSample != "" {
+		options.TailSample = false
+	}
 	if len(options.DynSample) != 0 {
 		// when using dynamic sampling, we make the sampling decision after parsing
 		// the content, so we must not tailsample.
@@ -285,8 +289,12 @@ func sanityCheckOptions(options *GlobalOptions) {
 		fmt.Println("request_parse_query flag must be either 'whitelist' or 'all'.")
 		usage()
 		os.Exit(1)
-	case len(options.DynSample) != 0 && options.SampleRate <= 1 && options.GoalSampleRate <= 1:
-		fmt.Println("sample rate flag must be set >= 2 when dynamic sampling is enabled")
+	case (len(options.DynSample) != 0 || options.DeterministicSample != "") && options.SampleRate <= 1 && options.GoalSampleRate <= 1:
+		fmt.Println("sample rate flag must be set >= 2 when dynamic or deterministic sampling is enabled")
+		usage()
+		os.Exit(1)
+	case len(options.DynSample) != 0 && options.DeterministicSample != "":
+		fmt.Println("dynamic sampling and deterministic sampling cannot be used together")
 		usage()
 		os.Exit(1)
 	}

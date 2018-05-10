@@ -32,6 +32,24 @@ func randomRequestID() string {
 	return reqID
 }
 
+func assertEqual(t *testing.T, a interface{}, b interface{}) {
+	if a != b {
+		t.Fatalf("%v != %v", a, b)
+	}
+}
+
+func TestDeterministicSamplerDatapoints(t *testing.T) {
+	s, _ := NewDeterministicSampler(17)
+	a := s.Sample("hello")
+	assertEqual(t, a, false)
+	a = s.Sample("hello")
+	assertEqual(t, a, false)
+	a = s.Sample("world")
+	assertEqual(t, a, false)
+	a = s.Sample("this5")
+	assertEqual(t, a, true)
+}
+
 func TestDeterministicSampler(t *testing.T) {
 	const (
 		nRequestIDs             = 200000

@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"github.com/Sirupsen/logrus"
-	"github.com/honeycombio/dynsampler-go"
+	dynsampler "github.com/honeycombio/dynsampler-go"
 	"github.com/honeycombio/libhoney-go"
 	"github.com/honeycombio/urlshaper"
 
@@ -34,6 +34,7 @@ import (
 	"github.com/honeycombio/honeytail/parsers/postgresql"
 	"github.com/honeycombio/honeytail/parsers/regex"
 	"github.com/honeycombio/honeytail/parsers/syslog"
+	"github.com/honeycombio/honeytail/sample"
 	"github.com/honeycombio/honeytail/tail"
 )
 
@@ -282,17 +283,27 @@ func modifyEventContents(toBeSent chan event.Event, options GlobalOptions) chan 
 		}
 	}
 	// initialize the dynamic sampler
-	var sampler dynsampler.Sampler
+	var dynamicSampler dynsampler.Sampler
 	if len(options.DynSample) != 0 {
-		sampler = &dynsampler.AvgSampleWithMin{
+		dynamicSampler = &dynsampler.AvgSampleWithMin{
 			GoalSampleRate:    options.GoalSampleRate,
 			ClearFrequencySec: options.DynWindowSec,
 			MinEventsPerSec:   options.MinSampleRate,
 		}
-		if err := sampler.Start(); err != nil {
+		if err := dynamicSampler.Start(); err != nil {
 			logrus.WithField("error", err).Fatal("dynsampler failed to start")
 		}
 	}
+
+	var deterministicSampler *sample.DeterministicSampler
+	if options.DeterministicSample != "" {
+		var err error
+		deterministicSampler, err = sample.NewDeterministicSampler(options.SampleRate)
+		if err != nil {
+			logrus.WithField("error", err).Fatal("error creating deterministic sampler")
+		}
+	}
+
 	// initialize the data augmentation map
 	// map contents are sourceFieldValue -> object containing new keys and values
 	// {"sourceField":{"val1":{"newKey1":"newVal1","newKey2":"newVal2"},"val2":{"newKey1":"newValA"}}}
@@ -352,16 +363,29 @@ func modifyEventContents(toBeSent chan event.Event, options GlobalOptions) chan 
 					for k, v := range parsedAddFields {
 						ev.Data[k] = v
 					}
-					// do dynsampling last so it can use request shaped fields
-					if sampler == nil {
-						ev.SampleRate = int(options.SampleRate)
-					} else {
+					ev.SampleRate = int(options.SampleRate)
+					if dynamicSampler != nil {
 						key := makeDynsampleKey(&ev, options)
-						sr := sampler.GetSampleRate(key)
+						sr := dynamicSampler.GetSampleRate(key)
 						if rand.Intn(sr) != 0 {
 							ev.SampleRate = -1
 						} else {
 							ev.SampleRate = sr
+						}
+					}
+					if deterministicSampler != nil {
+						sampleKey, ok := ev.Data[options.DeterministicSample].(string)
+						if !ok {
+							logrus.WithField("event_data", ev.Data).
+								WithField("field", options.DeterministicSample).
+								Error("Field to deterministically sample on does not exist in event, leaving it to random chance")
+							if rand.Intn(int(options.SampleRate)) != 0 {
+								ev.SampleRate = -1
+							}
+						} else {
+							if !deterministicSampler.Sample(sampleKey) {
+								ev.SampleRate = -1
+							}
 						}
 					}
 					newSent <- ev

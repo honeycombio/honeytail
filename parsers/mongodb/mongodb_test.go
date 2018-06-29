@@ -18,6 +18,7 @@ const (
 	UBUNTU_3_2_9_UPDATE    = `2016-09-14T23:36:36.793+0000 I WRITE [conn61] update protecteddb.comedy query: { name: "Hulk" } update: { $unset: { cast: 1.0 } } keysExamined:0 docsExamined:4 nMatched:0 nModified:0 keyUpdates:0 writeConflicts:0 numYields:0 locks:{ Global: { acquireCount: { r: 1, w: 1 } }, Database: { acquireCount: { w: 1 } }, Collection: { acquireCount: { w: 1 } } } 0ms`
 	UBUNTU_2_6_FIND        = `2016-09-15T02:38:10.395-0400 [conn1579035] query starfruit_production.users query: { $query: { altemails: { $in: [ "REDACTED@domain.org" ] } }, $orderby: { _id: 1 } } planSummary: IXSCAN { _id: 1 } ntoskip:0 nscanned:67439 nscannedObjects:67439 keyUpdates:0 numYields:1 locks(micros) r:114782 nreturned:0 reslen:20 105ms`
 	UBUNTU_2_4_FIND        = `Tue Sep 13 21:10:33.961 [TTLMonitor] query btest.system.indexes query: { expireAfterSeconds: { $exists: true } } ntoreturn:0 ntoskip:0 nscanned:1 keyUpdates:0 locks(micros) r:60 nreturned:0 reslen:20 0ms`
+	ATLAS_3_6_0_FIND       = `2018-06-29T16:21:19.864+0000 I COMMAND  [conn8080] command foo.abc appName: "MongoDB Shell" command: find { find: "foo.abc", filter: { a: 99.0 }, $clusterTime: { clusterTime: Timestamp(1530289263, 1), signature: { hash: BinData(0, D296E984640196C4D2977BECF468865948F7704C), keyId: 6571916458190700545 } }, $db: "foo" } planSummary: IXSCAN { a: 1 } keysExamined:2 docsExamined:2 cursorExhausted:1 numYields:0 nreturned:2 reslen:303 locks:{ Global: { acquireCount: { r: 2 } }, Database: { acquireCount: { r: 1 } }, Collection: { acquireCount: { r: 1 } } } protocol:op_msg 0ms`
 	OSX_3_2_9_AGGREGATE    = `2016-09-14T14:46:13.879-0700 I COMMAND [conn1] command testtest.zips command: aggregate { aggregate: "zips", pipeline: [ { $group: { _id: "$state", totalPop: { $sum: "$pop" } } }, { $match: { totalPop: { $gte: 10000000.0 } } } ], cursor: {} } keyUpdates:0 writeConflicts:0 numYields:229 reslen:342 locks:{ Global: { acquireCount: { r: 466 } }, Database: { acquireCount: { r: 233 } }, Collection: { acquireCount: { r: 233 } } } protocol:op_command 34ms`
 	HEARTBEAT              = `Sun Sep 18 07:20:03.246 [conn123456789] command admin.$cmd command: replSetHeartbeat { replSetHeartbeat: "replica-set-here", from: "host:port" } ntoreturn:1 keyUpdates:0 numYields:0  reslen:100 0ms`
 	NESTED_QUOTES          = `2016-09-20T14:55:06.189-0400 [conn2915444] update namespace.collection query: { _id: ObjectId('51abe5b6c') } update: { $set: { recent_data: [ { id: ObjectId('57e1860'), msg: "Nietzsche said "For what constitutes the tremendous historical uniqueness of that Persian is just the opposite of this."" } ] } } nscanned:1 nscannedObjects:1 nMatched:1 nModified:1 keyUpdates:0 numYields:0 locks(micros) w:393 0ms`
@@ -39,6 +40,7 @@ var (
 	UBUNTU_3_2_9_INSERT_TIME, _    = time.ParseInLocation(iso8601LocalTimeFormat, "2016-09-14T23:39:23.450+0000", time.UTC)
 	UBUNTU_3_2_9_FIND_TIME, _      = time.ParseInLocation(iso8601LocalTimeFormat, "2016-09-15T00:01:55.387+0000", time.UTC)
 	UBUNTU_3_2_9_UPDATE_TIME, _    = time.ParseInLocation(iso8601LocalTimeFormat, "2016-09-14T23:36:36.793+0000", time.UTC)
+	ATLAS_3_6_0_FIND_TIME, _       = time.ParseInLocation(iso8601LocalTimeFormat, "2018-06-29T16:21:19.864+0000", time.UTC)
 	HEARTBEAT_TIME, _              = time.ParseInLocation(ctimeTimeFormat, "Sun Sep 18 07:20:03.246", time.UTC)
 	UBUNTU_2_4_FIND_TIME, _        = time.ParseInLocation(ctimeTimeFormat, "Tue Sep 13 21:10:33.961", time.UTC)
 	UBUNTU_2_6_FIND_TIME, _        = time.ParseInLocation(iso8601LocalTimeFormat, "2016-09-15T02:38:10.395-0400", time.UTC)
@@ -250,7 +252,21 @@ func TestProcessLines(t *testing.T) {
 				},
 			},
 		},
-
+		{
+			line: ATLAS_3_6_0_FIND,
+			expected: processed{
+				time: ATLAS_3_6_0_FIND_TIME,
+				includeData: map[string]interface{}{
+					"operation":   "command",
+					"context":     "conn8080",
+					"namespace":   "foo.abc",
+					"duration_ms": 0.0,
+					"reslen":      303.0,
+					"database":    "foo",
+					"collection":  "abc",
+				},
+			},
+		},
 		{
 			line: HEARTBEAT,
 			expected: processed{

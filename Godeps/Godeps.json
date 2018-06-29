@@ -48,19 +48,19 @@
 		},
 		{
 			"ImportPath": "github.com/honeycombio/mongodbtools/logparser",
-			"Rev": "8874fcd7ede8ce3fd736c71c038f2ca20e07263a"
+			"Rev": "358295c47f6829ef176ffb92d91a340b7be36786"
 		},
 		{
 			"ImportPath": "github.com/honeycombio/mongodbtools/logparser/internal/logparser",
-			"Rev": "8874fcd7ede8ce3fd736c71c038f2ca20e07263a"
+			"Rev": "358295c47f6829ef176ffb92d91a340b7be36786"
 		},
 		{
 			"ImportPath": "github.com/honeycombio/mongodbtools/queryshape",
-			"Rev": "8874fcd7ede8ce3fd736c71c038f2ca20e07263a"
+			"Rev": "358295c47f6829ef176ffb92d91a340b7be36786"
 		},
 		{
 			"ImportPath": "github.com/honeycombio/mongodbtools/queryshape/internal/queryshape",
-			"Rev": "8874fcd7ede8ce3fd736c71c038f2ca20e07263a"
+			"Rev": "358295c47f6829ef176ffb92d91a340b7be36786"
 		},
 		{
 			"ImportPath": "github.com/honeycombio/mysqltools/query/normalizer",

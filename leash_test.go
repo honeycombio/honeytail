@@ -670,14 +670,14 @@ func TestGetEndLine(t *testing.T) {
 }
 
 func TestRebaseTime(t *testing.T) {
-	baseTime, err := time.Parse("Mon Jan 2 15:04:05 -0700 MST 2006", "Wed Jul 3 15:04:05 -0800 PST 2018")
+	baseTime, err := time.Parse("Mon Jan 2 15:04:05 -0700 MST 2006", "Wed Jul 3 15:04:05 -0700 PDT 2018")
 	assert.Nil(t, err)
-	nowTime, err := time.Parse("Mon Jan 2 15:04:05 -0700 MST 2006", "Wed Jul 4 12:00:00 -0800 PST 2018")
+	nowTime, err := time.Parse("Mon Jan 2 15:04:05 -0700 MST 2006", "Wed Jul 4 12:00:00 -0700 PDT 2018")
 	assert.Nil(t, err)
-	timestamp, err := time.Parse("Mon Jan 2 15:04:05 -0700 MST 2006", "Wed Jul 3 12:00:05 -0800 PST 2018")
+	timestamp, err := time.Parse("Mon Jan 2 15:04:05 -0700 MST 2006", "Wed Jul 3 12:00:05 -0700 PDT 2018")
 	assert.Nil(t, err)
 	// should be three hours, four minutes behind our nowTime
-	expected, err := time.Parse("Mon Jan 2 15:04:05 -0700 MST 2006", "Wed Jul 4 08:56:00 -0800 PST 2018")
+	expected, err := time.Parse("Mon Jan 2 15:04:05 -0700 MST 2006", "Wed Jul 4 08:56:00 -0700 PDT 2018")
 	assert.Nil(t, err)
 	rebasedTime := rebaseTime(baseTime, nowTime, timestamp)
 	assert.Equal(t, expected, rebasedTime)
@@ -685,10 +685,10 @@ func TestRebaseTime(t *testing.T) {
 
 func TestGetBaseTime(t *testing.T) {
 	fileContents := `
-{"key1": "value1", "timestamp": "Wed Jul 3 12:00:05 -0800 PST 2018"}
-{"key1": "value2", "timestamp": "Wed Jul 3 13:00:05 -0800 PST 2018"}
-{"key1": "value3", "timestamp": "Wed Jul 3 14:00:05 -0800 PST 2018"}
-{"key1": "value4", "timestamp": "Wed Jul 3 15:04:05 -0800 PST 2018"}
+{"key1": "value1", "timestamp": "Wed Jul 3 12:00:05 -0700 PDT 2018"}
+{"key1": "value2", "timestamp": "Wed Jul 3 13:00:05 -0700 PDT 2018"}
+{"key1": "value3", "timestamp": "Wed Jul 3 14:00:05 -0700 PDT 2018"}
+{"key1": "value4", "timestamp": "Wed Jul 3 15:04:05 -0700 PDT 2018"}
 `
 
 	f, err := ioutil.TempFile(os.TempDir(), "honeytail-test")
@@ -709,9 +709,9 @@ func TestGetBaseTime(t *testing.T) {
 		},
 	}
 
-	expected, err := time.Parse("Mon Jan 2 15:04:05 -0700 MST 2006", "Wed Jul 3 15:04:05 -0800 PST 2018")
+	expected, err := time.Parse("Mon Jan 2 15:04:05 -0700 MST 2006", "Wed Jul 3 15:04:05 -0700 PDT 2018")
 	assert.Nil(t, err)
 	baseTime, err := getBaseTime(options)
 	assert.Nil(t, err)
-	assert.Equal(t, expected, baseTime)
+	assert.Equal(t, expected.UTC(), baseTime.UTC())
 }

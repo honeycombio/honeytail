@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -9,6 +10,7 @@ import (
 	"math/rand"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -319,6 +321,17 @@ func modifyEventContents(toBeSent chan event.Event, options GlobalOptions) chan 
 			logrus.WithField("error", err).Fatal("failed to unmarshal Data Augmentation Map from JSON")
 		}
 	}
+
+	var baseTime, startTime time.Time
+	if options.RebaseTime {
+		var err error
+		baseTime, err = getBaseTime(options)
+		if err != nil {
+			logrus.WithError(err).Fatal("--rebase_time specified but cannot rebase")
+		}
+		startTime = time.Now()
+	}
+
 	// ok, we need to munge events. Sing up enough goroutines to handle this
 	newSent := make(chan event.Event, options.NumSenders)
 	go func() {
@@ -387,6 +400,9 @@ func modifyEventContents(toBeSent chan event.Event, options GlobalOptions) chan 
 								ev.SampleRate = -1
 							}
 						}
+					}
+					if options.RebaseTime {
+						ev.Timestamp = rebaseTime(baseTime, startTime, ev.Timestamp)
 					}
 					newSent <- ev
 				}
@@ -604,4 +620,94 @@ func logStats(stats *responseStats, interval uint) {
 	for range ticker.C {
 		stats.logAndReset()
 	}
+}
+
+func getBaseTime(options GlobalOptions) (time.Time, error) {
+	var baseTime time.Time
+
+	// support multiple files and globs, although this is unlikely to be used
+	searchFiles := []string{}
+	for _, f := range options.Reqs.LogFiles {
+		// can't work with stdin
+		if f == "-" {
+			continue
+		}
+		// can't work with files that don't exist
+		if files, err := filepath.Glob(f); err == nil && files != nil {
+			searchFiles = append(searchFiles, files...)
+		}
+	}
+	if len(searchFiles) == 0 {
+		return baseTime, fmt.Errorf("unable to get base time, no files found")
+	}
+
+	// we're going to have to parse lines, so get an instance of the parser
+	parser, parserOpts := getParserAndOptions(options)
+	parser.Init(parserOpts)
+	lines := make(chan string)
+	events := make(chan event.Event)
+	var prefixRegex *parsers.ExtRegexp
+	if options.PrefixRegex == "" {
+		prefixRegex = nil
+	} else {
+		prefixRegex = &parsers.ExtRegexp{regexp.MustCompile(options.PrefixRegex)}
+	}
+	// read each file, throw the last line on the lines channel
+	go getEndLines(searchFiles, lines)
+	// the parser will parse each line and give us an event
+	go func() {
+		// ProcessLines will stop when the lines channel closes
+		parser.ProcessLines(lines, events, prefixRegex)
+		// Signal that we're done sending events
+		close(events)
+	}()
+
+	// we read the event and find the latest timestamp
+	// this is our base time (assuming the input files are sorted by time,
+	// otherwise we'd have to parse *everything*)
+	for ev := range events {
+		if ev.Timestamp.After(baseTime) {
+			baseTime = ev.Timestamp
+		}
+	}
+
+	return baseTime, nil
+}
+
+func getEndLines(files []string, lines chan<- string) {
+	for _, f := range files {
+		lines <- getEndLine(f)
+	}
+
+	close(lines)
+}
+
+func getEndLine(file string) string {
+	handle, err := os.Open(file)
+	if err != nil {
+		logrus.WithError(err).WithField("file", file).
+			Fatal("unable to open file")
+	}
+	defer handle.Close()
+	// we use a scanner to read to the last line
+	// not the most efficient
+	scanner := bufio.NewScanner(handle)
+	var line string
+	for scanner.Scan() {
+		line = scanner.Text()
+	}
+
+	if scanner.Err() != nil {
+		logrus.WithError(err).WithField("file", file).
+			Fatal("unable to read to end of file")
+	}
+
+	return line
+}
+
+func rebaseTime(baseTime, startTime, timestamp time.Time) time.Time {
+	// Figure out the gap between the event and the end of our event window
+	delta := baseTime.UnixNano() - timestamp.UnixNano()
+	// Create a new time relative to the current time
+	return startTime.Add(time.Duration(delta) * time.Duration(-1))
 }

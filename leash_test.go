@@ -15,8 +15,11 @@ import (
 	"os"
 	"os/exec"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
+
+	"github.com/honeycombio/honeytail/parsers/htjson"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -646,4 +649,69 @@ func expectWithTimeout(condition func() bool, timeout time.Duration) bool {
 	}
 	return false
 
+}
+
+func TestGetEndLine(t *testing.T) {
+	fileContents := `
+{"key1": "value1"}
+{"key1": "value2"}
+{"key1": "value3"}
+{"key1": "END"}`
+
+	f, err := ioutil.TempFile(os.TempDir(), "honeytail-test")
+	assert.Nil(t, err, "failed to open temp file")
+	_, err = f.WriteString(fileContents)
+	assert.Nil(t, err, "failed to write temp file")
+	f.Close()
+	defer syscall.Unlink(f.Name())
+
+	line := getEndLine(f.Name())
+	assert.Equal(t, `{"key1": "END"}`, line)
+}
+
+func TestRebaseTime(t *testing.T) {
+	baseTime, err := time.Parse("Mon Jan 2 15:04:05 -0700 MST 2006", "Wed Jul 3 15:04:05 -0800 PST 2018")
+	assert.Nil(t, err)
+	nowTime, err := time.Parse("Mon Jan 2 15:04:05 -0700 MST 2006", "Wed Jul 4 12:00:00 -0800 PST 2018")
+	assert.Nil(t, err)
+	timestamp, err := time.Parse("Mon Jan 2 15:04:05 -0700 MST 2006", "Wed Jul 3 12:00:05 -0800 PST 2018")
+	assert.Nil(t, err)
+	// should be three hours, four minutes behind our nowTime
+	expected, err := time.Parse("Mon Jan 2 15:04:05 -0700 MST 2006", "Wed Jul 4 08:56:00 -0800 PST 2018")
+	assert.Nil(t, err)
+	rebasedTime := rebaseTime(baseTime, nowTime, timestamp)
+	assert.Equal(t, expected, rebasedTime)
+}
+
+func TestGetBaseTime(t *testing.T) {
+	fileContents := `
+{"key1": "value1", "timestamp": "Wed Jul 3 12:00:05 -0800 PST 2018"}
+{"key1": "value2", "timestamp": "Wed Jul 3 13:00:05 -0800 PST 2018"}
+{"key1": "value3", "timestamp": "Wed Jul 3 14:00:05 -0800 PST 2018"}
+{"key1": "value4", "timestamp": "Wed Jul 3 15:04:05 -0800 PST 2018"}
+`
+
+	f, err := ioutil.TempFile(os.TempDir(), "honeytail-test")
+	assert.Nil(t, err, "failed to open temp file")
+	_, err = f.WriteString(fileContents)
+	assert.Nil(t, err, "failed to write temp file")
+	f.Close()
+	defer syscall.Unlink(f.Name())
+
+	options := GlobalOptions{
+		Reqs: RequiredOptions{
+			LogFiles:   []string{f.Name()},
+			ParserName: "json",
+		},
+		JSON: htjson.Options{
+			TimeFieldFormat: "Mon Jan 2 15:04:05 -0700 MST 2006",
+			TimeFieldName:   "timestamp",
+		},
+	}
+
+	expected, err := time.Parse("Mon Jan 2 15:04:05 -0700 MST 2006", "Wed Jul 3 15:04:05 -0800 PST 2018")
+	assert.Nil(t, err)
+	baseTime, err := getBaseTime(options)
+	assert.Nil(t, err)
+	assert.Equal(t, expected, baseTime)
 }

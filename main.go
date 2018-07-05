@@ -62,6 +62,7 @@ type GlobalOptions struct {
 	DebugOut         bool `long:"debug_stdout" description:"Instead of sending events to Honeycomb, print them to STDOUT for debugging"`
 	StatusInterval   uint `long:"status_interval" description:"How frequently, in seconds, to print out summary info" default:"60"`
 	Backfill         bool `long:"backfill" description:"Configure honeytail to ingest old data in order to backfill Honeycomb. Sets the correct values for --backoff, --tail.read_from, and --tail.stop"`
+	RebaseTime       bool `long:"rebase_time" description:"When backfilling data, rebase timestamps relative to the current time."`
 
 	Localtime           bool     `long:"localtime" description:"When parsing a timestamp that has no time zone, assume it is in the same timezone as localhost instead of UTC (the default)"`
 	Timezone            string   `long:"timezone" description:"When parsing a timestamp use this time zone instead of UTC (the default). Must be specified in TZ format as seen here: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones"`

@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"math/rand"
 	"os"
@@ -689,6 +690,22 @@ func getEndLine(file string) string {
 			Fatal("unable to open file")
 	}
 	defer handle.Close()
+
+	info, err := os.Stat(file)
+	if err != nil {
+		logrus.WithError(err).WithField("file", file).
+			Fatal("unable to stat file")
+	}
+	// If we're bigger than 2m, zoom to the end of the file and go back 1mb
+	// 2m is an arbitrary limit
+	if info.Size() > 2*1024*1024 {
+		_, err := handle.Seek(-1024*1024, io.SeekEnd)
+		if err != nil {
+			logrus.WithError(err).WithField("file", file).
+				Fatal("unable to seek to last megabyte of file")
+		}
+	}
+
 	// we use a scanner to read to the last line
 	// not the most efficient
 	scanner := bufio.NewScanner(handle)

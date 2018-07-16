@@ -1,5 +1,6 @@
 os:
   - linux
+  - osx
 
 language: go
 
@@ -12,7 +13,7 @@ addons:
 dist: trusty
 
 go:
-    - 1.8
+    - "1.10"
 
 script:
     - set -e
@@ -28,9 +29,9 @@ script:
 
 before_install:
     # Install fpm for deb/rpm package building
-    - sudo apt-get -qq update
-    - sudo apt-get install -y build-essential rpm
-    - gem install fpm
+    - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then sudo apt-get -qq update; fi
+    - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then sudo apt-get install -y build-essential rpm; fi
+    - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then gem install fpm; fi
 
 install:
         - true # HACK: fixes travis-CI lack of support for vendor/ + godeps

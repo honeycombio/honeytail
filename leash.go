@@ -377,28 +377,45 @@ func modifyEventContents(toBeSent chan event.Event, options GlobalOptions) chan 
 					for k, v := range parsedAddFields {
 						ev.Data[k] = v
 					}
-					ev.SampleRate = int(options.SampleRate)
-					if dynamicSampler != nil {
-						key := makeDynsampleKey(&ev, options)
-						sr := dynamicSampler.GetSampleRate(key)
-						if rand.Intn(sr) != 0 {
-							ev.SampleRate = -1
-						} else {
-							ev.SampleRate = sr
-						}
-					}
-					if deterministicSampler != nil {
-						sampleKey, ok := ev.Data[options.DeterministicSample].(string)
-						if !ok {
-							logrus.WithField("event_data", ev.Data).
-								WithField("field", options.DeterministicSample).
-								Error("Field to deterministically sample on does not exist in event, leaving it to random chance")
-							if rand.Intn(int(options.SampleRate)) != 0 {
-								ev.SampleRate = -1
+					// get presampled field if it exists
+					if options.PreSampledField != "" {
+						var presampledRate int
+						if psr, ok := ev.Data[options.PreSampledField]; ok {
+							switch psr := psr.(type) {
+							case float64:
+								presampledRate = int(psr)
+							case string:
+								if val, err := strconv.Atoi(psr); err == nil {
+									presampledRate = val
+								}
 							}
-						} else {
-							if !deterministicSampler.Sample(sampleKey) {
+						}
+						ev.SampleRate = presampledRate
+					} else {
+						// do sampling
+						ev.SampleRate = int(options.SampleRate)
+						if dynamicSampler != nil {
+							key := makeDynsampleKey(&ev, options)
+							sr := dynamicSampler.GetSampleRate(key)
+							if rand.Intn(sr) != 0 {
 								ev.SampleRate = -1
+							} else {
+								ev.SampleRate = sr
+							}
+						}
+						if deterministicSampler != nil {
+							sampleKey, ok := ev.Data[options.DeterministicSample].(string)
+							if !ok {
+								logrus.WithField("event_data", ev.Data).
+									WithField("field", options.DeterministicSample).
+									Error("Field to deterministically sample on does not exist in event, leaving it to random chance")
+								if rand.Intn(int(options.SampleRate)) != 0 {
+									ev.SampleRate = -1
+								}
+							} else {
+								if !deterministicSampler.Sample(sampleKey) {
+									ev.SampleRate = -1
+								}
 							}
 						}
 					}

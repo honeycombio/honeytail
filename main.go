@@ -80,6 +80,7 @@ type GlobalOptions struct {
 	DeterministicSample string   `long:"deterministic_sampling" description:"Specify a field to deterministically sample on, i.e., every concurrent Honeytail instance will sample 1/N based on content."`
 	DynSample           []string `long:"dynsampling" description:"enable dynamic sampling using the field listed in this option. May be specified multiple times; fields will be concatenated to form the dynsample key. WARNING increases CPU utilization dramatically over normal sampling"`
 	DynWindowSec        int      `long:"dynsample_window" description:"measurement window size for the dynsampler, in seconds" default:"30"`
+	PreSampledField     string   `long:"presampled" description:"If this log has already been sampled, specify the field containing the sample rate here and it will be passed along unchanged"`
 	GoalSampleRate      int      `hidden:"true" description:"used to hold the desired sample rate and set tailing sample rate to 1"`
 	MinSampleRate       int      `long:"dynsample_minimum" description:"if the rate of traffic falls below this, dynsampler won't sample" default:"1"`
 
@@ -296,6 +297,14 @@ func sanityCheckOptions(options *GlobalOptions) {
 		os.Exit(1)
 	case len(options.DynSample) != 0 && options.DeterministicSample != "":
 		fmt.Println("dynamic sampling and deterministic sampling cannot be used together")
+		usage()
+		os.Exit(1)
+	case options.DeterministicSample != "" && options.PreSampledField != "":
+		fmt.Println("deterministic sampling and a presampled field cannot be used together")
+		usage()
+		os.Exit(1)
+	case options.SampleRate != 1 && options.PreSampledField != "":
+		fmt.Println("sampling and a presampled field cannot be used together")
 		usage()
 		os.Exit(1)
 	}

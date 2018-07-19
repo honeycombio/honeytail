@@ -22,10 +22,10 @@ script:
 # Build binary and packages
     - go install -ldflags "-X main.BuildID=1.${TRAVIS_BUILD_NUMBER}" github.com/honeycombio/honeytail/...
     - $GOPATH/bin/honeytail --write_default_config > ./honeytail.conf
-    - ./build-pkg.sh -v "1.${TRAVIS_BUILD_NUMBER}" -t deb
-    - ./build-pkg.sh -v "1.${TRAVIS_BUILD_NUMBER}" -t rpm
+    - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then ./build-pkg.sh -v "1.${TRAVIS_BUILD_NUMBER}" -t deb; fi
+    - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then ./build-pkg.sh -v "1.${TRAVIS_BUILD_NUMBER}" -t rpm; fi
 # Check that packages install
-    - pkg-test/test.sh "1.${TRAVIS_BUILD_NUMBER}"
+    - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then pkg-test/test.sh "1.${TRAVIS_BUILD_NUMBER}"; fi
 
 before_install:
     # Install fpm for deb/rpm package building

@@ -10,9 +10,22 @@ import (
 )
 
 const (
-	StrftimeChar     = "%"
-	UnixTimestampFmt = "%s(%L)?"
+	StrftimeChar        = "%"
+	UnixTimestampFmt    = "%s(%L)?"
+	UnixTimestampFmtAlt = "%s(.%L)?"
 )
+
+// TODO UnixTimestampFmt is not a regex - it shouldn't look like one. Also even
+// if it were a regex it would be wrong because it's expecting a dot between the
+// seconds and fractional seconds, eg `%s(.%L)?`. But just changing it would
+// break anybody that is using the magical  string `%s(%L)?` as their timestamp
+// in order to enable this magical behavior. Is anybody doing that? Who can
+// know? Introducing UnixTimestampFmtAlt gets it closer to what it's actually
+// representing, except that it's not actually _just_ milliseconds, it's
+// actually any fraction. Which can't really be represented using either
+// strftime or go's time format. Ugh.  Time!! Everything is terrible. Maybe this
+// magical string should just be "UnixEpochDecimal" instead to make clear it's
+// something special?
 
 var (
 	// DefaultNower returns current time when called with Now() unless overridden
@@ -174,19 +187,14 @@ func tryTimeFormats(t, intendedFormat string) time.Time {
 	// hack it by just replacing all commas with periods and hope it works out.
 	// https://github.com/golang/go/issues/6189
 	t = strings.Replace(t, ",", ".", -1)
-	if intendedFormat == UnixTimestampFmt {
+	if (intendedFormat == UnixTimestampFmt) || (intendedFormat == UnixTimestampFmtAlt) {
 		if unix, err := strconv.ParseInt(t, 0, 64); err == nil {
 			return time.Unix(unix, 0)
 		}
-		// millis
+		// fractional seconds eg 12345678.890123
 		if unix, err := strconv.ParseFloat(t, 64); err == nil {
-			splitStr := strings.Split(t, ".")
-			if len(splitStr) == 2 && len(splitStr[1]) == 3 {
-				floatPart, err := strconv.ParseInt(splitStr[1], 10, 64)
-				if err == nil {
-					return time.Unix(int64(math.Trunc(unix)), floatPart*int64(time.Millisecond))
-				}
-			}
+			sec, dec := math.Modf(unix)
+			return time.Unix(int64(sec), int64(dec*(1e9)))
 		}
 	}
 	if intendedFormat != "" {

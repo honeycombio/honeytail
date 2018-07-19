@@ -153,7 +153,7 @@ var tts = []testTimestamp{
 		diffThreshold: time.Millisecond,
 	},
 	{
-		format:        UnixTimestampFmt,
+		format:        UnixTimestampFmtAlt,
 		fieldName:     "time",
 		input:         "1440116565.123456",
 		tz:            utc,
@@ -161,7 +161,7 @@ var tts = []testTimestamp{
 		diffThreshold: time.Microsecond,
 	},
 	{
-		format:        UnixTimestampFmt,
+		format:        UnixTimestampFmtTxt,
 		fieldName:     "time",
 		input:         "1440116565.12345678",
 		tz:            utc,

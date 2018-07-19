@@ -13,6 +13,7 @@ const (
 	StrftimeChar        = "%"
 	UnixTimestampFmt    = "%s(%L)?"
 	UnixTimestampFmtAlt = "%s(.%L)?"
+	UnixTimestampFmtTxt = "unixepoch"
 )
 
 // TODO UnixTimestampFmt is not a regex - it shouldn't look like one. Also even
@@ -187,7 +188,9 @@ func tryTimeFormats(t, intendedFormat string) time.Time {
 	// hack it by just replacing all commas with periods and hope it works out.
 	// https://github.com/golang/go/issues/6189
 	t = strings.Replace(t, ",", ".", -1)
-	if (intendedFormat == UnixTimestampFmt) || (intendedFormat == UnixTimestampFmtAlt) {
+	if (intendedFormat == UnixTimestampFmt) ||
+		(intendedFormat == UnixTimestampFmtAlt) ||
+		(intendedFormat == UnixTimestampFmtTxt) {
 		if unix, err := strconv.ParseInt(t, 0, 64); err == nil {
 			return time.Unix(unix, 0)
 		}

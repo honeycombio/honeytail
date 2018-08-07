@@ -64,7 +64,7 @@
 		},
 		{
 			"ImportPath": "github.com/honeycombio/mysqltools/query/normalizer",
-			"Rev": "8faf3147a35bfe18a56b0894412c0b19460b7fae"
+			"Rev": "58ac8748fdae12b4cb7f9b2d4a32cf0139f627a6"
 		},
 		{
 			"ImportPath": "github.com/honeycombio/sqlparser",
@@ -174,9 +174,9 @@
 			"Rev": "0e4ae46ea3f08de351074b643d649d5d00661a3c"
 		},
 		{
-				"ImportPath": "launchpad.net/gocheck",
-				"Comment": "87",
-				"Rev": "gustavo@niemeyer.net-20140225173054-xu9zlkf9kxhvow02"
+			"ImportPath": "launchpad.net/gocheck",
+			"Comment": "87",
+			"Rev": "gustavo@niemeyer.net-20140225173054-xu9zlkf9kxhvow02"
 		}
 	]
 }

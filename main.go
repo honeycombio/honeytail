@@ -83,6 +83,7 @@ type GlobalOptions struct {
 	PreSampledField     string   `long:"presampled" description:"If this log has already been sampled, specify the field containing the sample rate here and it will be passed along unchanged"`
 	GoalSampleRate      int      `hidden:"true" description:"used to hold the desired sample rate and set tailing sample rate to 1"`
 	MinSampleRate       int      `long:"dynsample_minimum" description:"if the rate of traffic falls below this, dynsampler won't sample" default:"1"`
+	JSONFields          []string `long:"json_field" description:"JSON fields encoded as string to unescape and properly parse before sending"`
 
 	Reqs  RequiredOptions `group:"Required Options"`
 	Modes OtherModes      `group:"Other Modes"`

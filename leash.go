@@ -422,6 +422,24 @@ func modifyEventContents(toBeSent chan event.Event, options GlobalOptions) chan 
 					if options.RebaseTime {
 						ev.Timestamp = rebaseTime(baseTime, startTime, ev.Timestamp)
 					}
+					if len(options.JSONFields) > 0 {
+						for _, field := range options.JSONFields {
+							jsonVal, ok := ev.Data[field].(string)
+							if !ok {
+								logrus.WithField("field", field).
+									Warn("Error asserting given field as string")
+								continue
+							}
+							var jsonMap map[string]interface{}
+							if err := json.Unmarshal([]byte(jsonVal), &jsonMap); err != nil {
+								logrus.WithField("field", field).
+									Warn("Error unmarshalling field as JSON")
+								continue
+							}
+
+							ev.Data[field] = jsonMap
+						}
+					}
 					newSent <- ev
 				}
 				wg.Done()

@@ -47,6 +47,10 @@ type TailOptions struct {
 type Config struct {
 	// Path to the log file to tail
 	Paths []string
+
+	// Paths to exclude from tailing
+	FilterPaths []string
+
 	// Type of log rotation we expect on this file
 	Type RotateStyle
 	// Tail specific options
@@ -117,6 +121,7 @@ func GetEntries(ctx context.Context, conf Config) ([]chan string, error) {
 				return nil, err
 			}
 			files = removeStateFiles(files, conf)
+			files = removeFilteredPaths(files, conf.FilterPaths)
 			filenames = append(filenames, files...)
 		}
 	}
@@ -166,6 +171,35 @@ func removeStateFiles(files []string, conf Config) []string {
 		// great! it's not a state file. let's use it.
 		newFiles = append(newFiles, file)
 	}
+	return newFiles
+}
+
+func removeFilteredPaths(files []string, filteredPaths []string) []string {
+	newFiles := []string{}
+
+	for _, file := range files {
+		shouldRemove := false
+		for _, filteredPath := range filteredPaths {
+			if matched, err := filepath.Match(filteredPath, file); err != nil {
+				logrus.WithError(err).WithFields(logrus.Fields{
+					"file":   file,
+					"filter": filteredPath,
+				}).Warn("unable to compare file with filter, will exclude file")
+				shouldRemove = true
+				continue
+			} else if matched {
+				logrus.WithFields(logrus.Fields{
+					"file":   file,
+					"filter": filteredPath,
+				}).Info("removing file as it matches filter")
+				shouldRemove = true
+			}
+		}
+		if !shouldRemove {
+			newFiles = append(newFiles, file)
+		}
+	}
+
 	return newFiles
 }
 

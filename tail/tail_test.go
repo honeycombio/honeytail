@@ -232,6 +232,38 @@ func TestRemoveStateFiles(t *testing.T) {
 	}
 }
 
+func TestRemoveFilteredPaths(t *testing.T) {
+	files := []string{
+		"/var/log/exactmatch.log",
+		"foo.1",
+		"foo.2",
+		"foobar.1",
+		"foobar.2",
+		"barfoo.1",
+		"xyz",
+		"/var/log/123_something.log",
+		"/var/log/321_something.log",
+		"/var/log/123_somethingelse.log",
+	}
+	filters := []string{
+		"/var/log/exactmatch.log",
+		"/var/log/nothing.log",
+		"foo*",
+		"zbarfoo*",
+		"abc",
+		"/var/log/*something.log",
+	}
+	expected := []string{
+		"barfoo.1",
+		"xyz",
+		"/var/log/123_somethingelse.log",
+	}
+
+	filtered := removeFilteredPaths(files, filters)
+	if !reflect.DeepEqual(filtered, expected) {
+		t.Errorf("expected %v, instead got %v", expected, filtered)
+	}
+}
 func TestGetStateFile(t *testing.T) {
 	ts := &testSetup{}
 	ts.start(t)

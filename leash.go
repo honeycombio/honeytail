@@ -90,9 +90,10 @@ func run(ctx context.Context, options GlobalOptions) {
 	var linesChans []chan string
 	var err error
 	tc := tail.Config{
-		Paths:   options.Reqs.LogFiles,
-		Type:    tail.RotateStyleSyslog,
-		Options: options.Tail,
+		Paths:       options.Reqs.LogFiles,
+		FilterPaths: options.FilterFiles,
+		Type:        tail.RotateStyleSyslog,
+		Options:     options.Tail,
 	}
 	if options.TailSample {
 		linesChans, err = tail.GetSampledEntries(ctx, tc, options.SampleRate)

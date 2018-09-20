@@ -5,15 +5,15 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/Sirupsen/logrus"
-	"github.com/honeycombio/libhoney-go"
-	flag "github.com/jessevdk/go-flags"
-
+	"github.com/fsnotify/fsnotify"
 	"github.com/honeycombio/honeytail/httime"
 	"github.com/honeycombio/honeytail/parsers/arangodb"
 	"github.com/honeycombio/honeytail/parsers/csv"
@@ -26,6 +26,8 @@ import (
 	"github.com/honeycombio/honeytail/parsers/regex"
 	"github.com/honeycombio/honeytail/parsers/syslog"
 	"github.com/honeycombio/honeytail/tail"
+	"github.com/honeycombio/libhoney-go"
+	flag "github.com/jessevdk/go-flags"
 )
 
 // BuildID is set by Travis CI
@@ -188,7 +190,70 @@ func main() {
 		fmt.Fprintln(os.Stderr, "Could not verify Honeycomb write key: ", err)
 		os.Exit(1)
 	}
-	run(context.Background(), options)
+
+	filewatcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error getting FS watcher: %s", err)
+		os.Exit(1)
+	}
+
+	for _, file := range options.Reqs.LogFiles {
+		// Only watch if we're globbing
+		if strings.Contains(file, "*") {
+			dir := filepath.Dir(file)
+			logrus.WithFields(logrus.Fields{
+				"glob": file,
+				"dir":  dir,
+			}).Debug("Watching directory for changes due to glob")
+			if err := filewatcher.Add(dir); err != nil {
+				fmt.Fprintf(os.Stderr, "Error watching directory %q: %s", dir, err)
+				os.Exit(1)
+			}
+		}
+	}
+
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	ctx, cancel := context.WithCancel(context.Background())
+	doneCh := make(chan struct{})
+
+	// set up our signal handler and support canceling
+	go func() {
+		sig := <-sigs
+		fmt.Fprintf(os.Stderr, "Aborting! Caught signal \"%s\"\n", sig)
+		fmt.Fprintf(os.Stderr, "Cleaning up...\n")
+		go func() {
+			cancel()
+			doneCh <- struct{}{}
+		}()
+		// and if they insist, catch a second CTRL-C or timeout on 10sec
+		select {
+		case <-sigs:
+			fmt.Fprintf(os.Stderr, "Caught second signal... Aborting.\n")
+			os.Exit(1)
+		case <-time.After(10 * time.Second):
+			fmt.Fprintf(os.Stderr, "Taking too long... Aborting.\n")
+			os.Exit(1)
+		}
+	}()
+	go run(ctx, cancel, options, doneCh)
+
+	for {
+		select {
+		case fsEvent := <-filewatcher.Events:
+			logrus.Info(fsEvent)
+			if fsEvent.Op == fsnotify.Create {
+				//todo: change back to debug
+				logrus.WithField("filename", fsEvent.Name).Debug("Detected a new file, re-initializing")
+				cancel()
+				ctx, cancel = context.WithCancel(context.Background())
+				go run(ctx, cancel, options, doneCh)
+			}
+		case <-doneCh:
+			logrus.Info("Honeytail is all done, goodbye!")
+			os.Exit(0)
+		}
+	}
 }
 
 // setVersion sets the internal version ID and updates libhoney's user-agent

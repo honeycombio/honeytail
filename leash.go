@@ -641,6 +641,7 @@ func logStats(ctx context.Context, stats *responseStats, interval uint) {
 	for {
 		select {
 		case <-ctx.Done():
+			stats.logAndReset()
 			return
 		case <-ticker.C:
 			stats.logAndReset()

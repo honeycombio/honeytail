@@ -10,14 +10,12 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/Sirupsen/logrus"
@@ -41,15 +39,11 @@ import (
 	"github.com/honeycombio/honeytail/tail"
 )
 
-// actually go and be leashy
-func run(ctx context.Context, options GlobalOptions) {
+// Unleash... the parsers.
+func run(ctx context.Context, cancel context.CancelFunc, options GlobalOptions, doneCh chan<- struct{}) {
 	logrus.Info("Starting honeytail")
 
 	stats := newResponseStats()
-
-	sigs := make(chan os.Signal, 1)
-	ctx, cancel := context.WithCancel(ctx)
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 
 	// spin up our transmission to send events to Honeycomb
 	libhConfig := libhoney.Config{
@@ -105,23 +99,6 @@ func run(ctx context.Context, options GlobalOptions) {
 			"Error occurred while trying to tail logfile")
 	}
 
-	// set up our signal handler and support canceling
-	go func() {
-		sig := <-sigs
-		fmt.Fprintf(os.Stderr, "Aborting! Caught signal \"%s\"\n", sig)
-		fmt.Fprintf(os.Stderr, "Cleaning up...\n")
-		cancel()
-		// and if they insist, catch a second CTRL-C or timeout on 10sec
-		select {
-		case <-sigs:
-			fmt.Fprintf(os.Stderr, "Caught second signal... Aborting.\n")
-			os.Exit(1)
-		case <-time.After(10 * time.Second):
-			fmt.Fprintf(os.Stderr, "Taking too long... Aborting.\n")
-			os.Exit(1)
-		}
-	}()
-
 	// for each channel we got back from tail.GetEntries, spin up a parser.
 	parsersWG := sync.WaitGroup{}
 	responsesWG := sync.WaitGroup{}
@@ -158,10 +135,15 @@ func run(ctx context.Context, options GlobalOptions) {
 			for i := uint(0); i < options.NumSenders; i++ {
 				wg.Add(1)
 				go func() {
+					defer wg.Done()
+					select {
+					case <-ctx.Done():
+						return
+					default:
+					}
 					for ev := range modifiedToBeSent {
 						realToBeSent <- ev
 					}
-					wg.Done()
 				}()
 			}
 			wg.Wait()
@@ -176,7 +158,7 @@ func run(ctx context.Context, options GlobalOptions) {
 		responses := libhoney.Responses()
 		responsesWG.Add(1)
 		go func() {
-			handleResponses(responses, stats, toBeResent, delaySending, options)
+			handleResponses(ctx, responses, stats, toBeResent, delaySending, options)
 			responsesWG.Done()
 		}()
 
@@ -192,15 +174,14 @@ func run(ctx context.Context, options GlobalOptions) {
 		}(lines)
 	}
 	parsersWG.Wait()
-	// tell libhoney to finish up sending events
-	libhoney.Close()
 	// print out what we've done one last time
 	responsesWG.Wait()
+	libhoney.Close()
 	stats.log()
 	stats.logFinal()
-
-	// Nothing bad happened, yay
-	logrus.Info("Honeytail is all done, goodbye!")
+	if options.Tail.Stop {
+		doneCh <- struct{}{}
+	}
 }
 
 // getParserOptions takes a parser name and the global options struct
@@ -575,6 +556,9 @@ func sendToLibhoney(ctx context.Context, toBeSent chan event.Event, toBeResent c
 		}
 		// otherwise pick something up off the regular queue and send it
 		select {
+		case <-ctx.Done():
+			doneSending <- true
+			return
 		case ev, ok := <-toBeSent:
 			if !ok {
 				// channel is closed
@@ -620,10 +604,10 @@ func sendEvent(ev event.Event) {
 
 // handleResponses reads from the response queue, logging a summary and debug
 // re-enqueues any events that failed to send in a retryable way
-func handleResponses(responses chan libhoney.Response, stats *responseStats,
+func handleResponses(ctx context.Context, responses chan libhoney.Response, stats *responseStats,
 	toBeResent chan event.Event, delaySending chan int,
 	options GlobalOptions) {
-	go logStats(stats, options.StatusInterval)
+	go logStats(ctx, stats, options.StatusInterval)
 
 	for rsp := range responses {
 		stats.update(rsp)
@@ -647,15 +631,21 @@ func handleResponses(responses chan libhoney.Response, stats *responseStats,
 }
 
 // logStats dumps and resets the stats once every minute
-func logStats(stats *responseStats, interval uint) {
+func logStats(ctx context.Context, stats *responseStats, interval uint) {
 	logrus.Debugf("Initializing stats reporting. Will print stats once/%d seconds", interval)
 	if interval == 0 {
 		// interval of 0 means don't print summary status
 		return
 	}
 	ticker := time.NewTicker(time.Second * time.Duration(interval))
-	for range ticker.C {
-		stats.logAndReset()
+	for {
+		select {
+		case <-ctx.Done():
+			stats.logAndReset()
+			return
+		case <-ticker.C:
+			stats.logAndReset()
+		}
 	}
 }
 

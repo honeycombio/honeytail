@@ -220,15 +220,11 @@ func tailSingleFile(ctx context.Context, tailer *tail.Tail, file string, stateFi
 	ticker := time.NewTicker(time.Second)
 	state := State{}
 	go func() {
-		for range ticker.C {
-			updateStateFile(&state, tailer, file, stateFh)
-		}
-	}()
-
-	go func() {
 	ReadLines:
 		for {
 			select {
+			case <-ticker.C:
+				updateStateFile(&state, tailer, file, stateFh)
 			case line, ok := <-tailer.Lines:
 				if !ok {
 					// tailer.Lines is closed

@@ -289,6 +289,17 @@ func tailStdIn(ctx context.Context) chan string {
 func getStartLocation(stateFile string, logfile string) *tail.SeekInfo {
 	beginning := &tail.SeekInfo{}
 	end := &tail.SeekInfo{0, 2}
+
+	if _, err := os.Stat(stateFile); os.IsNotExist(err) {
+		logrus.WithFields(logrus.Fields{
+			"state_file": stateFile,
+			"log_file":   logfile,
+		}).Debug("getStartLocation found no state file, starting at the beginning")
+
+		// empty means start at beginning
+		return &tail.SeekInfo{}
+	}
+
 	fh, err := os.Open(stateFile)
 	if err != nil {
 		logrus.WithFields(logrus.Fields{

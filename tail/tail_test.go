@@ -20,6 +20,13 @@ var tailOpts = TailOptions{
 	Stop:     true,
 }
 
+func TestGetStartLocationNoStateFile(t *testing.T) {
+	seekInfo := getStartLocation("/tmp/something.log.leash.state", "/var/log/something.log")
+	if !(seekInfo.Offset == 0 && seekInfo.Whence == 0) {
+		t.Fatal("Should start at the beginning of the log file if the test file doesn't exist")
+	}
+}
+
 func TestTailSingleFile(t *testing.T) {
 	ts := &testSetup{}
 	ts.start(t)

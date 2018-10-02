@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Sirupsen/logrus"
@@ -59,41 +60,52 @@ type Config struct {
 
 // State is what's stored in a statefile
 type State struct {
+	sync.Mutex
 	INode  uint64 // the inode
 	Offset int64
 }
 
-// GetSampledEntries wraps GetEntries and returns a list of channels that
-// provide sampled entries
-func GetSampledEntries(ctx context.Context, conf Config, sampleRate uint) ([]chan string, error) {
-	unsampledLinesChans, err := GetEntries(ctx, conf)
-	if err != nil {
-		return nil, err
-	}
-	if sampleRate == 1 {
-		return unsampledLinesChans, nil
-	}
-
-	sampledLinesChans := make([]chan string, 0, len(unsampledLinesChans))
-
-	for _, lines := range unsampledLinesChans {
-		sampledLines := make(chan string)
-		go func(pLines chan string) {
-			defer close(sampledLines)
-			for line := range pLines {
-				if shouldDrop(sampleRate) {
-					logrus.WithFields(logrus.Fields{
-						"line":       line,
-						"samplerate": sampleRate,
-					}).Debug("Sampler says skip this line")
-				} else {
-					sampledLines <- line
-				}
+// sampleLines takes in one channel
+func sampleLines(ctx context.Context, sampleRate uint, unsampledLines <-chan string, sampledLines chan<- string) {
+	defer close(sampledLines)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case line, ok := <-unsampledLines:
+			if !ok {
+				return
 			}
-		}(lines)
-		sampledLinesChans = append(sampledLinesChans, sampledLines)
+			if shouldDrop(sampleRate) {
+				logrus.WithFields(logrus.Fields{
+					"line":       line,
+					"samplerate": sampleRate,
+				}).Debug("Sampler says skip this line")
+			} else {
+				sampledLines <- line
+			}
+		}
 	}
-	return sampledLinesChans, nil
+}
+
+// GetSampledEntries wraps GetEntries and sends channels back that provide
+// sampled entries
+func GetSampledEntries(
+	ctx context.Context,
+	conf Config,
+	sampleRate uint,
+	fileCh <-chan string,
+	sampledLinesChans chan chan string,
+	errCh chan<- error,
+) {
+	unsampledLinesChans := make(chan chan string)
+	go GetEntries(ctx, conf, fileCh, unsampledLinesChans, errCh)
+	for unsampledLines := range unsampledLinesChans {
+		sampledLines := make(chan string)
+		go sampleLines(ctx, sampleRate, unsampledLines, sampledLines)
+		sampledLinesChans <- sampledLines
+	}
+	close(sampledLinesChans)
 }
 
 // shouldDrop returns true if the line should be dropped
@@ -104,56 +116,47 @@ func shouldDrop(rate uint) bool {
 	return rand.Intn(int(rate)) != 0
 }
 
-// GetEntries sets up a list of channels that get one line at a time from each
-// file down each channel.
-func GetEntries(ctx context.Context, conf Config) ([]chan string, error) {
+// GetEntries sets up a channel of channels that each get one line at a time
+// from files.
+func GetEntries(ctx context.Context, conf Config, fileChan <-chan string, linesChans chan chan string, errCh chan<- error) {
 	if conf.Type != RotateStyleSyslog {
-		return nil, errors.New("Only Syslog style rotation currently supported")
-	}
-	// expand any globs in the list of files so our list all represents real files
-	var filenames []string
-	for _, filePath := range conf.Paths {
-		if filePath == "-" {
-			filenames = append(filenames, filePath)
-		} else {
-			files, err := filepath.Glob(filePath)
-			if err != nil {
-				return nil, err
-			}
-			files = removeStateFiles(files, conf)
-			files = removeFilteredPaths(files, conf.FilterPaths)
-			filenames = append(filenames, files...)
-		}
-	}
-	if len(filenames) == 0 {
-		return nil, errors.New("After removing missing files and state files from the list, there are no files left to tail")
+		errCh <- errors.New("Only Syslog style rotation currently supported")
+		return
 	}
 
-	// make our lines channel list; we'll get one channel for each file
-	linesChans := make([]chan string, 0, len(filenames))
-	numFiles := len(filenames)
-	for _, file := range filenames {
-		var lines chan string
-		if file == "-" {
-			lines = tailStdIn(ctx)
-		} else {
-			stateFile := getStateFile(conf, file, numFiles)
-			tailer, err := getTailer(conf, file, stateFile)
-			if err != nil {
-				return nil, err
+	numFiles := 0
+	defer close(linesChans)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case file, ok := <-fileChan:
+			if !ok {
+				return
 			}
-			lines = tailSingleFile(ctx, tailer, file, stateFile)
+			numFiles++
+			lines := make(chan string)
+			linesChans <- lines
+			if file == "-" {
+				go tailStdIn(ctx, lines)
+				return
+			} else {
+				stateFile := getStateFile(conf, file, numFiles)
+				tailer, err := getTailer(conf, file, stateFile)
+				if err != nil {
+					errCh <- err
+					return
+				}
+				go tailSingleFile(ctx, tailer, file, stateFile, lines)
+			}
 		}
-		linesChans = append(linesChans, lines)
 	}
-
-	return linesChans, nil
 }
 
-// removeStateFiles goes through the list of files and removes any that appear
+// RemoveStateFiles goes through the list of files and removes any that appear
 // to be statefiles to avoid .leash.state.leash.state.leash.state from appearing
 // when you use an overly permissive glob
-func removeStateFiles(files []string, conf Config) []string {
+func RemoveStateFiles(files []string, conf Config) []string {
 	newFiles := []string{}
 	for _, file := range files {
 		if file == conf.Options.StateFile {
@@ -174,7 +177,7 @@ func removeStateFiles(files []string, conf Config) []string {
 	return newFiles
 }
 
-func removeFilteredPaths(files []string, filteredPaths []string) []string {
+func RemoveFilteredPaths(files []string, filteredPaths []string) []string {
 	newFiles := []string{}
 
 	for _, file := range files {
@@ -203,12 +206,10 @@ func removeFilteredPaths(files []string, filteredPaths []string) []string {
 	return newFiles
 }
 
-func tailSingleFile(ctx context.Context, tailer *tail.Tail, file string, stateFile string) chan string {
-	lines := make(chan string)
+func tailSingleFile(ctx context.Context, tailer *tail.Tail, file string, stateFile string, lines chan<- string) {
 	// TODO report some metric to indicate whether we're keeping up with the
 	// front of the file, of if it's being written faster than we can send
 	// events
-
 	stateFh, err := os.OpenFile(stateFile, os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
 		logrus.WithFields(logrus.Fields{
@@ -219,53 +220,44 @@ func tailSingleFile(ctx context.Context, tailer *tail.Tail, file string, stateFi
 
 	ticker := time.NewTicker(time.Second)
 	state := State{}
-	go func() {
-		for range ticker.C {
-			updateStateFile(&state, tailer, file, stateFh)
-		}
-	}()
 
-	go func() {
-	ReadLines:
-		for {
-			select {
-			case line, ok := <-tailer.Lines:
-				if !ok {
-					// tailer.Lines is closed
-					break ReadLines
-				}
-				if line.Err != nil {
-					// skip errored lines
-					continue
-				}
-				lines <- line.Text
-			case <-ctx.Done():
-				// will only trigger when the context is cancelled
+ReadLines:
+	for {
+		select {
+		case <-ticker.C:
+			updateStateFile(&state, tailer, file, stateFh)
+		case line, ok := <-tailer.Lines:
+			if !ok {
+				// tailer.Lines is closed
 				break ReadLines
 			}
+			if line.Err != nil {
+				// skip errored lines
+				continue
+			}
+			lines <- line.Text
+		case <-ctx.Done():
+			// will only trigger when the context is cancelled
+			break ReadLines
 		}
-		close(lines)
-		ticker.Stop()
-		updateStateFile(&state, tailer, file, stateFh)
-		stateFh.Close()
-	}()
-	return lines
+	}
+	close(lines)
+	ticker.Stop()
+	updateStateFile(&state, tailer, file, stateFh)
+	stateFh.Close()
 }
 
 // tailStdIn is a special case to tail STDIN without any of the
 // fancy stuff that the tail module provides
-func tailStdIn(ctx context.Context) chan string {
-	lines := make(chan string)
+func tailStdIn(ctx context.Context, lines chan<- string) {
 	input := bufio.NewReader(os.Stdin)
-	go func() {
-		defer close(lines)
-		for {
-			// check for signal triggered exit
-			select {
-			case <-ctx.Done():
-				return
-			default:
-			}
+	defer close(lines)
+	for {
+		// check for signal triggered exit
+		select {
+		case <-ctx.Done():
+			return
+		default:
 			line, partialLine, err := input.ReadLine()
 			if err != nil {
 				logrus.Debug("stdin is closed")
@@ -280,8 +272,7 @@ func tailStdIn(ctx context.Context) chan string {
 			}
 			lines <- strings.Join(parts, "")
 		}
-	}()
-	return lines
+	}
 }
 
 // getStartLocation reads the state file and creates an appropriate start
@@ -422,6 +413,8 @@ func getStateFile(conf Config, filename string, numFiles int) string {
 // updateStateFile updates the state file once per second with the current
 // values for the logfile's inode number and offset
 func updateStateFile(state *State, t *tail.Tail, file string, stateFh *os.File) {
+	defer state.Unlock()
+	state.Lock()
 	logStat := unix.Stat_t{}
 	unix.Stat(file, &logStat)
 	currentPos, err := t.Tell()

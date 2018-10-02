@@ -37,7 +37,8 @@ func TestTailSingleFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	lines := tailSingleFile(ts.ctx, tailer, filename, statefilename)
+	lines := make(chan string)
+	go tailSingleFile(ts.ctx, tailer, filename, statefilename, lines)
 	checkLinesChan(t, lines, jsonLines)
 }
 
@@ -49,13 +50,17 @@ func TestTailSTDIN(t *testing.T) {
 		Options: tailOpts,
 		Paths:   make([]string, 1),
 	}
-	conf.Paths[0] = "-"
-	lineChans, err := GetEntries(ts.ctx, conf)
-	if err != nil {
-		t.Fatal(err)
+	linesChans := make(chan chan string)
+	errChan := make(chan error)
+	fileChan := make(chan string)
+	go GetEntries(ts.ctx, conf, fileChan, linesChans, errChan)
+	fileChan <- "-"
+	numLinesChans := 0
+	for _ = range linesChans {
+		numLinesChans++
 	}
-	if len(lineChans) != 1 {
-		t.Errorf("lines chans should have had one channel; instead was length %d", len(lineChans))
+	if numLinesChans != 1 {
+		t.Errorf("lines chans should have had one channel; instead was length %d", numLinesChans)
 	}
 }
 
@@ -72,6 +77,16 @@ func TestGetSampledEntries(t *testing.T) {
 
 	jsonLines := make([][]string, 3)
 	filenameRoot := ts.tmpdir + "/json.log"
+
+	linesChans := make(chan chan string)
+	errChan := make(chan error)
+	fileChan := make(chan string)
+	go GetSampledEntries(ts.ctx, conf, 2, fileChan, linesChans, errChan)
+
+	// can't check each line because the parallel goroutines screw with the random
+	// dropping lines, so you can't know which channel will drop which messages.
+	// But the overall count of messages is predictable.
+	var lineCounter int
 	for i := 0; i < 3; i++ {
 		jsonLines[i] = make([]string, 6)
 		for j := 0; j < 6; j++ {
@@ -79,24 +94,15 @@ func TestGetSampledEntries(t *testing.T) {
 		}
 
 		filename := filenameRoot + fmt.Sprint(i)
-		conf.Paths[i] = filename
 		ts.writeFile(t, filename, strings.Join(jsonLines[i], "\n"))
-	}
-
-	chanArr, err := GetSampledEntries(ts.ctx, conf, 2)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// can't check each line because the parallel goroutines screw with the random
-	// dropping lines, so you can't know which channel will drop which messages.
-	// But the overall count of messages is predictable.
-	var lineCounter int
-
-	for _, ch := range chanArr {
-		for _ = range ch {
+		fileChan <- filename
+		for _ = range <-linesChans {
 			lineCounter++
 		}
 	}
+
+	close(fileChan)
+
 	expectedLines := 10
 	if lineCounter != expectedLines {
 		t.Errorf("expected to get %d lines, got %d instead", expectedLines, lineCounter)
@@ -115,6 +121,11 @@ func TestGetEntries(t *testing.T) {
 
 	jsonLines := make([][]string, 3)
 	filenameRoot := ts.tmpdir + "/json.log"
+
+	linesChans := make(chan chan string)
+	errChan := make(chan error)
+	fileChan := make(chan string)
+	go GetEntries(ts.ctx, conf, fileChan, linesChans, errChan)
 	for i := 0; i < 3; i++ {
 		jsonLines[i] = make([]string, 3)
 		for j := 0; j < 3; j++ {
@@ -122,36 +133,9 @@ func TestGetEntries(t *testing.T) {
 		}
 
 		filename := filenameRoot + fmt.Sprint(i)
-		conf.Paths[i] = filename
+		fileChan <- filename
 		ts.writeFile(t, filename, strings.Join(jsonLines[i], "\n"))
-	}
-
-	chanArr, err := GetEntries(ts.ctx, conf)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for i, ch := range chanArr {
-		checkLinesChan(t, ch, jsonLines[i])
-	}
-
-	// test that if all statefile-like filenames and missing files are removed
-	// from the list, it errors
-	fn1 := ts.tmpdir + "/sparklestate"
-	ts.writeFile(t, fn1, "body")
-	fn2 := ts.tmpdir + "/foo.leash.state"
-	ts.writeFile(t, fn2, "body")
-	conf = Config{
-		Paths: []string{fn1, fn2, "/file/does/not/exist"},
-		Options: TailOptions{
-			StateFile: fn1,
-		},
-	}
-	nilChan, err := GetEntries(ts.ctx, conf)
-	if nilChan != nil {
-		t.Error("errored getEntries was supposed to respond with a nil channel list")
-	}
-	if err == nil {
-		t.Error("expected error from GetEntries; got nil instead.")
+		checkLinesChan(t, <-linesChans, jsonLines[i])
 	}
 }
 
@@ -183,15 +167,15 @@ func TestAbortChannel(t *testing.T) {
 		ts.writeFile(t, filename, strings.Join(jsonLines[i], "\n"))
 	}
 
-	chanArr, err := GetEntries(ts.ctx, conf)
-	if err != nil {
-		t.Fatal(err)
-	}
+	linesChans := make(chan chan string)
+	errChan := make(chan error)
+	fileChan := make(chan string)
+	go GetEntries(ts.ctx, conf, fileChan, linesChans, errChan)
 
 	// ok, let's see what happens when we want to quit
 	ts.cancel()
-	for _, ch := range chanArr {
-		checkLinesChanClosed(t, ch)
+	for lines := range linesChans {
+		checkLinesChanClosed(t, lines)
 	}
 }
 
@@ -217,7 +201,7 @@ func TestRemoveStateFiles(t *testing.T) {
 	conf := Config{
 		Options: TailOptions{},
 	}
-	newFiles := removeStateFiles(files, conf)
+	newFiles := RemoveStateFiles(files, conf)
 	if !reflect.DeepEqual(newFiles, expectedFilesNoStatefile) {
 		t.Errorf("expected %v, instead got %v", expectedFilesNoStatefile, newFiles)
 	}
@@ -226,7 +210,7 @@ func TestRemoveStateFiles(t *testing.T) {
 			StateFile: "myspecialstatefile",
 		},
 	}
-	newFiles = removeStateFiles(files, conf)
+	newFiles = RemoveStateFiles(files, conf)
 	if !reflect.DeepEqual(newFiles, expectedFilesConfStatefile) {
 		t.Errorf("expected %v, instead got %v", expectedFilesConfStatefile, newFiles)
 	}
@@ -259,7 +243,7 @@ func TestRemoveFilteredPaths(t *testing.T) {
 		"/var/log/123_somethingelse.log",
 	}
 
-	filtered := removeFilteredPaths(files, filters)
+	filtered := RemoveFilteredPaths(files, filters)
 	if !reflect.DeepEqual(filtered, expected) {
 		t.Errorf("expected %v, instead got %v", expected, filtered)
 	}

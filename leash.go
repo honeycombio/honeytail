@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -24,6 +25,7 @@ import (
 	dynsampler "github.com/honeycombio/dynsampler-go"
 	"github.com/honeycombio/libhoney-go"
 	"github.com/honeycombio/urlshaper"
+	fsnotify "gopkg.in/fsnotify.v1"
 
 	"github.com/honeycombio/honeytail/event"
 	"github.com/honeycombio/honeytail/parsers"
@@ -41,15 +43,132 @@ import (
 	"github.com/honeycombio/honeytail/tail"
 )
 
+func watchFiles(ctx context.Context, options GlobalOptions, tc tail.Config, fileCh chan<- string, errCh chan<- error) {
+	defer close(fileCh)
+
+	filenames := []string{}
+	for _, filePath := range tc.Paths {
+		if filePath == "-" {
+			filenames = append(filenames, filePath)
+		} else {
+			files, err := filepath.Glob(filePath)
+			if err != nil {
+				errCh <- err
+				return
+			}
+			files = tail.RemoveStateFiles(files, tc)
+			files = tail.RemoveFilteredPaths(files, tc.FilterPaths)
+			filenames = append(filenames, files...)
+		}
+	}
+	for _, path := range filenames {
+		fileCh <- path
+	}
+
+	if len(filenames) == 0 {
+		errCh <- errors.New("No files to tail found after removing state files and filtered files.")
+	}
+
+	// Don't watch for new files if we've set --tail.stop. Close the file
+	// chan and be done with it.
+	if options.Tail.Stop {
+		return
+	}
+
+	// After getting the first static group of files to watch, poll
+	// any directories with globs for new files
+	filewatcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error getting FS watcher: %s", err)
+		os.Exit(1)
+	}
+
+	for _, file := range options.Reqs.LogFiles {
+		// Only watch if we're globbing
+		if strings.Contains(file, "*") {
+			expandedFiles, err := filepath.Glob(file)
+			if err != nil {
+				logrus.WithFields(logrus.Fields{
+					"err": err,
+				}).Fatal("Error globbing files")
+			}
+
+			glob := file
+
+			for _, file := range expandedFiles {
+				dir := filepath.Dir(file)
+				logrus.WithFields(logrus.Fields{
+					"glob": glob,
+					"file": file,
+					"dir":  dir,
+				}).Debug("Watching directory for changes due to glob")
+				if err := filewatcher.Add(dir); err != nil {
+					logrus.WithFields(logrus.Fields{
+						"dir": dir,
+						"err": err,
+					}).Fatal("Error watching directory")
+				}
+			}
+		}
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case fsEvent := <-filewatcher.Events:
+			logrus.Warn(fsEvent)
+			if fsEvent.Op == fsnotify.Create {
+				for _, pattern := range options.Reqs.LogFiles {
+					matched, err := filepath.Match(pattern, fsEvent.Name)
+					if err != nil {
+						logrus.WithFields(logrus.Fields{
+							"err":      err,
+							"pattern":  pattern,
+							"filename": fsEvent.Name,
+						}).Error("Error attempting to match filename")
+						continue
+					}
+
+					if matched {
+						logrus.WithField("filename", fsEvent.Name).
+							Debug("Detected a new file, adding to tailed files")
+						fileCh <- fsEvent.Name
+					}
+				}
+			}
+		}
+	}
+
+}
+
+func handleSignals(cancel context.CancelFunc, errCh <-chan error) {
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	sig := <-sigs
+	fmt.Fprintf(os.Stderr, "Aborting! Caught signal \"%s\"\n", sig)
+	fmt.Fprintf(os.Stderr, "Cleaning up...\n")
+	cancel()
+	// and if they insist, catch a second CTRL-C or timeout on 10sec
+	select {
+	case <-sigs:
+		fmt.Fprintf(os.Stderr, "Caught second signal... Aborting.\n")
+		os.Exit(1)
+	case err := <-errCh:
+		logrus.WithFields(logrus.Fields{"err": err}).Fatal(
+			"Error occurred while trying to tail logfile")
+	case <-time.After(10 * time.Second):
+		fmt.Fprintf(os.Stderr, "Taking too long... Aborting.\n")
+		os.Exit(1)
+	}
+}
+
 // actually go and be leashy
 func run(ctx context.Context, options GlobalOptions) {
 	logrus.Info("Starting honeytail")
 
 	stats := newResponseStats()
-
-	sigs := make(chan os.Signal, 1)
 	ctx, cancel := context.WithCancel(ctx)
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 
 	// spin up our transmission to send events to Honeycomb
 	libhConfig := libhoney.Config{
@@ -86,9 +205,21 @@ func run(ctx context.Context, options GlobalOptions) {
 		prefixRegex = &parsers.ExtRegexp{regexp.MustCompile(options.PrefixRegex)}
 	}
 
-	// get our lines channel from which to read log lines
-	var linesChans []chan string
-	var err error
+	// Channel which we will use to send the name of the files we are
+	// interested in tailing. We need a channel for this because we might
+	// add new files in-flight if we are using a glob.
+
+	// used to communicate which files should be tailed back to main
+	// goroutines
+	fileCh := make(chan string)
+
+	// used to send the chan strings (which the lines of each file are sent
+	// over) back to the main goroutines
+	linesChs := make(chan chan string)
+
+	// used to send errors from tail prepping goroutines
+	errCh := make(chan error)
+
 	tc := tail.Config{
 		Paths:       options.Reqs.LogFiles,
 		FilterPaths: options.FilterFiles,
@@ -96,36 +227,20 @@ func run(ctx context.Context, options GlobalOptions) {
 		Options:     options.Tail,
 	}
 	if options.TailSample {
-		linesChans, err = tail.GetSampledEntries(ctx, tc, options.SampleRate)
+		go tail.GetSampledEntries(ctx, tc, options.SampleRate, fileCh, linesChs, errCh)
 	} else {
-		linesChans, err = tail.GetEntries(ctx, tc)
-	}
-	if err != nil {
-		logrus.WithFields(logrus.Fields{"err": err}).Fatal(
-			"Error occurred while trying to tail logfile")
+		go tail.GetEntries(ctx, tc, fileCh, linesChs, errCh)
 	}
 
+	go watchFiles(ctx, options, tc, fileCh, errCh)
+
 	// set up our signal handler and support canceling
-	go func() {
-		sig := <-sigs
-		fmt.Fprintf(os.Stderr, "Aborting! Caught signal \"%s\"\n", sig)
-		fmt.Fprintf(os.Stderr, "Cleaning up...\n")
-		cancel()
-		// and if they insist, catch a second CTRL-C or timeout on 10sec
-		select {
-		case <-sigs:
-			fmt.Fprintf(os.Stderr, "Caught second signal... Aborting.\n")
-			os.Exit(1)
-		case <-time.After(10 * time.Second):
-			fmt.Fprintf(os.Stderr, "Taking too long... Aborting.\n")
-			os.Exit(1)
-		}
-	}()
+	go handleSignals(cancel, errCh)
 
 	// for each channel we got back from tail.GetEntries, spin up a parser.
 	parsersWG := sync.WaitGroup{}
 	responsesWG := sync.WaitGroup{}
-	for _, lines := range linesChans {
+	for lines := range linesChs {
 		// get our parser
 		parser, opts := getParserAndOptions(options)
 		if parser == nil {

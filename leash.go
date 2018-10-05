@@ -43,10 +43,11 @@ import (
 	"github.com/honeycombio/honeytail/tail"
 )
 
-func watchFiles(ctx context.Context, options GlobalOptions, tc tail.Config, fileCh chan<- string, errCh chan<- error) {
+func watchFiles(ctx context.Context, options GlobalOptions, tc tail.Config, fileCh chan<- tail.FileToWatch, errCh chan<- error) {
 	defer close(fileCh)
 
 	filenames := []string{}
+
 	for _, filePath := range tc.Paths {
 		if filePath == "-" {
 			filenames = append(filenames, filePath)
@@ -62,7 +63,10 @@ func watchFiles(ctx context.Context, options GlobalOptions, tc tail.Config, file
 		}
 	}
 	for _, path := range filenames {
-		fileCh <- path
+		fileCh <- tail.FileToWatch{
+			Name:     path,
+			ReadFrom: options.Tail.ReadFrom,
+		}
 	}
 
 	if len(filenames) == 0 {
@@ -133,7 +137,10 @@ func watchFiles(ctx context.Context, options GlobalOptions, tc tail.Config, file
 					if matched {
 						logrus.WithField("filename", fsEvent.Name).
 							Debug("Detected a new file, adding to tailed files")
-						fileCh <- fsEvent.Name
+						fileCh <- tail.FileToWatch{
+							Name:     fsEvent.Name,
+							ReadFrom: "beginning",
+						}
 					}
 				}
 			}
@@ -211,7 +218,7 @@ func run(ctx context.Context, options GlobalOptions) {
 
 	// used to communicate which files should be tailed back to main
 	// goroutines
-	fileCh := make(chan string)
+	fileCh := make(chan tail.FileToWatch)
 
 	// used to send the chan strings (which the lines of each file are sent
 	// over) back to the main goroutines

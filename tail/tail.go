@@ -39,6 +39,11 @@ type TailOptions struct {
 	StateFile string `long:"statefile" description:"File in which to store the last read position. Defaults to a file in /tmp named $logfile.leash.state. If tailing multiple files, default is forced."`
 }
 
+type FileToWatch struct {
+	Name     string
+	ReadFrom string
+}
+
 // Statefile mechanics when ReadFrom is 'last'
 // missing statefile => ReadFrom = end
 // empty statefile => ReadFrom = end
@@ -94,7 +99,7 @@ func GetSampledEntries(
 	ctx context.Context,
 	conf Config,
 	sampleRate uint,
-	fileCh <-chan string,
+	fileCh <-chan FileToWatch,
 	sampledLinesChans chan chan string,
 	errCh chan<- error,
 ) {
@@ -118,7 +123,7 @@ func shouldDrop(rate uint) bool {
 
 // GetEntries sets up a channel of channels that each get one line at a time
 // from files.
-func GetEntries(ctx context.Context, conf Config, fileChan <-chan string, linesChans chan chan string, errCh chan<- error) {
+func GetEntries(ctx context.Context, conf Config, fileChan <-chan FileToWatch, linesChans chan chan string, errCh chan<- error) {
 	if conf.Type != RotateStyleSyslog {
 		errCh <- errors.New("Only Syslog style rotation currently supported")
 		return
@@ -137,17 +142,21 @@ func GetEntries(ctx context.Context, conf Config, fileChan <-chan string, linesC
 			numFiles++
 			lines := make(chan string)
 			linesChans <- lines
-			if file == "-" {
+			if file.Name == "-" {
 				go tailStdIn(ctx, lines)
 				return
 			} else {
-				stateFile := getStateFile(conf, file, numFiles)
-				tailer, err := getTailer(conf, file, stateFile)
+				// Set ReadFrom differently (to the beginning)
+				// if we're reading from a new file.
+				fileSpecificConf := conf
+				fileSpecificConf.Options.ReadFrom = file.ReadFrom
+				stateFile := getStateFile(fileSpecificConf, file.Name, numFiles)
+				tailer, err := getTailer(fileSpecificConf, file.Name, stateFile)
 				if err != nil {
 					errCh <- err
 					return
 				}
-				go tailSingleFile(ctx, tailer, file, stateFile, lines)
+				go tailSingleFile(ctx, tailer, file.Name, stateFile, lines)
 			}
 		}
 	}

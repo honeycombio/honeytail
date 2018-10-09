@@ -247,6 +247,8 @@ func run(ctx context.Context, options GlobalOptions) {
 	// for each channel we got back from tail.GetEntries, spin up a parser.
 	parsersWG := sync.WaitGroup{}
 	responsesWG := sync.WaitGroup{}
+
+	// todo: linesChs including filename instead of ?
 	for lines := range linesChs {
 		// get our parser
 		parser, opts := getParserAndOptions(options)

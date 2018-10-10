@@ -223,6 +223,32 @@ func tryTimeFormats(t, intendedFormat string) time.Time {
 		ts = tOther
 	} else if tOther, err := Parse(time.UnixDate, t); err == nil {
 		ts = tOther
+	} else {
+		// the defaults didn't catch it, let's try a few other things
+		// is it all numeric? then try unix epoch times
+		epochInt, err := strconv.ParseInt(t, 0, 64)
+		if err == nil {
+			// it might be seconds or it might be milliseconds! Who can know!
+			// 10-digit numbers are seconds, 13-digit milliseconds, 16 microseconds
+			if len(t) == 10 {
+				ts = time.Unix(epochInt, 0)
+			} else if len(t) > 10 {
+				// turn it into seconds and fractional seconds
+				fractionalTime := t[:10] + "." + t[10:]
+				// then chop it into the int part and the fractional part
+				if epochFloat, err := strconv.ParseFloat(fractionalTime, 64); err == nil {
+					sec, dec := math.Modf(epochFloat)
+					ts = time.Unix(int64(sec), int64(dec*(1e9)))
+				}
+
+			}
+		} else {
+			epochFloat, err := strconv.ParseFloat(t, 64)
+			if err == nil {
+				sec, dec := math.Modf(epochFloat)
+				ts = time.Unix(int64(sec), int64(dec*(1e9)))
+			}
+		}
 	}
 	return ts
 }

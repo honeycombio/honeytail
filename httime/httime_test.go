@@ -176,6 +176,14 @@ var tts = []testTimestamp{
 		expected:      time.Unix(1397113200, 0),
 		diffThreshold: 0,
 	},
+	{
+		format:        "",
+		input:         "1538860697500",
+		tz:            utc,
+		fieldName:     "timestamp",
+		expected:      time.Unix(1538860697, 500000000),
+		diffThreshold: 0,
+	},
 }
 
 func TestGetTimestampValid(t *testing.T) {

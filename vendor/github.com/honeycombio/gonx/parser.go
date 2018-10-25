@@ -26,7 +26,7 @@ func NewParser(format string) *Parser {
 	sanitizedFormat := regexp.QuoteMeta(format + " ")
 	// except dots, let's let people ignore sections of the log line by ...ing them out.
 	sanitizedFormat = strings.Replace(sanitizedFormat, "\\.", ".", -1)
-	re := regexp.MustCompile(`\\\$([a-z_]+)(\\?(.))`).ReplaceAllString(
+	re := regexp.MustCompile(`\\\$([A-Za-z0-9_]+)(\\?(.))`).ReplaceAllString(
 		sanitizedFormat, "(?P<$1>[^$3]*)$2")
 	return &Parser{format, regexp.MustCompile(fmt.Sprintf("^%v$", strings.Trim(re, " ")))}
 }

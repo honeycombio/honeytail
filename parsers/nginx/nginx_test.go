@@ -33,8 +33,8 @@ func TestProcessLines(t *testing.T) {
 	preReg := &parsers.ExtRegexp{regexp.MustCompile("^.*:..:.. (?P<pre_hostname>[a-zA-Z-.]+): ")}
 	tlm := []testLineMaps{
 		{
-			line:        "Nov 05 10:23:45 myhost: https - 10.252.4.24 - - [08/Oct/2015:00:26:26 +0000] 200 174 0.099",
-			trimmedLine: "https - 10.252.4.24 - - [08/Oct/2015:00:26:26 +0000] 200 174 0.099",
+			line:        "Nov 05 10:23:45 myhost: https - 10.252.4.24 - - [08/Oct/2015:00:26:26 +0000] 200 174 0.099 a873d74c-4588-4a25-b3ed-77d23fe6275a 17d22fa7-796e-85f6-3d58-2d6e693da860",
+			trimmedLine: "https - 10.252.4.24 - - [08/Oct/2015:00:26:26 +0000] 200 174 0.099 a873d74c-4588-4a25-b3ed-77d23fe6275a 17d22fa7-796e-85f6-3d58-2d6e693da860",
 			ev: event.Event{
 				Timestamp: t1,
 				Data: map[string]interface{}{
@@ -44,6 +44,8 @@ func TestProcessLines(t *testing.T) {
 					"remote_addr":            "10.252.4.24",
 					"request_time":           0.099,
 					"status":                 int64(200),
+					"traceId":                "a873d74c-4588-4a25-b3ed-77d23fe6275a",
+					"id":                     "17d22fa7-796e-85f6-3d58-2d6e693da860",
 				},
 			},
 		},
@@ -53,7 +55,7 @@ func TestProcessLines(t *testing.T) {
 			NumParsers: 5,
 		},
 		lineParser: &GonxLineParser{
-			parser: gonx.NewParser("$http_x_forwarded_proto - $remote_addr - $remote_user [$time_local] $status $body_bytes_sent $request_time"),
+			parser: gonx.NewParser("$http_x_forwarded_proto - $remote_addr - $remote_user [$time_local] $status $body_bytes_sent $request_time $traceId $id"),
 		},
 	}
 	lines := make(chan string)

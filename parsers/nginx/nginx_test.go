@@ -155,6 +155,8 @@ func TestGetTimestamp(t *testing.T) {
 	userDefinedTimeFormat := "2006-01-02T15:04:05.9999Z"
 	exampleCustomFormatTimestamp := "2017-07-31T20:40:57.980264Z"
 	t3, _ := time.ParseInLocation(userDefinedTimeFormat, exampleCustomFormatTimestamp, time.UTC)
+	t4 := time.Unix(1444263986, 250000000)
+	msec := 1444263986.25
 	testCases := []struct {
 		desc      string
 		conf      Options
@@ -259,6 +261,18 @@ func TestGetTimestamp(t *testing.T) {
 				"foo": "bar",
 			},
 			retval: t3,
+		},
+		{
+			desc: "timestamp in milliseconds",
+			conf: Options{},
+			input: map[string]interface{}{
+				"foo":  "bar",
+				"msec": msec,
+			},
+			postMunge: map[string]interface{}{
+				"foo": "bar",
+			},
+			retval: t4,
 		},
 	}
 

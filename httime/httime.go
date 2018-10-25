@@ -40,6 +40,7 @@ var (
 		"timestamp", "Timestamp", "TimeStamp",
 		"date", "Date",
 		"datetime", "Datetime", "DateTime",
+		"msec",
 	}
 	// reference: http://man7.org/linux/man-pages/man3/strftime.3.html
 	convertMapping = map[string]string{
@@ -126,6 +127,8 @@ func GetTimestamp(m map[string]interface{}, timeFieldName, timeFieldFormat strin
 				timeStr = v
 			case int:
 				timeStr = strconv.Itoa(v)
+			case float64:
+				timeStr = strconv.FormatFloat(v, 'f', -1, 64)
 			default:
 				warnAboutTime(timeFieldName, t, timeFoundImproperTypeMsg)
 				ts = Now()

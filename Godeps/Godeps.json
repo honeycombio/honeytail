@@ -1,7 +1,7 @@
 {
 	"ImportPath": "github.com/honeycombio/honeytail",
 	"GoVersion": "go1.10",
-	"GodepVersion": "v79",
+	"GodepVersion": "v80",
 	"Packages": [
 		"./..."
 	],
@@ -38,8 +38,8 @@
 		},
 		{
 			"ImportPath": "github.com/honeycombio/gonx",
-			"Comment": "v1.3.0-5-g45c9e83",
-			"Rev": "45c9e836929976702894f73f10fb9ec43e0279d2"
+			"Comment": "v1.3.0-8-gf9b2468",
+			"Rev": "f9b2468e9ef8ac5f75fe56c66d0d31949d4b59ea"
 		},
 		{
 			"ImportPath": "github.com/honeycombio/libhoney-go",

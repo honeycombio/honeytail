@@ -174,5 +174,9 @@ func (n *Parser) getTimestamp(evMap map[string]interface{}) time.Time {
 		return httime.GetTimestamp(evMap, "time_iso8601", iso8601TimeLayout)
 	}
 
+	if _, ok := evMap["msec"]; ok {
+		return httime.GetTimestamp(evMap, "msec", "")
+	}
+
 	return httime.GetTimestamp(evMap, "", "")
 }

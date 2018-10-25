@@ -1,5 +1,5 @@
 # This builds the binary inside an Alpine Linux container, which is small
-FROM alpine:3.3
+FROM alpine:3.6
 MAINTAINER Ben Hartshorne <ben@honeycomb.io>
 
 # Set us up so we can build the binary
@@ -18,6 +18,7 @@ RUN apk add --update \
         git \
         openssl \
         ca-certificates \
+        musl-dev \
     && ver=$(git rev-parse --short HEAD) \
     && git clean -f \
     && rm -rf .git \

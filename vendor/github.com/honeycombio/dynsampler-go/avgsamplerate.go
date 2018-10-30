@@ -125,7 +125,15 @@ func (a *AvgSampleRate) updateMaps() {
 		} else {
 			// there are more samples than the allotted number. Sample this key enough
 			// to knock it under the limit (aka round up)
-			newSavedSampleRates[key] = int(math.Ceil(count / goalForKey))
+			rate := math.Ceil(count / goalForKey)
+			// if counts are <= 1 we can get values for goalForKey that are +Inf
+			// and subsequent division ends up with NaN. If that's the case,
+			// fall back to 1
+			if math.IsNaN(rate) {
+				newSavedSampleRates[key] = 1
+			} else {
+				newSavedSampleRates[key] = int(rate)
+			}
 			extra += goalForKey - (count / float64(newSavedSampleRates[key]))
 		}
 	}

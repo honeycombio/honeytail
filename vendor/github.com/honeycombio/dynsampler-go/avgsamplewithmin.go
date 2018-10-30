@@ -100,6 +100,8 @@ func (a *AvgSampleWithMin) updateMaps() {
 		for k := range tmpCounts {
 			newSavedSampleRates[k] = 1
 		}
+		a.lock.Lock()
+		defer a.lock.Unlock()
 		a.savedSampleRates = newSavedSampleRates
 		return
 	}
@@ -109,6 +111,7 @@ func (a *AvgSampleWithMin) updateMaps() {
 	for _, count := range tmpCounts {
 		logSum += math.Log10(float64(count))
 	}
+	// Note that this can produce Inf if logSum is 0
 	goalRatio := goalCount / logSum
 
 	// must go through the keys in a fixed order to prevent rounding from changing
@@ -130,6 +133,7 @@ func (a *AvgSampleWithMin) updateMaps() {
 		count := float64(tmpCounts[key])
 		// take the max of 1 or my log10 share of the total
 		goalForKey := math.Max(1, math.Log10(count)*goalRatio)
+
 		// take this key's share of the extra and pass the rest along
 		extraForKey := extra / float64(keysRemaining)
 		goalForKey += extraForKey
@@ -143,7 +147,15 @@ func (a *AvgSampleWithMin) updateMaps() {
 		} else {
 			// there are more samples than the allotted number. Sample this key enough
 			// to knock it under the limit (aka round up)
-			newSavedSampleRates[key] = int(math.Ceil(count / goalForKey))
+			rate := math.Ceil(count / goalForKey)
+			// if counts are <= 1 we can get values for goalForKey that are +Inf
+			// and subsequent division ends up with NaN. If that's the case,
+			// fall back to 1
+			if math.IsNaN(rate) {
+				newSavedSampleRates[key] = 1
+			} else {
+				newSavedSampleRates[key] = int(rate)
+			}
 			extra += goalForKey - (count / float64(newSavedSampleRates[key]))
 		}
 	}

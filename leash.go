@@ -222,7 +222,7 @@ func run(ctx context.Context, options GlobalOptions) {
 
 	// used to send the chan strings (which the lines of each file are sent
 	// over) back to the main goroutines
-	linesChs := make(chan chan string)
+	fileLinesChs := make(chan tail.FileLines)
 
 	// used to send errors from tail prepping goroutines
 	errCh := make(chan error)
@@ -234,9 +234,9 @@ func run(ctx context.Context, options GlobalOptions) {
 		Options:     options.Tail,
 	}
 	if options.TailSample {
-		go tail.GetSampledEntries(ctx, tc, options.SampleRate, fileCh, linesChs, errCh)
+		go tail.GetSampledEntries(ctx, tc, options.SampleRate, fileCh, fileLinesChs, errCh)
 	} else {
-		go tail.GetEntries(ctx, tc, fileCh, linesChs, errCh)
+		go tail.GetEntries(ctx, tc, fileCh, fileLinesChs, errCh)
 	}
 
 	go watchFiles(ctx, options, tc, fileCh, errCh)
@@ -248,8 +248,7 @@ func run(ctx context.Context, options GlobalOptions) {
 	parsersWG := sync.WaitGroup{}
 	responsesWG := sync.WaitGroup{}
 
-	// todo: linesChs including filename instead of ?
-	for lines := range linesChs {
+	for file := range fileLinesChs {
 		// get our parser
 		parser, opts := getParserAndOptions(options)
 		if parser == nil {
@@ -274,7 +273,7 @@ func run(ctx context.Context, options GlobalOptions) {
 		delaySending := make(chan int, 2*options.NumSenders)
 
 		// apply any filters to the events before they get sent
-		modifiedToBeSent := modifyEventContents(toBeSent, options)
+		modifiedToBeSent := modifyEventContents(toBeSent, file.FileName, options)
 
 		realToBeSent := make(chan event.Event, 10*options.NumSenders)
 		go func() {
@@ -313,7 +312,7 @@ func run(ctx context.Context, options GlobalOptions) {
 			// wait for all the events in toBeSent to be handed to libhoney
 			<-doneSending
 			parsersWG.Done()
-		}(lines)
+		}(file.Lines)
 	}
 	parsersWG.Wait()
 	// tell libhoney to finish up sending events
@@ -382,7 +381,7 @@ func getParserAndOptions(options GlobalOptions) (parsers.Parser, interface{}) {
 // returns a channel on which it will send the munged events. It is responsible
 // for hashing or dropping or adding fields to the events and doing the dynamic
 // sampling, if enabled
-func modifyEventContents(toBeSent chan event.Event, options GlobalOptions) chan event.Event {
+func modifyEventContents(toBeSent chan event.Event, filename string, options GlobalOptions) chan event.Event {
 	// parse the addField bit once instead of for every event
 	parsedAddFields := map[string]string{}
 	for _, addField := range options.AddFields {
@@ -394,6 +393,7 @@ func modifyEventContents(toBeSent chan event.Event, options GlobalOptions) chan 
 		}
 		parsedAddFields[splitField[0]] = splitField[1]
 	}
+
 	// do all the advance work for request shaping
 	shaper := &requestShaper{}
 	if len(options.RequestShape) != 0 {
@@ -466,6 +466,10 @@ func modifyEventContents(toBeSent chan event.Event, options GlobalOptions) chan 
 			wg.Add(1)
 			go func() {
 				for ev := range toBeSent {
+					if options.IncludeFilename {
+						ev.Data["filename"] = filename
+					}
+
 					// do request shaping
 					for _, field := range options.RequestShape {
 						shaper.requestShape(field, &ev, options)

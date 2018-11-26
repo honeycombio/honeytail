@@ -44,6 +44,13 @@ type FileToWatch struct {
 	ReadFrom string
 }
 
+// FileLines is contains channel where the contents of the file will be passed,
+// as well as metadata about the file (such as name).
+type FileLines struct {
+	Lines    chan string
+	FileName string
+}
+
 // Statefile mechanics when ReadFrom is 'last'
 // missing statefile => ReadFrom = end
 // empty statefile => ReadFrom = end
@@ -100,15 +107,18 @@ func GetSampledEntries(
 	conf Config,
 	sampleRate uint,
 	fileCh <-chan FileToWatch,
-	sampledLinesChans chan chan string,
+	sampledLinesChans chan<- FileLines,
 	errCh chan<- error,
 ) {
-	unsampledLinesChans := make(chan chan string)
+	unsampledLinesChans := make(chan FileLines)
 	go GetEntries(ctx, conf, fileCh, unsampledLinesChans, errCh)
-	for unsampledLines := range unsampledLinesChans {
+	for unsampled := range unsampledLinesChans {
 		sampledLines := make(chan string)
-		go sampleLines(ctx, sampleRate, unsampledLines, sampledLines)
-		sampledLinesChans <- sampledLines
+		go sampleLines(ctx, sampleRate, unsampled.Lines, sampledLines)
+		sampledLinesChans <- FileLines{
+			Lines:    sampledLines,
+			FileName: unsampled.FileName,
+		}
 	}
 	close(sampledLinesChans)
 }
@@ -123,7 +133,7 @@ func shouldDrop(rate uint) bool {
 
 // GetEntries sets up a channel of channels that each get one line at a time
 // from files.
-func GetEntries(ctx context.Context, conf Config, fileChan <-chan FileToWatch, linesChans chan chan string, errCh chan<- error) {
+func GetEntries(ctx context.Context, conf Config, fileChan <-chan FileToWatch, linesChans chan<- FileLines, errCh chan<- error) {
 	if conf.Type != RotateStyleSyslog {
 		errCh <- errors.New("Only Syslog style rotation currently supported")
 		return
@@ -141,7 +151,10 @@ func GetEntries(ctx context.Context, conf Config, fileChan <-chan FileToWatch, l
 			}
 			numFiles++
 			lines := make(chan string)
-			linesChans <- lines
+			linesChans <- FileLines{
+				Lines:    lines,
+				FileName: file.Name,
+			}
 			if file.Name == "-" {
 				go tailStdIn(ctx, lines)
 				return

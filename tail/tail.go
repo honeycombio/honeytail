@@ -324,7 +324,7 @@ func getStartLocation(stateFile string, logfile string) *tail.SeekInfo {
 		return end
 	}
 	// compare inode numbers of the last-seen and existing log files
-	if state.INode != logStat.Ino {
+	if state.INode != uint64(logStat.Ino) {
 		logrus.WithFields(logrus.Fields{
 			"starting at": "beginning", "error": err,
 		}).Debug("getStartLocation found a different inode number for the logfile")
@@ -428,7 +428,7 @@ func updateStateFile(state *State, t *tail.Tail, file string, stateFh *os.File) 
 	if err != nil {
 		return
 	}
-	state.INode = logStat.Ino
+	state.INode = uint64(logStat.Ino)
 	state.Offset = currentPos
 	out, err := json.Marshal(state)
 	if err != nil {

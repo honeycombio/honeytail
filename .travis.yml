@@ -19,6 +19,7 @@ script:
     - set -e
 # Run tests
     - go test github.com/honeycombio/honeytail/...
+    - GOOS=freebsd go build -o /dev/null
 # Build binary and packages
     - go install -ldflags "-X main.BuildID=1.${TRAVIS_BUILD_NUMBER}" github.com/honeycombio/honeytail/...
     - $GOPATH/bin/honeytail --write_default_config > ./honeytail.conf

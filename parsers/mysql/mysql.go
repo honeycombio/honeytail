@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/honeycombio/mysqltools/query/normalizer"
 

@@ -21,7 +21,7 @@ import (
 
 	"github.com/honeycombio/honeytail/parsers/htjson"
 
-	"github.com/Sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/sys/unix"
 

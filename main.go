@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 	"github.com/honeycombio/libhoney-go"
 	flag "github.com/jessevdk/go-flags"
 

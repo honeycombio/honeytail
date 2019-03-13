@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 	"github.com/honeycombio/mongodbtools/logparser"
 	queryshape "github.com/honeycombio/mongodbtools/queryshape"
 

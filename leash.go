@@ -20,7 +20,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 	dynsampler "github.com/honeycombio/dynsampler-go"
 	"github.com/honeycombio/libhoney-go"
 	"github.com/honeycombio/urlshaper"

@@ -100,7 +100,7 @@ type RegexLineParser struct {
 	lineRegexes []*regexp.Regexp
 }
 
-// RegexLineParser factory
+// NewRegexLineParser factory
 func NewRegexLineParser(regexStrs []string) (*RegexLineParser, error) {
 	lineRegexes, err := ParseLineRegexes(regexStrs)
 	if err != nil {

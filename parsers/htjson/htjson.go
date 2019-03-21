@@ -4,6 +4,7 @@ package htjson
 
 import (
 	"encoding/json"
+	"math/rand"
 	"strings"
 	"sync"
 
@@ -26,6 +27,12 @@ type Parser struct {
 	lineParser parsers.LineParser
 
 	warnedAboutTime bool
+
+	// set SampleRate to allow the json parser to drop events after their lines
+	// are joined
+	SampleRate int
+
+	wg sync.WaitGroup
 }
 
 func (p *Parser) Init(options interface{}) error {
@@ -48,7 +55,59 @@ func (j *JSONLineParser) ParseLine(line string) (map[string]interface{}, error) 
 }
 
 func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, prefixRegex *parsers.ExtRegexp) {
+	// multiline json assumptions:
+	// json objects will be separated by newlines - so
+	// `{\n"foo":1\n}\n{"bar":2}` is accepted, but
+	// `{\n"foo":1\n}{"bar":2}` is not.
+	//
+	// as such, since json disallows multi-line strings, on a space-trimmed line,
+	// /^{/ (HasPrefix(s, "{")) indicates the beginning of an object
+	rawEvents := make(chan string)
+
+	defer p.wg.Wait()
+	p.wg.Add(1)
+	go p.handleEvents(rawEvents, send, prefixRegex)
+
+	groupedLines := make([]string, 0, 5)
+
+	// figure out beginning
+	for line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "{") {
+			// this is the beginning of an object!
+
+			// if sampling is disabledor sampler says keep, pass along this
+			// group
+			if p.SampleRate <= 1 || rand.Intn(p.SampleRate) == 0 {
+				// send the previous lines
+				jsonLine := strings.Join(groupedLines, "")
+				rawEvents <- jsonLine
+			}
+			// clear the groupedLines
+			groupedLines = make([]string, 0, 5)
+
+		}
+
+		// add this line
+		groupedLines = append(groupedLines, line)
+
+	}
+
+	// send the last event, if one was collected
+	if p.SampleRate <= 1 || rand.Intn(p.SampleRate) == 0 {
+		// send the previous lines
+		jsonLine := strings.Join(groupedLines, "")
+		rawEvents <- jsonLine
+	}
+
+	logrus.Debug("lines channel is closed, ending json processor")
+	close(rawEvents)
+}
+
+func (p *Parser) handleEvents(lines <-chan string, send chan<- event.Event, prefixRegex *parsers.ExtRegexp) {
+	defer p.wg.Done()
 	wg := sync.WaitGroup{}
+
 	numParsers := 1
 	if p.conf.NumParsers > 0 {
 		numParsers = p.conf.NumParsers
@@ -89,8 +148,9 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 
 				// send an event to Transmission
 				e := event.Event{
-					Timestamp: timestamp,
-					Data:      parsedLine,
+					Timestamp:  timestamp,
+					SampleRate: p.SampleRate,
+					Data:       parsedLine,
 				}
 				send <- e
 			}
@@ -99,5 +159,4 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 		}()
 	}
 	wg.Wait()
-	logrus.Debug("lines channel is closed, ending json processor")
 }

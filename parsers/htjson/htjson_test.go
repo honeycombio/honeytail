@@ -2,7 +2,11 @@ package htjson
 
 import (
 	"reflect"
+	"strings"
 	"testing"
+	"time"
+
+	"github.com/honeycombio/honeytail/event"
 )
 
 type testLineMap struct {
@@ -47,5 +51,48 @@ func TestParseLine(t *testing.T) {
 		if !reflect.DeepEqual(resp, tlm.expected) {
 			t.Errorf("response %+v didn't match expected %+v", resp, tlm.expected)
 		}
+	}
+}
+
+func TestProcessLinesHandlesMultilineJSONInput(t *testing.T) {
+	// test data: has 3 json objects across multiple lines
+	input := `
+	"mid-object-beginning": 0}
+	{
+		"first": 1,
+		"another_key": 1
+	}
+	{ "second": 2}
+	{
+
+		"third": 3
+
+	}
+	{
+		"fourth, but incomplete": 0
+`
+	p := Parser{}
+	if err := p.Init(&Options{}); err != nil {
+		t.Errorf("Failed to init parser: %e", err)
+	}
+
+	inputLines := make(chan string)
+	outputEvents := make(chan event.Event, 4) // 4 so there's room for an additional event if our test creates more than expected
+	defer close(inputLines)
+
+	go p.ProcessLines(inputLines, outputEvents, nil)
+
+	for _, line := range strings.Split(input, "\n") {
+		inputLines <- line
+	}
+
+	// TODO I'm sure there's a more correct way to do this, but it escapes me at
+	// the moment
+	time.Sleep(5 * time.Second)
+
+	expected := 3
+	found := len(outputEvents)
+	if found != expected {
+		t.Errorf("Expected %d outputs, got %d", expected, found)
 	}
 }

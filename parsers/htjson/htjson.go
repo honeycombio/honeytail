@@ -73,31 +73,25 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 	// figure out beginning
 	for line := range lines {
 		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "{") {
-			// this is the beginning of an object!
+		// add this line
+		groupedLines = append(groupedLines, line)
 
-			// if sampling is disabledor sampler says keep, pass along this
-			// group
+		if strings.HasSuffix(line, "}") {
+			// this is the end of an object!
+
+			// if sampling is disabled or sampler says keep, emit this group
 			if p.SampleRate <= 1 || rand.Intn(p.SampleRate) == 0 {
 				// send the previous lines
 				jsonLine := strings.Join(groupedLines, "")
-				rawEvents <- jsonLine
+				if jsonLine != "" {
+					rawEvents <- jsonLine
+				}
 			}
 			// clear the groupedLines
 			groupedLines = make([]string, 0, 5)
 
 		}
 
-		// add this line
-		groupedLines = append(groupedLines, line)
-
-	}
-
-	// send the last event, if one was collected
-	if p.SampleRate <= 1 || rand.Intn(p.SampleRate) == 0 {
-		// send the previous lines
-		jsonLine := strings.Join(groupedLines, "")
-		rawEvents <- jsonLine
 	}
 
 	logrus.Debug("lines channel is closed, ending json processor")

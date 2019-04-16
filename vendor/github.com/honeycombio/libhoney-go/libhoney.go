@@ -582,8 +582,10 @@ func (e *Event) SendPresampled() error {
 	if e.APIHost == "" {
 		return errors.New("No APIHost for Honeycomb. Can't send to the Great Unknown.")
 	}
-	if e.WriteKey == "" {
-		return errors.New("No WriteKey specified. Can't send event.")
+	if e.WriteKey == "" { // TODO: this is incompatible with honeycombio/libhoney-go, will need revisiting when vendor'd lib is updated
+		if txType := reflect.TypeOf(tx); txType.String() != "*libhoney.WriterOutput" {
+			return errors.New("No WriteKey specified. Can't send event.")
+		}
 	}
 	if e.Dataset == "" {
 		return errors.New("No Dataset for Honeycomb. Can't send datasetless.")

@@ -181,12 +181,16 @@ func main() {
 	addParserDefaultOptions(&options)
 	sanityCheckOptions(&options)
 
-	if _, err := libhoney.VerifyWriteKey(libhoney.Config{
-		APIHost:  options.APIHost,
-		WriteKey: options.Reqs.WriteKey,
-	}); err != nil {
-		fmt.Fprintln(os.Stderr, "Could not verify Honeycomb write key: ", err)
-		os.Exit(1)
+	if !options.DebugOut {
+		if _, err := libhoney.VerifyWriteKey(libhoney.Config{
+			APIHost:  options.APIHost,
+			WriteKey: options.Reqs.WriteKey,
+		}); err != nil {
+			fmt.Fprintln(os.Stderr, "Could not verify Honeycomb write key: ", err)
+			os.Exit(1)
+		}
+	} else {
+		logrus.Debug("skipping Honeycomb write key verification, because --debug_stdout is set...")
 	}
 	run(context.Background(), options)
 }
@@ -269,7 +273,7 @@ func sanityCheckOptions(options *GlobalOptions) {
 		fmt.Println("Parser required to be specified with the --parser flag.")
 		usage()
 		os.Exit(1)
-	case options.Reqs.WriteKey == "" || options.Reqs.WriteKey == "NULL":
+	case (options.Reqs.WriteKey == "" || options.Reqs.WriteKey == "NULL") && (!options.DebugOut):
 		fmt.Println("Write key required to be specified with the --writekey flag.")
 		usage()
 		os.Exit(1)

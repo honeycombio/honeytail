@@ -129,6 +129,9 @@ func GetTimestamp(m map[string]interface{}, timeFieldName, timeFieldFormat strin
 				timeStr = strconv.Itoa(v)
 			case float64:
 				timeStr = strconv.FormatFloat(v, 'f', -1, 64)
+			case time.Time:
+				// it's a time.Time struct - we can just return it
+				return v
 			default:
 				warnAboutTime(timeFieldName, t, timeFoundImproperTypeMsg)
 				ts = Now()

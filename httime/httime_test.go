@@ -250,6 +250,14 @@ func TestGetTimestampCustomFormat(t *testing.T) {
 	}
 }
 
+func TestGetTimestampTypeTime(t *testing.T) {
+	expected := time.Now()
+	resp := GetTimestamp(map[string]interface{}{"real_time_key": expected}, "real_time_key", "")
+	if !resp.Equal(expected) {
+		t.Errorf("resp time %s didn't match expected time %s", resp, expected)
+	}
+}
+
 func TestCommaInTimestamp(t *testing.T) {
 	commaTimes := []testTimestamp{
 		{ // test commas as the fractional portion separator

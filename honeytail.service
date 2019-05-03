@@ -8,6 +8,8 @@ KillMode=process
 Restart=on-failure
 User=honeycomb
 Group=honeycomb
+RestartSec=5
+StartLimitInterval=0
 
 [Install]
 Alias=honeytail honeytail.service

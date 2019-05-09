@@ -19,6 +19,7 @@ jobs:
           root: workspace
           paths:
             - build_id
+
   test_honeytail:
     executor: linuxgo
     steps:
@@ -63,20 +64,21 @@ jobs:
           cp ./honeytail.conf /tmp/honeytail/
           find /tmp/honeytail -ls
       - run: |
-          tar -cvf /tmp/honeytail.tgz /tmp/honeytail
-          cp /tmp/honeytail.tgz workspace/
+          tar -cvf /tmp/honeytail.tar /tmp/honeytail
+          cp /tmp/honeytail.tar workspace/
       - persist_to_workspace:
           root: workspace
           paths:
-            - honeytail.tgz
+            - honeytail.tar
 
   publish:
     executor: linuxgo
     steps:
       - attach_workspace:
           at: workspace
+      - run: echo "export BUILD_ID=$(cat workspace/build_id)" >> $BASH_ENV
       - run: echo "in publish" && find . -ls
-      - run: tar -xzvf workspace/honeytail.tgz
+      - run: tar -xvf workspace/honeytail.tar
       - run: find . -ls
 
 workflows:

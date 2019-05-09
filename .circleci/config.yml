@@ -3,7 +3,7 @@ version: 2.1
 executors:
   linuxgo:
     parameters:
-    working_directory: /go/src/github.com/honeycombio/beeline-go
+    working_directory: /go/src/github.com/honeycombio/honeytail
     docker:
       - image: circleci/golang:1.10
 
@@ -29,7 +29,7 @@ jobs:
       - run: export BUILD_ID=$(cat ~/build_id)
       - run: echo "build ID 2dolla is >> ${BUILD_ID}"
       - run: echo "build ID is >> ${BUILD_ID}"
-      - run: go install -ldflags "-X main.BuildID=1.${BUILD_ID}" github.com/honeycombio/honeytail/...
+      - run: go install -ldflags "-X main.BuildID=1.${BUILD_ID}" ./...
 
   build_debs:
     executor: linuxgo
@@ -41,7 +41,7 @@ jobs:
           sudo apt-get install -y build-essential rpm ruby ruby-dev
           sudo gem install fpm
       - run: |
-          go install -ldflags "-X main.BuildID=1.${BUILD_ID}" github.com/honeycombio/honeytail/...
+          go install -ldflags "-X main.BuildID=1.${BUILD_ID}" ./...
           $GOPATH/bin/honeytail --write_default_config > ./honeytail.conf
           ./build-pkg.sh -v "1.${BUILD_ID}" -t deb
           ./build-pkg.sh -v "1.${BUILD_ID}" -t rpm

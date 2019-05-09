@@ -60,14 +60,13 @@ jobs:
       - run: |
           cp $GOPATH/bin/* workspace/
           cp ./honeytail.conf workspace/
-      - store_artifacts:
-          path: ./honeytail.conf
+          find workspace -ls
       - persist_to_workspace:
           root: workspace
           paths:
             - honeytail.conf
-            - honeytail-1.${BUILD_ID}-1.x86_64.rpm
-            - honeytail_1.${BUILD_ID}_amd64.deb
+            - "honeytail-1.${BUILD_ID}-1.x86_64.rpm"
+            - "honeytail_1.${BUILD_ID}_amd64.deb"
 
   publish:
     executor: linuxgo

@@ -1,5 +1,8 @@
 version: 2.1
 
+orbs:
+  aws-cli: circleci/aws-cli@0.1.13
+
 executors:
   linuxgo:
     parameters:
@@ -77,9 +80,17 @@ jobs:
       - attach_workspace:
           at: workspace
       - run: echo "export BUILD_ID=$(cat workspace/build_id)" >> $BASH_ENV
+
+      - aws-cli/install
+      - aws-cli/configure:
+          aws-access-key-id: AWS_ACCESS_KEY_ID
+          aws-secret-access-key: AWS_SECRET_ACCESS_KEY
+          aws-region: AWS_REGION
+
       - run: echo "in publish" && find . -ls
       - run: tar -xvf workspace/honeytail.tar
       - run: find . -ls
+      - run: aws s3 cp tmp/honeytail/* s3://honeycomb-builds/honeycombio/honeytail/${BUILD_ID}/${BUILD_ID}.1/home/travis/gopath/bin/
 
 workflows:
   build:

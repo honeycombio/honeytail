@@ -49,7 +49,6 @@ jobs:
       - run: echo "finished build_debs" && find . -ls
       - store_artifacts:
           path: ./honeytail.conf
-          destination: config/
 
   publish:
     executor: linuxgo

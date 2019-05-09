@@ -12,6 +12,7 @@ jobs:
     executor: linuxgo
     steps:
       - run: echo $(expr $CIRCLE_BUILD_NUM + 1000) > ~/build_id
+      - run: cat ~/build_id
   test_honeytail:
     executor: linuxgo
     steps:
@@ -36,6 +37,8 @@ jobs:
     steps:
       - checkout
       - run: export BUILD_ID=$(cat ~/build_id)
+      - run: echo ${BUILD_ID}
+      - run: cat ~/build_id
       - run: |
           sudo apt-get -qq update
           sudo apt-get install -y build-essential rpm ruby ruby-dev

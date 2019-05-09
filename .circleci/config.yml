@@ -90,7 +90,10 @@ jobs:
       - run: echo "in publish" && find . -ls
       - run: tar -xvf workspace/honeytail.tar
       - run: find . -ls
-      - run: aws s3 cp tmp/honeytail/* s3://honeycomb-builds/honeycombio/honeytail/${BUILD_ID}/${BUILD_ID}.1/home/travis/gopath/bin/
+      - run: |
+          for artifact in tmp/honeytail/*; do
+            aws s3 cp $artifact s3://honeycomb-builds/honeycombio/honeytail/${BUILD_ID}/${BUILD_ID}.1/home/travis/gopath/bin/
+          done
 
 workflows:
   build:
@@ -109,4 +112,6 @@ workflows:
           requires:
             - build_debs
             # - build_osx
-
+          # filters:
+          #   branches:
+          #     only: master

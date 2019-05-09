@@ -66,9 +66,9 @@ workflows:
       - build_debs:
           requires:
             - test_honeytail
-      - build_osx:
-          requires:
-            - test_honeytail
+      # - build_osx:
+      #     requires:
+      #       - test_honeytail
       - publish:
           requires:
             - build_debs

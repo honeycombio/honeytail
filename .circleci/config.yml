@@ -27,7 +27,9 @@ jobs:
     steps:
       - checkout
       - run: export BUILD_ID=$(cat ~/build_id)
-      - run: go install -ldflags "-X main.BuildID=1.${$BUILD_ID}" github.com/honeycombio/honeytail/...
+      - run: echo "build ID 2dolla is >> ${BUILD_ID}"
+      - run: echo "build ID is >> ${BUILD_ID}"
+      - run: go install -ldflags "-X main.BuildID=1.${BUILD_ID}" github.com/honeycombio/honeytail/...
 
   build_debs:
     executor: linuxgo
@@ -39,11 +41,11 @@ jobs:
           apt-get install -y build-essential rpm
           gem install fpm
       - run: |
-          go install -ldflags "-X main.BuildID=1.${$BUILD_ID}" github.com/honeycombio/honeytail/...
+          go install -ldflags "-X main.BuildID=1.${BUILD_ID}" github.com/honeycombio/honeytail/...
           $GOPATH/bin/honeytail --write_default_config > ./honeytail.conf
-          ./build-pkg.sh -v "1.${$BUILD_ID}" -t deb
-          ./build-pkg.sh -v "1.${$BUILD_ID}" -t rpm
-          pkg-test/test.sh "1.${$BUILD_ID}"
+          ./build-pkg.sh -v "1.${BUILD_ID}" -t deb
+          ./build-pkg.sh -v "1.${BUILD_ID}" -t rpm
+          pkg-test/test.sh "1.${BUILD_ID}"
       - run: echo "finished build_debs" && find . -ls
       - store_artifacts:
           path: ./honeytail.conf

@@ -42,6 +42,7 @@ jobs:
           ./build-pkg.sh -v "1.${$BUILD_ID}" -t deb
           ./build-pkg.sh -v "1.${$BUILD_ID}" -t rpm
           pkg-test/test.sh "1.${$BUILD_ID}"
+      - run: echo "finished build_debs" && find . -ls
       - store_artifacts:
           path: ./honeytail.conf
           destination: config/
@@ -49,7 +50,7 @@ jobs:
   publish:
     executor: linuxgo
     steps:
-      - run: find . -ls
+      - run: echo "in publish" && find . -ls
 
 workflows:
   build:

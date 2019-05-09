@@ -23,9 +23,6 @@ jobs:
     executor: linuxgo
     steps:
       - checkout
-      - attach_workspace:
-          at: workspace
-      - run: echo "export BUILD_ID=$(cat workspace/build_id)" >> $BASH_ENV
       - run: go get -v -t -d ./...
       # turn off race detection for now
       # - run: go test -race -v ./...
@@ -54,13 +51,15 @@ jobs:
           sudo gem install fpm
       - run: |
           go install -ldflags "-X main.BuildID=1.${BUILD_ID}" ./...
-          $GOPATH/bin/honeytail --write_default_config > workspace/honeytail.conf
+          $GOPATH/bin/honeytail --write_default_config > ./honeytail.conf
           ./build-pkg.sh -v "1.${BUILD_ID}" -t deb
           ./build-pkg.sh -v "1.${BUILD_ID}" -t rpm
           # pkg-test/test.sh "1.${BUILD_ID}"
       - run: echo "finished build_debs" && find . -ls
       - run: echo "finished build_debs" && find $GOPATH/bin -ls
-      - run: cp $GOPATH/bin/* workspace
+      - run: |
+          cp $GOPATH/bin/* workspace/
+          cp ./honeytail.conf workspace/
       - store_artifacts:
           path: ./honeytail.conf
       - persist_to_workspace:

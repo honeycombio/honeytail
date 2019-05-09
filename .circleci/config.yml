@@ -72,5 +72,5 @@ workflows:
       - publish:
           requires:
             - build_debs
-            - build_osx
+            # - build_osx
 

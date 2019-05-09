@@ -11,9 +11,10 @@ jobs:
   setup:
     executor: linuxgo
     steps:
-      - run: build_id=$(( $CIRCLE_BUILD_NUM + 1000 ))
-      - run: echo "export BUILD_ID=$build_id" >> $BASH_ENV
-      - run: echo "export BUILD_ID=$build_id"
+      - run: |
+          build_id=$(( $CIRCLE_BUILD_NUM + 1000 ))
+          echo "export BUILD_ID=$build_id" >> $BASH_ENV
+          echo "export BUILD_ID=$build_id"
       # - run: cat ~/build_id
   test_honeytail:
     executor: linuxgo

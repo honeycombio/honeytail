@@ -58,15 +58,17 @@ jobs:
       - run: echo "finished build_debs" && find . -ls
       - run: echo "finished build_debs" && find $GOPATH/bin -ls
       - run: |
-          cp $GOPATH/bin/* workspace/
-          cp ./honeytail.conf workspace/
-          find workspace -ls
+          mkdir /tmp/honeytail
+          cp $GOPATH/bin/* /tmp/honeytail/
+          cp ./honeytail.conf /tmp/honeytail/
+          find /tmp/honeytail -ls
+      - run: |
+          tar -cvf /tmp/honeytail.tgz /tmp/honeytail
+          cp /tmp/honeytail.tgz workspace/
       - persist_to_workspace:
           root: workspace
           paths:
-            - honeytail.conf
-            - "honeytail-1.${BUILD_ID}-1.x86_64.rpm"
-            - "honeytail_1.${BUILD_ID}_amd64.deb"
+            - honeytail.tgz
 
   publish:
     executor: linuxgo
@@ -74,6 +76,8 @@ jobs:
       - attach_workspace:
           at: workspace
       - run: echo "in publish" && find . -ls
+      - run: tar -xzvf workspace/honeytail.tgz
+      - run: find . -ls
 
 workflows:
   build:

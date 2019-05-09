@@ -11,7 +11,7 @@ jobs:
   setup:
     executor: linuxgo
     steps:
-      - run: echo $(expr $CIRCLE_BUILD_NUM + 1000) > ~/project/build_id
+      - run: echo $(expr $CIRCLE_BUILD_NUM + 1000) > ~/build_id
   test_honeytail:
     executor: linuxgo
     steps:
@@ -24,14 +24,14 @@ jobs:
       xcode: "10.0.0"
     steps:
       - checkout
-      - run: export BUILD_ID=$(cat ~/project/build_id)
+      - run: export BUILD_ID=$(cat ~/build_id)
       - run: go install -ldflags "-X main.BuildID=1.${$BUILD_ID}" github.com/honeycombio/honeytail/...
 
   build_debs:
     executor: linuxgo
     steps:
       - checkout
-      - run: export BUILD_ID=$(cat ~/project/build_id)
+      - run: export BUILD_ID=$(cat ~/build_id)
       - run: |
           apt-get -qq update
           apt-get install -y build-essential rpm

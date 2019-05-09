@@ -13,13 +13,15 @@ jobs:
     steps:
       - run: build_id=$(expr $CIRCLE_BUILD_NUM + 1000)
       - run: echo "export BUILD_ID=$build_id" >> $BASH_ENV
-      - run: cat ~/build_id
+      - run: echo "export BUILD_ID=$build_id"
+      # - run: cat ~/build_id
   test_honeytail:
     executor: linuxgo
     steps:
       - checkout
       - run: echo $BUILD_ID
       - run: cat $BASH_ENV
+      - run: find ~ -ls
       - run: go get -v -t -d ./...
       # turn off race detection for now
       # - run: go test -race -v ./...
@@ -41,7 +43,7 @@ jobs:
       - checkout
       - run: export BUILD_ID=$(cat ~/build_id)
       - run: echo ${BUILD_ID}
-      - run: cat ~/build_id
+      - run: find ~ -ls
       - run: |
           sudo apt-get -qq update
           sudo apt-get install -y build-essential rpm ruby ruby-dev

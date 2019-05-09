@@ -37,9 +37,9 @@ jobs:
       - checkout
       - run: export BUILD_ID=$(cat ~/build_id)
       - run: |
-          apt-get -qq update
-          apt-get install -y build-essential rpm
-          gem install fpm
+          sudo apt-get -qq update
+          sudo apt-get install -y build-essential rpm
+          sudo gem install fpm
       - run: |
           go install -ldflags "-X main.BuildID=1.${BUILD_ID}" github.com/honeycombio/honeytail/...
           $GOPATH/bin/honeytail --write_default_config > ./honeytail.conf

@@ -112,6 +112,6 @@ workflows:
           requires:
             - build_debs
             # - build_osx
-          # filters:
-          #   branches:
-          #     only: master
+          filters:
+            branches:
+              only: master

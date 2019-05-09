@@ -14,6 +14,7 @@ jobs:
       - run: |
           mkdir workspace
           echo $(( $CIRCLE_BUILD_NUM + 1000 )) > workspace/build_id
+          cat workspace/build_id
       - persist_to_workspace:
           root: workspace
           paths:
@@ -24,13 +25,7 @@ jobs:
       - checkout
       - attach_workspace:
           at: workspace
-      - run: echo "export BUILD_ID=$(cat workspace/build_id)"
-      - run: |
-          echo "export BUILD_ID=$(cat workspace/build_id)" >> $BASH_ENV
-          cat workspace/build_id
-      - run: echo $BUILD_ID
-      - run: cat $BASH_ENV
-      - run: find ~ -ls
+      - run: echo "export BUILD_ID=$(cat workspace/build_id)" >> $BASH_ENV
       - run: go get -v -t -d ./...
       # turn off race detection for now
       # - run: go test -race -v ./...
@@ -41,36 +36,45 @@ jobs:
       xcode: "10.0.0"
     steps:
       - checkout
-      - run: export BUILD_ID=$(cat ~/build_id)
-      - run: echo "build ID 2dolla is >> ${BUILD_ID}"
-      - run: echo "build ID is >> ${BUILD_ID}"
+      - attach_workspace:
+          at: workspace
+      - run: echo "export BUILD_ID=$(cat workspace/build_id)" >> $BASH_ENV
       - run: go install -ldflags "-X main.BuildID=1.${BUILD_ID}" ./...
 
   build_debs:
     executor: linuxgo
     steps:
       - checkout
-      - run: export BUILD_ID=$(cat ~/build_id)
-      - run: echo ${BUILD_ID}
-      - run: find ~ -ls
+      - attach_workspace:
+          at: workspace
+      - run: echo "export BUILD_ID=$(cat workspace/build_id)" >> $BASH_ENV
       - run: |
           sudo apt-get -qq update
           sudo apt-get install -y build-essential rpm ruby ruby-dev
           sudo gem install fpm
       - run: |
           go install -ldflags "-X main.BuildID=1.${BUILD_ID}" ./...
-          $GOPATH/bin/honeytail --write_default_config > ./honeytail.conf
+          $GOPATH/bin/honeytail --write_default_config > workspace/honeytail.conf
           ./build-pkg.sh -v "1.${BUILD_ID}" -t deb
           ./build-pkg.sh -v "1.${BUILD_ID}" -t rpm
           # pkg-test/test.sh "1.${BUILD_ID}"
       - run: echo "finished build_debs" && find . -ls
       - run: echo "finished build_debs" && find $GOPATH/bin -ls
+      - run: cp $GOPATH/bin/* workspace
       - store_artifacts:
           path: ./honeytail.conf
+      - persist_to_workspace:
+          root: workspace
+          paths:
+            - honeytail.conf
+            - honeytail-1.${BUILD_ID}-1.x86_64.rpm
+            - honeytail_1.${BUILD_ID}_amd64.deb
 
   publish:
     executor: linuxgo
     steps:
+      - attach_workspace:
+          at: workspace
       - run: echo "in publish" && find . -ls
 
 workflows:

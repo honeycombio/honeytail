@@ -1,0 +1,57 @@
+version: 2.1
+
+executors:
+  linuxgo:
+    parameters:
+    working_directory: /go/src/github.com/honeycombio/beeline-go
+    docker:
+      - image: circleci/golang:1.10
+
+jobs:
+  test_honeytail:
+    executor: linuxgo
+    steps:
+      - checkout
+      - run: go get -v -t -d ./...
+      - run: go test -race -v ./...
+
+  build_osx:
+    macos:
+      xcode: "10.0.0"
+    requires:
+      - test_honeytail
+    steps:
+      - go install
+
+  build_debs:
+    executor: linuxgo
+    steps:
+      - checkout
+      - run |
+          apt-get -qq update
+          apt-get install -y build-essential rpm
+          gem install fpm
+      - run |
+          go install -ldflags "-X main.BuildID=1.${TRAVIS_BUILD_NUMBER}" github.com/honeycombio/honeytail/...
+          $GOPATH/bin/honeytail --write_default_config > ./honeytail.conf
+          if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then ./build-pkg.sh -v "1.${TRAVIS_BUILD_NUMBER}" -t deb; fi
+          if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then ./build-pkg.sh -v "1.${TRAVIS_BUILD_NUMBER}" -t rpm; fi
+          if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then pkg-test/test.sh "1.${TRAVIS_BUILD_NUMBER}"; fi
+      - store_artifacts:
+          path: ./honeytail.conf
+          destination: config/
+
+  publish:
+    executor: linuxgo
+
+
+
+
+workflows:
+  build:
+    jobs:
+      - test_honeytail
+      - build_debs:
+          requires:
+            - test_honeytail
+

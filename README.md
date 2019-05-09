@@ -1,4 +1,4 @@
-# honeytail [![Build Status](https://travis-ci.org/honeycombio/honeytail.svg?branch=master)](https://travis-ci.org/honeycombio/honeytail)
+# honeytail [![CircleCI](https://circleci.com/gh/honeycombio/honeytail.svg?style=shield)](https://circleci.com/gh/honeycombio/honeytail)
 
 `honeytail` is [Honeycomb](https://honeycomb.io)'s agent for ingesting log file data into Honeycomb and making it available for exploration. Its favorite format is **JSON**, but understands how to parse a range of other well-known log formats.
 

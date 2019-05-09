@@ -38,7 +38,7 @@ jobs:
       - run: export BUILD_ID=$(cat ~/build_id)
       - run: |
           sudo apt-get -qq update
-          sudo apt-get install -y build-essential rpm
+          sudo apt-get install -y build-essential rpm ruby
           sudo gem install fpm
       - run: |
           go install -ldflags "-X main.BuildID=1.${BUILD_ID}" github.com/honeycombio/honeytail/...

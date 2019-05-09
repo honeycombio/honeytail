@@ -45,7 +45,7 @@ jobs:
           $GOPATH/bin/honeytail --write_default_config > ./honeytail.conf
           ./build-pkg.sh -v "1.${BUILD_ID}" -t deb
           ./build-pkg.sh -v "1.${BUILD_ID}" -t rpm
-          pkg-test/test.sh "1.${BUILD_ID}"
+          # pkg-test/test.sh "1.${BUILD_ID}"
       - run: echo "finished build_debs" && find . -ls
       - store_artifacts:
           path: ./honeytail.conf

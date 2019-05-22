@@ -39,7 +39,7 @@ jobs:
   test_honeytail:
     executor: linuxgo
     steps:
-      - date +%s > step_start
+      - run: date +%s > step_start
       - attach_workspace:
           at: buildevents
       - checkout
@@ -62,7 +62,7 @@ jobs:
   build_debs:
     executor: linuxgo
     steps:
-      - date +%s > step_start
+      - run: date +%s > step_start
       - attach_workspace:
           at: buildevents
       - checkout
@@ -98,7 +98,7 @@ jobs:
   publish:
     executor: linuxgo
     steps:
-      - date +%s > step_start
+      - run: date +%s > step_start
       - attach_workspace:
           at: buildevents
       - attach_workspace:
@@ -122,6 +122,7 @@ jobs:
 
   ### final submits the buildevents trace for this build
   final:
+    executor: linuxgo
     steps:
       - attach_workspace:
           at: buildevents

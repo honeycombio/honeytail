@@ -37,7 +37,7 @@ jobs:
             - build_id
       - run:
           name: report_step
-          command: ~/be/bin/buildevents step $CIRCLE_WORKFLOW_ID setup $(cat buildevents/build_start) setup
+          command: be/bin/buildevents step $CIRCLE_WORKFLOW_ID setup $(cat be/build_start) setup
           when: always
 
   test_honeytail:

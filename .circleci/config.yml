@@ -19,7 +19,7 @@ jobs:
           mkdir -p buildevents/bin
           date +%s > buildevents/build_start
       - run: |
-          curl -o buildevents/bin/be https://github.com/honeycombio/buildevents/releases/latest/download/buildevents
+          curl -L -o buildevents/bin/be https://github.com/honeycombio/buildevents/releases/latest/download/buildevents
           chmod 755 buildevents/bin/be
       - persist_to_workspace:
           root: buildevents

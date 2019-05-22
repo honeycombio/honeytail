@@ -14,6 +14,18 @@ jobs:
   setup:
     executor: linuxgo
     steps:
+      ### set up buildevents
+      - run: |
+          mkdir -p buildevents/bin
+          date +%s > buildevents/build_start
+      - run: |
+          curl -o buildevents/bin/be https://github.com/honeycombio/buildevents/releases/latest/download/buildevents
+      - persist_to_workspace:
+          root: buildevents
+          paths:
+            - build_start
+            - bin/be
+      ### set up build ID for the whole workflow using the setup build number
       - run: |
           mkdir workspace
           echo $(( $CIRCLE_BUILD_NUM + 1000 )) > workspace/build_id
@@ -22,15 +34,20 @@ jobs:
           root: workspace
           paths:
             - build_id
+      - run: buildevents/bin/be step $CIRCLE_WORKFLOW_ID setup $(cat buildevents/build_start) setup
 
   test_honeytail:
     executor: linuxgo
     steps:
+      - date +%s > step_start
+      - attach_workspace:
+          at: buildevents
       - checkout
-      - run: go get -v -t -d ./...
+      - run: buildevents/bin/be cmd $CIRCLE_WORKFLOW_ID test_honeytail go_get -- go get -v -t -d ./...
       # turn off race detection for now
       # - run: go test -race -v ./...
-      - run: go test -v ./...
+      - run: buildevents/bin/be cmd $CIRCLE_WORKFLOW_ID test_honeytail go_test -- go test -v ./...
+      - run: buildevents/bin/be step $CIRCLE_WORKFLOW_ID test_honeytail $(cat step_start) test_honeytail
 
   build_osx:
     macos:
@@ -45,19 +62,22 @@ jobs:
   build_debs:
     executor: linuxgo
     steps:
+      - date +%s > step_start
+      - attach_workspace:
+          at: buildevents
       - checkout
       - attach_workspace:
           at: workspace
       - run: echo "export BUILD_ID=$(cat workspace/build_id)" >> $BASH_ENV
       - run: |
-          sudo apt-get -qq update
-          sudo apt-get install -y build-essential rpm ruby ruby-dev
-          sudo gem install fpm
+          buildevents/bin/be cmd $CIRCLE_WORKFLOW_ID build_debs apt_get_update -- sudo apt-get -qq update
+          buildevents/bin/be cmd $CIRCLE_WORKFLOW_ID build_debs apt_get_install -- sudo apt-get install -y build-essential rpm ruby ruby-dev
+          buildevents/bin/be cmd $CIRCLE_WORKFLOW_ID build_debs gem_install -- sudo gem install fpm
       - run: |
-          go install -ldflags "-X main.BuildID=1.${BUILD_ID}" ./...
+          buildevents/bin/be cmd $CIRCLE_WORKFLOW_ID build_debs go_install -- go install -ldflags "-X main.BuildID=1.${BUILD_ID}" ./...
           $GOPATH/bin/honeytail --write_default_config > ./honeytail.conf
-          ./build-pkg.sh -v "1.${BUILD_ID}" -t deb
-          ./build-pkg.sh -v "1.${BUILD_ID}" -t rpm
+          buildevents/bin/be cmd $CIRCLE_WORKFLOW_ID build_debs build_deb -- ./build-pkg.sh -v "1.${BUILD_ID}" -t deb
+          buildevents/bin/be cmd $CIRCLE_WORKFLOW_ID build_debs build_rpm -- ./build-pkg.sh -v "1.${BUILD_ID}" -t rpm
           # pkg-test/test.sh "1.${BUILD_ID}"
       - run: echo "finished build_debs" && find . -ls
       - run: echo "finished build_debs" && find $GOPATH/bin -ls
@@ -67,16 +87,20 @@ jobs:
           cp ./honeytail.conf /tmp/honeytail/
           find /tmp/honeytail -ls
       - run: |
-          tar -cvf /tmp/honeytail.tar /tmp/honeytail
+          buildevents/bin/be cmd $CIRCLE_WORKFLOW_ID build_debs tar_honeytail -- tar -cvf /tmp/honeytail.tar /tmp/honeytail
           cp /tmp/honeytail.tar workspace/
       - persist_to_workspace:
           root: workspace
           paths:
             - honeytail.tar
+      - run: buildevents/bin/be step $CIRCLE_WORKFLOW_ID build_debs $(cat step_start) build_debs
 
   publish:
     executor: linuxgo
     steps:
+      - date +%s > step_start
+      - attach_workspace:
+          at: buildevents
       - attach_workspace:
           at: workspace
       - run: echo "export BUILD_ID=$(cat workspace/build_id)" >> $BASH_ENV
@@ -94,6 +118,16 @@ jobs:
           for artifact in tmp/honeytail/*; do
             aws s3 cp $artifact s3://honeycomb-builds/honeycombio/honeytail/${BUILD_ID}/${BUILD_ID}.1/home/travis/gopath/bin/
           done
+      - run: buildevents/bin/be step $CIRCLE_WORKFLOW_ID publish $(cat step_start) publish
+
+  ### final submits the buildevents trace for this build
+  final:
+    steps:
+      - attach_workspace:
+          at: buildevents
+      - run |
+          BUILD_START=$(cat buildevents/build_start)
+          buildevents build $CIRCLE_WORKFLOW_ID $BUILD_START success
 
 workflows:
   build:

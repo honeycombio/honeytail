@@ -163,3 +163,6 @@ workflows:
           filters:
             branches:
               only: master
+      - final:
+          requires:
+            - publish

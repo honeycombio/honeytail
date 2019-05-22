@@ -70,21 +70,21 @@ jobs:
     executor: linuxgo
     steps:
       - attach_workspace:
-          at: buildevents
-      - run: date +%s > buildevents/step_start
+          at: ~/buildevents
+      - run: date +%s > ~/buildevents/step_start
       - checkout
       - attach_workspace:
           at: workspace
       - run: echo "export BUILD_ID=$(cat workspace/build_id)" >> $BASH_ENV
       - run: |
-          buildevents/bin/be cmd $CIRCLE_WORKFLOW_ID build_debs apt_get_update -- sudo apt-get -qq update
-          buildevents/bin/be cmd $CIRCLE_WORKFLOW_ID build_debs apt_get_install -- sudo apt-get install -y build-essential rpm ruby ruby-dev
-          buildevents/bin/be cmd $CIRCLE_WORKFLOW_ID build_debs gem_install -- sudo gem install fpm
+          ~/buildevents/bin/be cmd $CIRCLE_WORKFLOW_ID build_debs apt_get_update -- sudo apt-get -qq update
+          ~/buildevents/bin/be cmd $CIRCLE_WORKFLOW_ID build_debs apt_get_install -- sudo apt-get install -y build-essential rpm ruby ruby-dev
+          ~/buildevents/bin/be cmd $CIRCLE_WORKFLOW_ID build_debs gem_install -- sudo gem install fpm
       - run: |
-          buildevents/bin/be cmd $CIRCLE_WORKFLOW_ID build_debs go_install -- go install -ldflags "-X main.BuildID=1.${BUILD_ID}" ./...
+          ~/buildevents/bin/be cmd $CIRCLE_WORKFLOW_ID build_debs go_install -- go install -ldflags "-X main.BuildID=1.${BUILD_ID}" ./...
           $GOPATH/bin/honeytail --write_default_config > ./honeytail.conf
-          buildevents/bin/be cmd $CIRCLE_WORKFLOW_ID build_debs build_deb -- ./build-pkg.sh -v "1.${BUILD_ID}" -t deb
-          buildevents/bin/be cmd $CIRCLE_WORKFLOW_ID build_debs build_rpm -- ./build-pkg.sh -v "1.${BUILD_ID}" -t rpm
+          ~/buildevents/bin/be cmd $CIRCLE_WORKFLOW_ID build_debs build_deb -- ./build-pkg.sh -v "1.${BUILD_ID}" -t deb
+          ~/buildevents/bin/be cmd $CIRCLE_WORKFLOW_ID build_debs build_rpm -- ./build-pkg.sh -v "1.${BUILD_ID}" -t rpm
           # pkg-test/test.sh "1.${BUILD_ID}"
       - run: echo "finished build_debs" && find . -ls
       - run: echo "finished build_debs" && find $GOPATH/bin -ls
@@ -94,7 +94,7 @@ jobs:
           cp ./honeytail.conf /tmp/honeytail/
           find /tmp/honeytail -ls
       - run: |
-          buildevents/bin/be cmd $CIRCLE_WORKFLOW_ID build_debs tar_honeytail -- tar -cvf /tmp/honeytail.tar /tmp/honeytail
+          ~/buildevents/bin/be cmd $CIRCLE_WORKFLOW_ID build_debs tar_honeytail -- tar -cvf /tmp/honeytail.tar /tmp/honeytail
           cp /tmp/honeytail.tar workspace/
       - persist_to_workspace:
           root: workspace
@@ -102,7 +102,7 @@ jobs:
             - honeytail.tar
       - run:
           name: report_step
-          command: buildevents/bin/be step $CIRCLE_WORKFLOW_ID build_debs $(cat buildevents/step_start) build_debs
+          command: ~/buildevents/bin/be step $CIRCLE_WORKFLOW_ID build_debs $(cat ~/buildevents/step_start) build_debs
           when: always
 
   publish:
@@ -138,10 +138,10 @@ jobs:
     executor: linuxgo
     steps:
       - attach_workspace:
-          at: buildevents
+          at: ~/buildevents
       - run: |
-          BUILD_START=$(cat buildevents/build_start)
-          buildevents build $CIRCLE_WORKFLOW_ID $BUILD_START success
+          BUILD_START=$(cat ~/buildevents/build_start)
+          ~/buildevents/bin/be build $CIRCLE_WORKFLOW_ID $BUILD_START success
 
 workflows:
   build:

@@ -43,10 +43,10 @@ jobs:
   test_honeytail:
     executor: linuxgo
     steps:
+      - checkout
       - attach_workspace:
           at: buildevents
       - run: date +%s > buildevents/step_start
-      - checkout
       - run: buildevents/bin/be cmd $CIRCLE_WORKFLOW_ID test_honeytail go_get -- go get -v -t -d ./...
       # turn off race detection for now
       # - run: go test -race -v ./...

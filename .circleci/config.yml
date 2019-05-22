@@ -165,4 +165,4 @@ workflows:
               only: master
       - final:
           requires:
-            - publish
+            - build_debs

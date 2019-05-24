@@ -18,19 +18,32 @@ jobs:
       - run: |
           mkdir -p be/bin
           date +%s > be/build_start
-      - run: |
-          curl -L -o be/bin/buildevents https://github.com/honeycombio/buildevents/releases/latest/download/buildevents
-          chmod 755 be/bin/buildevents
+      - run:
+          name: install buildevents
+          command: |
+            curl -L -o be/bin/buildevents https://github.com/honeycombio/buildevents/releases/latest/download/buildevents
+            chmod 755 be/bin/buildevents
       - persist_to_workspace:
           root: be
           paths:
             - build_start
             - bin/buildevents
-      ### set up build ID for the whole workflow using the setup build number
-      - run: |
-          mkdir workspace
-          echo $(( $CIRCLE_BUILD_NUM + 1000 )) > workspace/build_id
-          cat workspace/build_id
+
+      - run:
+          name: Generate and record build ID for the whole workflow
+          command: |
+            mkdir workspace
+            echo $(( $CIRCLE_BUILD_NUM + 1000 )) > workspace/build_id
+
+            # Publish the version number as a failed test so it appears at the top
+            mkdir -p test-results/version
+            echo '<testsuite tests="1"><testcase name="Version Number (not actually a failure)"><failure>' > test-results/version/results.xml
+            cat workspace/build_id >> test-results/version/results.xml
+            echo '</failure></testcase></testsuite>' >> test-results/version/results.xml
+
+            cat workspace/build_id
+      - store_test_results:
+          path: test-results
       - persist_to_workspace:
           root: workspace
           paths:

@@ -2,6 +2,7 @@ version: 2.1
 
 orbs:
   aws-cli: circleci/aws-cli@0.1.13
+  buildevents: honeycombio/buildevents@dev:first
 
 executors:
   linuxgo:
@@ -14,47 +15,18 @@ jobs:
   setup:
     executor: linuxgo
     steps:
-      ### set up buildevents
-      - run: |
-          mkdir -p be/bin
-          date +%s > be/build_start
-      - run: |
-          curl -L -o be/bin/buildevents https://github.com/honeycombio/buildevents/releases/latest/download/buildevents
-          chmod 755 be/bin/buildevents
-      - persist_to_workspace:
-          root: be
-          paths:
-            - build_start
-            - bin/buildevents
-      ### set up build ID for the whole workflow using the setup build number
-      - run: |
-          mkdir workspace
-          echo $(( $CIRCLE_BUILD_NUM + 1000 )) > workspace/build_id
-          cat workspace/build_id
-      - persist_to_workspace:
-          root: workspace
-          paths:
-            - build_id
-      - run:
-          name: report_step
-          command: be/bin/buildevents step $CIRCLE_WORKFLOW_ID setup $(cat be/build_start) setup
-          when: always
+      - setup_linux
 
   test_honeytail:
     executor: linuxgo
     steps:
-      - attach_workspace:
-          at: ~/be
-      - run: date +%s > ~/be/step_start
-      - checkout
-      - run: ~/be/bin/buildevents cmd $CIRCLE_WORKFLOW_ID test_honeytail go_get -- go get -v -t -d ./...
-      # turn off race detection for now
-      # - run: go test -race -v ./...
-      - run: ~/be/bin/buildevents cmd $CIRCLE_WORKFLOW_ID test_honeytail go_test -- go test -v ./...
-      - run:
-          name: report_step
-          command: ~/be/bin/buildevents step $CIRCLE_WORKFLOW_ID test_honeytail $(cat ~/be/step_start) test_honeytail
-          when: always
+      with_job_span:
+        steps:
+          - checkout
+          - run: be-cmd go_get -- go get -v -t -d ./...
+          # turn off race detection for now
+          # - run: go test -race -v ./...
+          - run: be-cmd go_test -- go test -v ./...
 
   build_osx:
     macos:
@@ -69,79 +41,65 @@ jobs:
   build_debs:
     executor: linuxgo
     steps:
-      - attach_workspace:
-          at: ~/be
-      - run: date +%s > ~/be/step_start
-      - checkout
-      - attach_workspace:
-          at: workspace
-      - run: echo "export BUILD_ID=$(cat workspace/build_id)" >> $BASH_ENV
-      - run: |
-          ~/be/bin/buildevents cmd $CIRCLE_WORKFLOW_ID build_debs apt_get_update -- sudo apt-get -qq update
-          ~/be/bin/buildevents cmd $CIRCLE_WORKFLOW_ID build_debs apt_get_install -- sudo apt-get install -y build-essential rpm ruby ruby-dev
-          ~/be/bin/buildevents cmd $CIRCLE_WORKFLOW_ID build_debs gem_install -- sudo gem install fpm
-      - run: |
-          ~/be/bin/buildevents cmd $CIRCLE_WORKFLOW_ID build_debs go_install -- go install -ldflags "-X main.BuildID=1.${BUILD_ID}" ./...
-          $GOPATH/bin/honeytail --write_default_config > ./honeytail.conf
-          ~/be/bin/buildevents cmd $CIRCLE_WORKFLOW_ID build_debs build_deb -- ./build-pkg.sh -v "1.${BUILD_ID}" -t deb
-          ~/be/bin/buildevents cmd $CIRCLE_WORKFLOW_ID build_debs build_rpm -- ./build-pkg.sh -v "1.${BUILD_ID}" -t rpm
-          # pkg-test/test.sh "1.${BUILD_ID}"
-      - run: echo "finished build_debs" && find . -ls
-      - run: echo "finished build_debs" && find $GOPATH/bin -ls
-      - run: |
-          mkdir /tmp/honeytail
-          cp $GOPATH/bin/* /tmp/honeytail/
-          cp ./honeytail.conf /tmp/honeytail/
-          find /tmp/honeytail -ls
-      - run: |
-          ~/be/bin/buildevents cmd $CIRCLE_WORKFLOW_ID build_debs tar_honeytail -- tar -cvf /tmp/honeytail.tar /tmp/honeytail
-          cp /tmp/honeytail.tar workspace/
-      - persist_to_workspace:
-          root: workspace
-          paths:
-            - honeytail.tar
-      - run:
-          name: report_step
-          command: ~/be/bin/buildevents step $CIRCLE_WORKFLOW_ID build_debs $(cat ~/be/step_start) build_debs
-          when: always
+      with_job_span:
+        steps:
+          - checkout
+          - attach_workspace:
+              at: workspace
+          - run: echo "export BUILD_ID=$(cat workspace/build_id)" >> $BASH_ENV
+          - run: |
+              be-cmd apt_get_update -- sudo apt-get -qq update
+              be-cmd apt_get_install -- sudo apt-get install -y build-essential rpm ruby ruby-dev
+              be-cmd gem_install -- sudo gem install fpm
+          - run: |
+              be-cmd go_install -- go install -ldflags "-X main.BuildID=1.${BUILD_ID}" ./...
+              $GOPATH/bin/honeytail --write_default_config > ./honeytail.conf
+              be-cmd build_deb -- ./build-pkg.sh -v "1.${BUILD_ID}" -t deb
+              be-cmd build_rpm -- ./build-pkg.sh -v "1.${BUILD_ID}" -t rpm
+              # pkg-test/test.sh "1.${BUILD_ID}"
+          - run: echo "finished build_debs" && find . -ls
+          - run: echo "finished build_debs" && find $GOPATH/bin -ls
+          - run: |
+              mkdir /tmp/honeytail
+              cp $GOPATH/bin/* /tmp/honeytail/
+              cp ./honeytail.conf /tmp/honeytail/
+              find /tmp/honeytail -ls
+          - run: |
+              be-cmd tar_honeytail -- tar -cvf /tmp/honeytail.tar /tmp/honeytail
+              cp /tmp/honeytail.tar workspace/
+          - persist_to_workspace:
+              root: workspace
+              paths:
+                - honeytail.tar
 
   publish:
     executor: linuxgo
     steps:
-      - attach_workspace:
-          at: ~/be
-      - run: date +%s > ~/be/step_start
-      - attach_workspace:
-          at: workspace
-      - run: echo "export BUILD_ID=$(cat workspace/build_id)" >> $BASH_ENV
+      with_job_span:
+        steps:
+        - attach_workspace:
+            at: workspace
+        - run: echo "export BUILD_ID=$(cat workspace/build_id)" >> $BASH_ENV
 
-      - aws-cli/install
-      - aws-cli/configure:
-          aws-access-key-id: AWS_ACCESS_KEY_ID
-          aws-secret-access-key: AWS_SECRET_ACCESS_KEY
-          aws-region: AWS_REGION
+        - aws-cli/install
+        - aws-cli/configure:
+            aws-access-key-id: AWS_ACCESS_KEY_ID
+            aws-secret-access-key: AWS_SECRET_ACCESS_KEY
+            aws-region: AWS_REGION
 
-      - run: echo "in publish" && find . -ls
-      - run: tar -xvf workspace/honeytail.tar
-      - run: find . -ls
-      - run: |
-          for artifact in tmp/honeytail/*; do
-            aws s3 cp $artifact s3://honeycomb-builds/honeycombio/honeytail/${BUILD_ID}/${BUILD_ID}.1/home/travis/gopath/bin/
-          done
-      - run:
-          name: report_step
-          command: ~/be/bin/buildevents step $CIRCLE_WORKFLOW_ID publish $(cat ~/be/step_start) publish
-          when: always
+          - run: echo "in publish" && find . -ls
+        - run: tar -xvf workspace/honeytail.tar
+        - run: find . -ls
+        - run: |
+            for artifact in tmp/honeytail/*; do
+              aws s3 cp $artifact s3://honeycomb-builds/honeycombio/honeytail/${BUILD_ID}/${BUILD_ID}.1/home/travis/gopath/bin/
+            done
 
-  ### final submits the buildevents trace for this build
+    ### final submits the buildevents trace for this build
   final:
     executor: linuxgo
     steps:
-      - attach_workspace:
-          at: ~/be
-      - run: |
-          BUILD_START=$(cat ~/be/build_start)
-          ~/be/bin/buildevents build $CIRCLE_WORKFLOW_ID $BUILD_START success
+      - finish_trace
 
 workflows:
   build:

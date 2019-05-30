@@ -87,7 +87,7 @@ jobs:
               aws-secret-access-key: AWS_SECRET_ACCESS_KEY
               aws-region: AWS_REGION
 
-            - run: echo "in publish" && find . -ls
+          - run: echo "in publish" && find . -ls
           - run: tar -xvf workspace/honeytail.tar
           - run: find . -ls
           - run: |

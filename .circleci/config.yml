@@ -61,11 +61,16 @@ jobs:
             - buildevents/berun:
                 bename: gem_install
                 becommand: sudo gem install fpm
-            - run: |
-                be-cmd go_install -- go install -ldflags "-X main.BuildID=1.${BUILD_ID}" ./...
-                $GOPATH/bin/honeytail --write_default_config > ./honeytail.conf
-                be-cmd build_deb -- ./build-pkg.sh -v "1.${BUILD_ID}" -t deb
-                be-cmd build_rpm -- ./build-pkg.sh -v "1.${BUILD_ID}" -t rpm
+            - buildevents/berun:
+                bename: go_install
+                becommand: go install -ldflags "-X main.BuildID=1.${BUILD_ID}" ./...
+            - run: $GOPATH/bin/honeytail --write_default_config > ./honeytail.conf
+            - buildevents/berun:
+                bename: build_deb
+                becommand: ./build-pkg.sh -v "1.${BUILD_ID}" -t deb
+            - buildevents/berun:
+                bename: build_rpm
+                becommand: ./build-pkg.sh -v "1.${BUILD_ID}" -t rpm
                 # pkg-test/test.sh "1.${BUILD_ID}"
             - run: echo "finished build_debs" && find . -ls
             - run: echo "finished build_debs" && find $GOPATH/bin -ls
@@ -74,9 +79,10 @@ jobs:
                 cp $GOPATH/bin/* /tmp/honeytail/
                 cp ./honeytail.conf /tmp/honeytail/
                 find /tmp/honeytail -ls
-            - run: |
-                be-cmd tar_honeytail -- tar -cvf /tmp/honeytail.tar /tmp/honeytail
-                cp /tmp/honeytail.tar workspace/
+            - buildevents/berun:
+                bename: tar_honeytail
+                becommand: tar -cvf /tmp/honeytail.tar /tmp/honeytail
+            - run: cp /tmp/honeytail.tar workspace/
             - persist_to_workspace:
                 root: workspace
                 paths:

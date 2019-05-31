@@ -1,8 +1,9 @@
 version: 2.1
 
 orbs:
-  aws-cli: circleci/aws-cli@0.1.13
   buildevents: honeycombio/buildevents@dev:first
+  aws-cli: circleci/aws-cli@0.1.13
+
 
 executors:
   linuxgo:
@@ -15,12 +16,12 @@ jobs:
   setup:
     executor: linuxgo
     steps:
-      - setup_linux
+      - buildevents/setup_linux
 
   test_honeytail:
     executor: linuxgo
     steps:
-      - with_job_span:
+      - buildevents/with_job_span:
           steps:
             - checkout
             - run: be-cmd go_get -- go get -v -t -d ./...
@@ -41,7 +42,7 @@ jobs:
   build_debs:
     executor: linuxgo
     steps:
-      - with_job_span:
+      - buildevents/with_job_span:
           steps:
             - checkout
             - attach_workspace:
@@ -75,7 +76,7 @@ jobs:
   publish:
     executor: linuxgo
     steps:
-      - with_job_span:
+      - buildevents/with_job_span:
           steps:
             - attach_workspace:
                 at: workspace
@@ -99,7 +100,8 @@ jobs:
   final:
     executor: linuxgo
     steps:
-      - finish_trace
+      - buildevents/finish_trace:
+          result: success
 
 workflows:
   build:

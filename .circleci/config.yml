@@ -24,12 +24,12 @@ jobs:
       - buildevents/with_job_span:
           steps:
             - checkout
-            - berun:
+            - buildevents/berun:
                 bename: go_get
                 becommand: go get -v -t -d ./...
             # turn off race detection for now
             # - run: go test -race -v ./...
-            - berun:
+            - buildevents/berun:
                 bename: go_test
                 becommand: go test -v ./...
 
@@ -52,13 +52,13 @@ jobs:
             - attach_workspace:
                 at: workspace
             - run: echo "export BUILD_ID=$(cat workspace/build_id)" >> $BASH_ENV
-            - berun:
+            - buildevents/berun:
                 bename: apt_get_update
                 becommand: sudo apt-get -qq update
-            - berun:
+            - buildevents/berun:
                 bename: apt_get_install
                 becommand: sudo apt-get install -y build-essential rpm ruby ruby-dev
-            - berun:
+            - buildevents/berun:
                 bename: gem_install
                 becommand: sudo gem install fpm
             - run: |

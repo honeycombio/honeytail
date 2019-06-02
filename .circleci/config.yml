@@ -1,7 +1,7 @@
 version: 2.1
 
 orbs:
-  buildevents: honeycombio/buildevents@dev:first
+  buildevents: honeycombio/buildevents@dev:second
   aws-cli: circleci/aws-cli@0.1.13
 
 
@@ -16,7 +16,7 @@ jobs:
   setup:
     executor: linuxgo
     steps:
-      - buildevents/setup_linux
+      - buildevents/start_trace
 
   test_honeytail:
     executor: linuxgo

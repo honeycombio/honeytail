@@ -33,7 +33,6 @@ jobs:
                 bename: go_test
                 becommand: go test -v ./...
 
-
   build_osx:
     macos:
       xcode: "10.0.0"

@@ -18,8 +18,8 @@ jobs:
     steps:
       - buildevents/start_trace
       - buildevents/with_job_span:
-          - steps:
-              - run: echo foo
+          steps:
+            - run: echo foo
 
   test_honeytail:
     executor: linuxgo

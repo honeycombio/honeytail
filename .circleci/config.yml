@@ -1,7 +1,7 @@
 version: 2.1
 
 orbs:
-  buildevents: honeycombio/buildevents@dev:master
+  buildevents: honeycombio/buildevents@0.2.0
   aws-cli: circleci/aws-cli@0.1.13
 
 
@@ -17,9 +17,11 @@ jobs:
     executor: linuxgo
     steps:
       - buildevents/start_trace
-      - buildevents/with_job_span:
-          steps:
-            - run: echo foo
+
+  watch:
+    executor: linuxgo
+    steps:
+      - buildevents/watch_build_and_finish
 
   test_honeytail:
     executor: linuxgo
@@ -115,17 +117,13 @@ jobs:
                   aws s3 cp $artifact s3://honeycomb-builds/honeycombio/honeytail/${BUILD_ID}/${BUILD_ID}.1/home/travis/gopath/bin/
                 done
 
-    ### final submits the buildevents trace for this build
-  final:
-    executor: linuxgo
-    steps:
-      - buildevents/finish_trace:
-          result: success
-
 workflows:
   build:
     jobs:
       - setup
+      - watch:
+          requires:
+            - setup
       - test_honeytail:
           requires:
             - setup
@@ -142,7 +140,4 @@ workflows:
           filters:
             branches:
               only: master
-      - final:
-          requires:
-            - build_debs
 

@@ -117,6 +117,7 @@ jobs:
                   aws s3 cp $artifact s3://honeycomb-builds/honeycombio/honeytail/${BUILD_ID}/${BUILD_ID}.1/home/travis/gopath/bin/
                 done
 
+
 workflows:
   build:
     jobs:

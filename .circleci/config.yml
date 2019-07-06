@@ -1,0 +1,144 @@
+version: 2.1
+
+orbs:
+  buildevents: honeycombio/buildevents@0.2.0
+  aws-cli: circleci/aws-cli@0.1.13
+
+
+executors:
+  linuxgo:
+    parameters:
+    working_directory: /go/src/github.com/honeycombio/honeytail
+    docker:
+      - image: circleci/golang:1.10
+
+jobs:
+  setup:
+    executor: linuxgo
+    steps:
+      - buildevents/start_trace
+
+  watch:
+    executor: linuxgo
+    steps:
+      - buildevents/watch_build_and_finish
+
+  test_honeytail:
+    executor: linuxgo
+    steps:
+      - buildevents/with_job_span:
+          steps:
+            - checkout
+            - buildevents/berun:
+                bename: go_get
+                becommand: go get -v -t -d ./...
+            # turn off race detection for now
+            # - run: go test -race -v ./...
+            - buildevents/berun:
+                bename: go_test
+                becommand: go test -v ./...
+
+
+  build_osx:
+    macos:
+      xcode: "10.0.0"
+    steps:
+      - checkout
+      - attach_workspace:
+          at: workspace
+      - run: echo "export BUILD_ID=$(cat workspace/build_id)" >> $BASH_ENV
+      - run: go install -ldflags "-X main.BuildID=1.${BUILD_ID}" ./...
+
+  build_debs:
+    executor: linuxgo
+    steps:
+      - buildevents/with_job_span:
+          steps:
+            - checkout
+            - attach_workspace:
+                at: workspace
+            - run: echo "export BUILD_ID=$(cat workspace/build_id)" >> $BASH_ENV
+            - buildevents/berun:
+                bename: apt_get_update
+                becommand: sudo apt-get -qq update
+            - buildevents/berun:
+                bename: apt_get_install
+                becommand: sudo apt-get install -y build-essential rpm ruby ruby-dev
+            - buildevents/berun:
+                bename: gem_install
+                becommand: sudo gem install fpm
+            - buildevents/berun:
+                bename: go_install
+                becommand: go install -ldflags "-X main.BuildID=1.${BUILD_ID}" ./...
+            - run: $GOPATH/bin/honeytail --write_default_config > ./honeytail.conf
+            - buildevents/berun:
+                bename: build_deb
+                becommand: ./build-pkg.sh -v "1.${BUILD_ID}" -t deb
+            - buildevents/berun:
+                bename: build_rpm
+                becommand: ./build-pkg.sh -v "1.${BUILD_ID}" -t rpm
+                # pkg-test/test.sh "1.${BUILD_ID}"
+            - run: echo "finished build_debs" && find . -ls
+            - run: echo "finished build_debs" && find $GOPATH/bin -ls
+            - run: |
+                mkdir /tmp/honeytail
+                cp $GOPATH/bin/* /tmp/honeytail/
+                cp ./honeytail.conf /tmp/honeytail/
+                find /tmp/honeytail -ls
+            - buildevents/berun:
+                bename: tar_honeytail
+                becommand: tar -cvf /tmp/honeytail.tar /tmp/honeytail
+            - run: cp /tmp/honeytail.tar workspace/
+            - persist_to_workspace:
+                root: workspace
+                paths:
+                  - honeytail.tar
+
+  publish:
+    executor: linuxgo
+    steps:
+      - buildevents/with_job_span:
+          steps:
+            - attach_workspace:
+                at: workspace
+            - run: echo "export BUILD_ID=$(cat workspace/build_id)" >> $BASH_ENV
+
+            - aws-cli/install
+            - aws-cli/configure:
+                aws-access-key-id: AWS_ACCESS_KEY_ID
+                aws-secret-access-key: AWS_SECRET_ACCESS_KEY
+                aws-region: AWS_REGION
+
+            - run: echo "in publish" && find . -ls
+            - run: tar -xvf workspace/honeytail.tar
+            - run: find . -ls
+            - run: |
+                for artifact in tmp/honeytail/*; do
+                  aws s3 cp $artifact s3://honeycomb-builds/honeycombio/honeytail/${BUILD_ID}/${BUILD_ID}.1/home/travis/gopath/bin/
+                done
+
+
+workflows:
+  build:
+    jobs:
+      - setup
+      - watch:
+          requires:
+            - setup
+      - test_honeytail:
+          requires:
+            - setup
+      - build_debs:
+          requires:
+            - test_honeytail
+      # - build_osx:
+      #     requires:
+      #       - test_honeytail
+      - publish:
+          requires:
+            - build_debs
+            # - build_osx
+          filters:
+            branches:
+              only: master
+

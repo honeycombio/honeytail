@@ -208,7 +208,7 @@ func setVersionUserAgent(backfill bool, parserName string) {
 	libhoney.UserAgentAddition = fmt.Sprintf("honeytail/%s (%s)", version, parserName)
 }
 
-// handleOtherModes takse care of all flags that say we should just do something
+// handleOtherModes takes care of all flags that say we should just do something
 // and exit rather than actually parsing logs
 func handleOtherModes(fp *flag.Parser, modes OtherModes) {
 	if modes.Version {

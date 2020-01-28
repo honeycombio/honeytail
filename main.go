@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strings"
 	"time"
@@ -192,7 +193,31 @@ func main() {
 	} else {
 		logrus.Debug("skipping Honeycomb write key verification, because --debug_stdout is set...")
 	}
+
+	logrus.Debug("parsed arguments: ", structToString(options))
+
 	run(context.Background(), options)
+}
+
+// convert options struct to a comma separated list of key=value pairs (for debugging)
+func structToString(s interface{}) string {
+	v := reflect.ValueOf(s)
+	t := v.Type()
+	fields := make([]string, v.NumField())
+
+	for i := 0; i < v.NumField(); i++ {
+		if v.Field(i).Kind() == reflect.Struct {
+			fields[i] = structToString(v.Field(i).Interface())
+		} else {
+			name := t.Field(i).Name
+			value := v.Field(i).Interface()
+			if name == "WriteKey" {
+				value = "[REDACTED]"
+			}
+			fields[i] = fmt.Sprintf("%s.%s=%v", t, name, value)
+		}
+	}
+	return strings.Join(fields, ",")
 }
 
 // setVersion sets the internal version ID and updates libhoney's user-agent

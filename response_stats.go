@@ -5,9 +5,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/honeycombio/honeytail/event"
-	"github.com/honeycombio/libhoney-go"
+	"github.com/honeycombio/libhoney-go/transmission"
+	"github.com/sirupsen/logrus"
 )
 
 // responseStats is a container for collecting statistics about events sent
@@ -42,7 +42,7 @@ func newResponseStats() *responseStats {
 }
 
 // update adds a response into the stats container
-func (r *responseStats) update(rsp libhoney.Response) {
+func (r *responseStats) update(rsp transmission.Response) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 	r.count += 1

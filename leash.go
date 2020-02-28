@@ -20,10 +20,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	dynsampler "github.com/honeycombio/dynsampler-go"
 	"github.com/honeycombio/libhoney-go"
+	"github.com/honeycombio/libhoney-go/transmission"
 	"github.com/honeycombio/urlshaper"
+	"github.com/sirupsen/logrus"
 
 	"github.com/honeycombio/honeytail/event"
 	"github.com/honeycombio/honeytail/parsers"
@@ -173,7 +174,7 @@ func run(ctx context.Context, options GlobalOptions) {
 		go sendToLibhoney(ctx, realToBeSent, toBeResent, delaySending, doneSending)
 
 		// start a goroutine that reads from responses and logs.
-		responses := libhoney.Responses()
+		responses := libhoney.TxResponses()
 		responsesWG.Add(1)
 		go func() {
 			handleResponses(responses, stats, toBeResent, delaySending, options)
@@ -620,7 +621,7 @@ func sendEvent(ev event.Event) {
 
 // handleResponses reads from the response queue, logging a summary and debug
 // re-enqueues any events that failed to send in a retryable way
-func handleResponses(responses chan libhoney.Response, stats *responseStats,
+func handleResponses(responses chan transmission.Response, stats *responseStats,
 	toBeResent chan event.Event, delaySending chan int,
 	options GlobalOptions) {
 	go logStats(stats, options.StatusInterval)

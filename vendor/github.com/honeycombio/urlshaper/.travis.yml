@@ -1,6 +1,0 @@
-language: go
-
-dist: trusty
-
-go:
-        - 1.6

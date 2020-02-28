@@ -183,7 +183,7 @@ func main() {
 	sanityCheckOptions(&options)
 
 	if !options.DebugOut {
-		if _, err := libhoney.VerifyWriteKey(libhoney.Config{
+		if _, err := libhoney.VerifyAPIKey(libhoney.Config{
 			APIHost:  options.APIHost,
 			WriteKey: options.Reqs.WriteKey,
 		}); err != nil {

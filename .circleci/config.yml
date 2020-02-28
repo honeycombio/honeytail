@@ -4,13 +4,34 @@ orbs:
   buildevents: honeycombio/buildevents@0.2.6
   aws-cli: circleci/aws-cli@0.1.13
 
-
 executors:
   linuxgo:
     parameters:
     working_directory: /go/src/github.com/honeycombio/honeytail
     docker:
       - image: circleci/golang:1.14
+
+commands:
+  go-build:
+    parameters:
+      os:
+        description: Target operating system
+        type: enum
+        enum: ["linux", "darwin"]
+        default: "linux"
+      arch:
+        description: Target architecture
+        type: enum
+        enum: ["amd64", "arm64"]
+        default: "amd64"
+    steps:
+      - run: |
+          GOOS=<< parameters.os >> \
+          GOARCH=<< parameters.arch >> \
+          buildevents cmd $CIRCLE_WORKFLOW_ID $BUILDEVENTS_SPAN_ID go_build -- \
+          go build -ldflags "-X main.BuildID=${CIRCLE_TAG}" \
+          -o $GOPATH/bin/honeytail-<< parameters.os >>-<< parameters.arch >> \
+          ./...
 
 jobs:
   setup:
@@ -23,41 +44,31 @@ jobs:
     steps:
       - buildevents/watch_build_and_finish
 
-  test_honeytail:
+  test:
     executor: linuxgo
     steps:
       - buildevents/with_job_span:
           steps:
             - checkout
-            - buildevents/berun:
-                bename: go_get
-                becommand: go get -v -t -d ./...
-            # turn off race detection for now
-            # - run: go test -race -v ./...
             - buildevents/berun:
                 bename: go_test
                 becommand: go test --timeout 5s -v ./...
 
-
-  build_osx:
-    macos:
-      xcode: "10.0.0"
-    steps:
-      - checkout
-      - attach_workspace:
-          at: workspace
-      - run: echo "export BUILD_ID=$(cat workspace/build_id)" >> $BASH_ENV
-      - run: go install -ldflags "-X main.BuildID=1.${BUILD_ID}" ./...
-
-  build_debs:
+  build:
     executor: linuxgo
     steps:
       - buildevents/with_job_span:
           steps:
             - checkout
-            - attach_workspace:
-                at: workspace
-            - run: echo "export BUILD_ID=$(cat workspace/build_id)" >> $BASH_ENV
+            - go-build:
+                os: linux
+                arch: amd64
+            - go-build:
+                os: linux
+                arch: arm64
+            - go-build:
+                os: darwin
+                arch: amd64
             - buildevents/berun:
                 bename: apt_get_update
                 becommand: sudo apt-get -qq update
@@ -67,19 +78,19 @@ jobs:
             - buildevents/berun:
                 bename: gem_install
                 becommand: sudo gem install fpm
+            - run: $GOPATH/bin/honeytail-linux-amd64 --write_default_config > ./honeytail.conf
             - buildevents/berun:
-                bename: go_install
-                becommand: go install -ldflags "-X main.BuildID=1.${BUILD_ID}" ./...
-            - run: $GOPATH/bin/honeytail --write_default_config > ./honeytail.conf
+                bename: build_deb_amd64
+                becommand: ./build-pkg.sh -a amd64 -v "${CIRCLE_TAG}" -t deb
             - buildevents/berun:
-                bename: build_deb
-                becommand: ./build-pkg.sh -v "1.${BUILD_ID}" -t deb
+                bename: build_deb_arm64
+                becommand: ./build-pkg.sh -a arm64 -v "${CIRCLE_TAG}" -t deb
             - buildevents/berun:
-                bename: build_rpm
-                becommand: ./build-pkg.sh -v "1.${BUILD_ID}" -t rpm
-                # pkg-test/test.sh "1.${BUILD_ID}"
+                bename: build_rpm_amd64
+                becommand: ./build-pkg.sh -a amd64 -v "${CIRCLE_TAG}" -t rpm
             - run: echo "finished build_debs" && find . -ls
             - run: echo "finished build_debs" && find $GOPATH/bin -ls
+            - run: mkdir -v artifacts; cp -v honeytail-*.{deb,rpm} artifacts/
             - run: |
                 mkdir /tmp/honeytail
                 cp $GOPATH/bin/* /tmp/honeytail/
@@ -88,57 +99,61 @@ jobs:
             - buildevents/berun:
                 bename: tar_honeytail
                 becommand: tar -cvf /tmp/honeytail.tar /tmp/honeytail
-            - run: cp /tmp/honeytail.tar workspace/
+            - run: cp /tmp/honeytail.tar workspace/artifacts
+            - run: tar -cvf artifacts/honeytail_all.tar artifacts/honeytail*
             - persist_to_workspace:
                 root: workspace
                 paths:
-                  - honeytail.tar
+                  - artifacts/honeytail_all.tar
+            - store_artifacts:
+                path: artifacts/
 
   publish:
-    executor: linuxgo
+    docker:
+      - image: cibuilds/github:0.12.1
     steps:
       - buildevents/with_job_span:
           steps:
             - attach_workspace:
-                at: workspace
-            - run: echo "export BUILD_ID=$(cat workspace/build_id)" >> $BASH_ENV
-
-            - aws-cli/install
-            - aws-cli/configure:
-                aws-access-key-id: AWS_ACCESS_KEY_ID
-                aws-secret-access-key: AWS_SECRET_ACCESS_KEY
-                aws-region: AWS_REGION
-
-            - run: echo "in publish" && find . -ls
-            - run: tar -xvf workspace/honeytail.tar
-            - run: find . -ls
-            - run: |
-                for artifact in tmp/honeytail/*; do
-                  aws s3 cp $artifact s3://honeycomb-builds/honeycombio/honeytail/${BUILD_ID}/${BUILD_ID}.1/home/travis/gopath/bin/
-                done
-
+                at: artifacts
+            - run:
+                name: "Publish Release on GitHub"
+                command: |
+                  echo "about to publish to tag ${CIRCLE_TAG}"
+                  tar -xvf artifacts/honeytail_all.tar
+                  ls -l *
+                  ghr -t ${GITHUB_TOKEN} -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} ${CIRCLE_TAG} ./artifacts/honeytail*.{deb,rpm} honeytail.tar
 
 workflows:
   build:
     jobs:
-      - setup
+      - setup:
+          filters:
+            tags:
+              only: /.*/
       - watch:
           requires:
             - setup
-      - test_honeytail:
+          filters:
+            tags:
+              only: /.*/
+      - test:
           requires:
             - setup
-      - build_debs:
+          filters:
+            tags:
+              only: /.*/
+      - build:
           requires:
-            - test_honeytail
-      # - build_osx:
-      #     requires:
-      #       - test_honeytail
+            - test
+          filters:
+            tags:
+              only: /.*/
       - publish:
           requires:
-            - build_debs
-            # - build_osx
+            - build
           filters:
+            tags:
+              only: /^v.*/
             branches:
-              only: master
-
+              ignore: /.*/

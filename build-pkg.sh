@@ -8,7 +8,7 @@ function usage() {
     exit 2
 }
 
-while getopts "v:t:" opt; do
+while getopts "v:t:m:" opt; do
     case "$opt" in
     v)
         version=$OPTARG
@@ -22,13 +22,16 @@ while getopts "v:t:" opt; do
     esac
 done
 
-if [ -z "$version" ] || [ -z "$pkg_type" ] || [ -z "$arch" ]; then
+if [ -z "$pkg_type" ] || [ -z "$arch" ]; then
     usage
+fi
+
+if [ -z "$version" ]; then
+    version=v0.0.0-dev
 fi
 
 fpm -s dir -n honeytail \
     -m "Honeycomb <team@honeycomb.io>" \
-    -p $GOPATH/bin \
     -v $version \
     -t $pkg_type \
     -a $arch \

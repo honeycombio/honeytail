@@ -21,6 +21,7 @@ import (
 
 	"github.com/honeycombio/honeytail/parsers/htjson"
 
+	"github.com/klauspost/compress/zstd"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/sys/unix"
@@ -612,6 +613,15 @@ func (r *responder) serveResponse(w http.ResponseWriter, req *http.Request) {
 		}
 		req.Body.Close()
 		reader = gzReader
+	case "zstd":
+		zReader, _ := zstd.NewReader(
+			nil,
+			zstd.WithDecoderConcurrency(1),
+			zstd.WithDecoderLowmem(true),
+			zstd.WithDecoderMaxMemory(8*1024*1024),
+		)
+		zReader.Reset(req.Body)
+		reader = zReader.IOReadCloser()
 	default:
 		reader = req.Body
 	}

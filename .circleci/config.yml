@@ -90,7 +90,7 @@ jobs:
                 becommand: ./build-pkg.sh -m amd64 -v "${CIRCLE_TAG}" -t rpm
             - run: echo "finished build_debs" && find . -ls
             - run: echo "finished build_debs" && find $GOPATH/bin -ls
-            - run: mkdir -v artifacts; cp -v honeytail*.{deb,rpm} artifacts/
+            - run: mkdir -v ~/artifacts; cp -v honeytail*.{deb,rpm} ~/artifacts/
             - run: |
                 mkdir /tmp/honeytail
                 cp $GOPATH/bin/* /tmp/honeytail/
@@ -99,14 +99,14 @@ jobs:
             - buildevents/berun:
                 bename: tar_honeytail
                 becommand: tar -cvf /tmp/honeytail.tar /tmp/honeytail
-            - run: cp /tmp/honeytail.tar artifacts/
-            - run: tar -cvf artifacts/honeytail_all.tar artifacts/honeytail*
+            - run: cp /tmp/honeytail.tar ~/artifacts/
+            - run: tar -cvf ~/artifacts/honeytail_all.tar ~/artifacts/honeytail*
             - persist_to_workspace:
-                root: .
+                root: ~/
                 paths:
                   - artifacts/honeytail_all.tar
             - store_artifacts:
-                path: artifacts/
+                path: ~/artifacts/
 
   publish:
     docker:

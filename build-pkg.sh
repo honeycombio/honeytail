@@ -32,7 +32,7 @@ fi
 
 fpm -s dir -n honeytail \
     -m "Honeycomb <team@honeycomb.io>" \
-    -v $version \
+    -v ${version#v} \
     -t $pkg_type \
     -a $arch \
     --pre-install=./preinstall \

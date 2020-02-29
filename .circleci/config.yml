@@ -106,7 +106,7 @@ jobs:
                 paths:
                   - artifacts/honeytail_all.tar
             - store_artifacts:
-                path: artifacts/
+                path: ~/artifacts/
 
   publish:
     docker:

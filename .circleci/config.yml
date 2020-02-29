@@ -100,7 +100,7 @@ jobs:
                 bename: tar_honeytail
                 becommand: tar -cvf /tmp/honeytail.tar /tmp/honeytail
             - run: cp /tmp/honeytail.tar ~/artifacts/
-            - run: tar -cvf ~/artifacts/honeytail_all.tar artifacts/honeytail*
+            - run: tar -cvf ~/artifacts/honeytail_all.tar ~/artifacts/honeytail*
             - persist_to_workspace:
                 root: ~/
                 paths:

@@ -307,6 +307,23 @@ func TestAddField(t *testing.T) {
 	assert.Contains(t, ts.rsp.reqBody, `{"format":"json","newfield":"newval","second":"new"}`)
 }
 
+func TestDurationField(t *testing.T) {
+	opts := defaultOptions
+	ts := &testSetup{}
+	ts.start(t, &opts)
+	defer ts.close()
+	logFileName := ts.tmpdir + "/duration.log"
+	fh, _ := os.Create(logFileName)
+	defer fh.Close()
+	fmt.Fprintf(fh, `{"format":"json","request_time":10054}`)
+	opts.Reqs.LogFiles = []string{logFileName}
+	opts.DurationField = "request_time"
+	opts.DurationUnit = "us"
+	run(context.Background(), opts)
+	assert.Equal(t, ts.rsp.reqCounter, 1)
+	assert.Contains(t, ts.rsp.reqBody, `{"format":"json","request_time":10.054}`)
+}
+
 func TestLinePrefix(t *testing.T) {
 	opts := defaultOptions
 	// linePrefix of "Nov 13 10:19:31 app23 process.port[pid]: "

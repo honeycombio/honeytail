@@ -86,6 +86,8 @@ type GlobalOptions struct {
 	MinSampleRate       int      `long:"dynsample_minimum" description:"if the rate of traffic falls below this, dynsampler won't sample" default:"1"`
 	JSONFields          []string `long:"json_field" description:"JSON fields encoded as string to unescape and properly parse before sending"`
 	FilterFiles         []string `short:"F" long:"filter-file" description:"Log file(s) to exclude from --file glob. Can specify multiple times, including multiple globs."`
+	DurationField       string   `long:"duration_field" description:"For the field listed, convert duration into milliseconds. To be used in conjunction with --duration_unit"`
+	DurationUnit        string   `long:"duration_unit" description:"Specify the unit of time that the duration field uses. Allowed values: us, s"`
 
 	Reqs  RequiredOptions `group:"Required Options"`
 	Modes OtherModes      `group:"Other Modes"`
@@ -271,6 +273,7 @@ func addParserDefaultOptions(options *GlobalOptions) {
 	case options.Reqs.ParserName == "nginx":
 		// automatically normalize the request when using the nginx parser
 		options.RequestShape = append(options.RequestShape, "request")
+		options.DurationField = "request_time"
 	}
 	if options.Reqs.ParserName != "mysql" {
 		// mysql is the only parser that requires in-parser sampling because it has

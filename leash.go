@@ -379,6 +379,19 @@ func modifyEventContents(toBeSent chan event.Event, options GlobalOptions) chan 
 					for k, v := range parsedAddFields {
 						ev.Data[k] = v
 					}
+					// do time unit conversion
+					if options.DurationField != "" && options.DurationUnit != "" {
+						// does that column exist in the event? and is it a float64?
+						if duration, ok := ev.Data[options.DurationField].(float64); ok {
+							switch options.DurationUnit {
+							case "us":
+								ev.Data[options.DurationField] = duration / 1000
+							case "s":
+								ev.Data[options.DurationField] = duration * 1000
+							}
+						}
+
+					}
 					// get presampled field if it exists
 					if options.PreSampledField != "" {
 						var presampledRate int

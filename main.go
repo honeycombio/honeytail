@@ -273,7 +273,10 @@ func addParserDefaultOptions(options *GlobalOptions) {
 	case options.Reqs.ParserName == "nginx":
 		// automatically normalize the request when using the nginx parser
 		options.RequestShape = append(options.RequestShape, "request")
-		options.DurationField = "request_time"
+		// automatically set the duration field if it's not set
+		if options.DurationField == "" {
+			options.DurationField = "request_time"
+		}
 	}
 	if options.Reqs.ParserName != "mysql" {
 		// mysql is the only parser that requires in-parser sampling because it has

@@ -381,13 +381,20 @@ func modifyEventContents(toBeSent chan event.Event, options GlobalOptions) chan 
 					}
 					// do time unit conversion
 					if options.DurationField != "" && options.DurationUnit != "" {
-						// does that column exist in the event? and is it a float64?
-						if duration, ok := ev.Data[options.DurationField].(float64); ok {
+						switch v := ev.Data[options.DurationField].(type) {
+						case float64:
 							switch options.DurationUnit {
 							case "us":
-								ev.Data[options.DurationField] = duration / 1000
+								ev.Data[options.DurationField] = v / 1000
 							case "s":
-								ev.Data[options.DurationField] = duration * 1000
+								ev.Data[options.DurationField] = v * 1000
+							}
+						case int64:
+							switch options.DurationUnit {
+							case "us":
+								ev.Data[options.DurationField] = float64(v) / 1000
+							case "s":
+								ev.Data[options.DurationField] = float64(v) * 1000
 							}
 						}
 

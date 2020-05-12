@@ -88,7 +88,7 @@ func TestProcessLinesHandlesMultilineJSONInput(t *testing.T) {
 
 	// TODO I'm sure there's a more correct way to do this, but it escapes me at
 	// the moment
-	time.Sleep(5 * time.Second)
+	time.Sleep(3 * time.Second)
 
 	expected := 3
 	found := len(outputEvents)

@@ -68,7 +68,7 @@ func TestProcessLines(t *testing.T) {
 		},
 	}
 	m := &Parser{
-		conf:       Options{},
+		conf:       Options{numParsers: 1},
 		lineParser: &ArangoLineParser{},
 	}
 	lines := make(chan string)

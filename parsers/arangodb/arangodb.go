@@ -8,13 +8,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/honeycombio/honeytail/event"
 	"github.com/honeycombio/honeytail/httime"
 	"github.com/honeycombio/honeytail/parsers"
+	"github.com/sirupsen/logrus"
 )
 
-const numParsers = 20
+const defaultNumParsers = 20
 
 const (
 	iso8601UTCTimeFormat   = "2006-01-02T15:04:05Z"
@@ -42,6 +42,7 @@ var timestampFormats = []string{
 
 // Options type for line parser, so far there are none.
 type Options struct {
+	numParsers int
 }
 
 // Parser for log lines.
@@ -169,6 +170,10 @@ func (p *Parser) Init(options interface{}) error {
 // ProcessLines method for Parser.
 func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, prefixRegex *parsers.ExtRegexp) {
 	wg := sync.WaitGroup{}
+	numParsers := defaultNumParsers
+	if p.conf.numParsers > 0 {
+		numParsers = p.conf.numParsers
+	}
 	for i := 0; i < numParsers; i++ {
 		wg.Add(1)
 		go func() {

@@ -42,6 +42,17 @@ import (
 	"github.com/honeycombio/honeytail/tail"
 )
 
+const backfillMessage = `Running in backfill mode may result in rate-limited events for this dataset. This is expected behavior.
+Be aware that if you are also sending data from other sources to this dataset, this may result in events
+being dropped.`
+const rateLimitMessageBackoff = `One or more of your events sent by honeytail has been rate-limited, and is being resent. This may result in a
+notification to your team administrators that rate-limiting has been triggered on this dataset. While this is
+expected behavior, it is possible that if there are other sources sending data to this dataset, that this may
+result in events being dropped. 
+`
+
+var previouslyRateLimited = false
+
 // actually go and be leashy
 func run(ctx context.Context, options GlobalOptions) {
 	logrus.Info("Starting honeytail")
@@ -77,6 +88,10 @@ func run(ctx context.Context, options GlobalOptions) {
 	if err := libhoney.Init(libhConfig); err != nil {
 		logrus.WithFields(logrus.Fields{"err": err}).Fatal(
 			"Error occured while spinning up Transimission")
+	}
+
+	if options.Backfill {
+		logrus.Info(backfillMessage)
 	}
 
 	// compile the prefix regex once for use on all channels
@@ -637,6 +652,10 @@ func handleResponses(responses chan transmission.Response, stats *responseStats,
 		}
 		// if this is an error we should retry sending, re-enqueue the event
 		if options.BackOff && (rsp.StatusCode == 429 || rsp.StatusCode == 500) {
+			if !previouslyRateLimited && rsp.StatusCode == 429 {
+				logrus.Info(rateLimitMessageBackoff)
+				previouslyRateLimited = true
+			}
 			logfields["retry_send"] = true
 			delaySending <- 1000 / int(options.NumSenders) // back off for a little bit
 			toBeResent <- rsp.Metadata.(event.Event)       // then retry sending the event

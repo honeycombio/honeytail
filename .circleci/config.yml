@@ -52,7 +52,7 @@ jobs:
             - checkout
             - buildevents/berun:
                 bename: go_test
-                becommand: go test --timeout 5s -v ./...
+                becommand: go test --timeout 10s -v ./...
 
   build:
     executor: linuxgo

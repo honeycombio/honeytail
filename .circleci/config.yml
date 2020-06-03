@@ -106,12 +106,12 @@ jobs:
           steps:
             - attach_workspace:
                 at: ~/
-            - run:
-                name: "Publish Release on GitHub"
-                command: |
-                  echo "about to publish to tag ${CIRCLE_TAG}"
-                  ls -l ~/artifacts/*
-                  ghr -draft -replace -t ${GITHUB_TOKEN} -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} ${CIRCLE_TAG} ~/artifacts
+            # - run:
+            #     name: "Publish Release on GitHub"
+            #     command: |
+            #       echo "about to publish to tag ${CIRCLE_TAG}"
+            #       ls -l ~/artifacts/*
+            #       ghr -t ${GITHUB_TOKEN} -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} ${CIRCLE_TAG} ~/artifacts
             - aws-cli/install
             - aws-cli/configure:
                 aws-access-key-id: AWS_ACCESS_KEY_ID

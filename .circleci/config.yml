@@ -100,7 +100,7 @@ jobs:
 
   publish:
     docker:
-      - image: cibuilds/github:0.12.1
+      - image: cibuilds/github:0.13.0
     steps:
       - buildevents/with_job_span:
           steps:
@@ -111,7 +111,7 @@ jobs:
                 command: |
                   echo "about to publish to tag ${CIRCLE_TAG}"
                   ls -l ~/artifacts/*
-                  ghr -t ${GITHUB_TOKEN} -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} ${CIRCLE_TAG} ~/artifacts
+                  ghr -draft -replace -t ${GITHUB_TOKEN} -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} ${CIRCLE_TAG} ~/artifacts
             - aws-cli/install
             - aws-cli/configure:
                 aws-access-key-id: AWS_ACCESS_KEY_ID

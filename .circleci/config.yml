@@ -125,8 +125,8 @@ jobs:
                 aws-secret-access-key: AWS_SECRET_ACCESS_KEY
                 aws-region: AWS_REGION
             - buildevents/berun:
-                bename: sync artifacts to s3
-                becommand: aws s3 sync ~/artifacts s3://honeycomb-builds/honeycombio/honeytail/$VERSION/
+                bename: sync_s3_artifacts
+                becommand: aws s3 sync ~/artifacts s3://honeycomb-builds/honeycombio/honeytail/${VERSION}/
 
 workflows:
   build:

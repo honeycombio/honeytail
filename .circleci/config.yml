@@ -111,7 +111,7 @@ jobs:
                 command: |
                   echo "about to publish to tag ${CIRCLE_TAG}"
                   ls -l ~/artifacts/*
-                  ghr -draft -t ${GITHUB_TOKEN} -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} ${CIRCLE_TAG} ~/artifacts
+                  ghr -draft -n ${CIRCLE_TAG} -t ${GITHUB_TOKEN} -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} ${CIRCLE_TAG} ~/artifacts
   publish_s3:
     executor: linuxgo
     steps:

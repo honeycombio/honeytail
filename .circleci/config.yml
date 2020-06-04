@@ -126,7 +126,7 @@ jobs:
                 aws-region: AWS_REGION
             - buildevents/berun:
                 bename: sync_s3_artifacts
-                becommand: aws s3 sync ~/artifacts s3://honeycomb-builds/honeycombio/honeytail/${VERSION}/
+                becommand: aws s3 sync ~/artifacts s3://honeycomb-builds/honeycombio/honeytail/${CIRCLE_TAG}/
 
 workflows:
   build:

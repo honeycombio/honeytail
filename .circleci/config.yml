@@ -98,7 +98,7 @@ jobs:
             - store_artifacts:
                 path: ~/artifacts
 
-  publish:
+  publish_github:
     docker:
       - image: cibuilds/github:0.13.0
     steps:
@@ -106,21 +106,27 @@ jobs:
           steps:
             - attach_workspace:
                 at: ~/
-            # - run:
-            #     name: "Publish Release on GitHub"
-            #     command: |
-            #       echo "about to publish to tag ${CIRCLE_TAG}"
-            #       ls -l ~/artifacts/*
-            #       ghr -t ${GITHUB_TOKEN} -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} ${CIRCLE_TAG} ~/artifacts
+            - run:
+                name: "Publish Release on GitHub"
+                command: |
+                  echo "about to publish to tag ${CIRCLE_TAG}"
+                  ls -l ~/artifacts/*
+                  ghr -draft -t ${GITHUB_TOKEN} -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} ${CIRCLE_TAG} ~/artifacts
+  publish_s3:
+    executor: linuxgo
+    steps:
+      - buildevents/with_job_span:
+          steps:
+            - attach_workspace:
+                at: ~/
             - aws-cli/install
             - aws-cli/configure:
                 aws-access-key-id: AWS_ACCESS_KEY_ID
                 aws-secret-access-key: AWS_SECRET_ACCESS_KEY
                 aws-region: AWS_REGION
-            - run: |
-                for artifact in ~/artifacts/*; do
-                  aws s3 cp $artifact s3://honeycomb-builds/honeycombio/honeytail/$VERSION/
-                done
+            - buildevents/berun:
+                bename: sync artifacts to s3
+                becommand: aws s3 sync ~/artifacts s3://honeycomb-builds/honeycombio/honeytail/$VERSION/
 
 workflows:
   build:
@@ -156,7 +162,17 @@ workflows:
               only: /^v.*/
             branches:
               ignore: /.*/
-      - publish:
+      - publish_github:
+          context: Honeycomb Secrets
+          requires:
+            - build
+            - hold
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              ignore: /.*/
+      - publish_s3:
           context: Honeycomb Secrets
           requires:
             - build

@@ -153,20 +153,10 @@ workflows:
           filters:
             tags:
               only: /.*/
-      - hold:
-          type: approval # presents manual approval button in the UI
-          requires:
-            - build
-          filters:
-            tags:
-              only: /^v.*/
-            branches:
-              ignore: /.*/
       - publish_github:
           context: Honeycomb Secrets
           requires:
             - build
-            - hold
           filters:
             tags:
               only: /^v.*/
@@ -176,7 +166,6 @@ workflows:
           context: Honeycomb Secrets
           requires:
             - build
-            - hold
           filters:
             tags:
               only: /^v.*/

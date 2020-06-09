@@ -79,50 +79,54 @@ jobs:
                 bename: gem_install
                 becommand: sudo gem install fpm
             - run: $GOPATH/bin/honeytail-linux-amd64 --write_default_config > ./honeytail.conf
+            - run: mkdir -p ~/artifacts
             - buildevents/berun:
                 bename: build_deb_amd64
-                becommand: ./build-pkg.sh -m amd64 -v "${CIRCLE_TAG}" -t deb
+                becommand: ./build-pkg.sh -m amd64 -v "${CIRCLE_TAG}" -t deb && mv *.deb ~/artifacts
             - buildevents/berun:
                 bename: build_deb_arm64
-                becommand: ./build-pkg.sh -m arm64 -v "${CIRCLE_TAG}" -t deb
+                becommand: ./build-pkg.sh -m arm64 -v "${CIRCLE_TAG}" -t deb && mv *.deb ~/artifacts
             - buildevents/berun:
                 bename: build_rpm_amd64
-                becommand: ./build-pkg.sh -m amd64 -v "${CIRCLE_TAG}" -t rpm
-            - run: echo "finished build_debs" && find . -ls
+                becommand: ./build-pkg.sh -m amd64 -v "${CIRCLE_TAG}" -t rpm && mv *.rpm ~/artifacts
+            - run: echo "finished build_debs" && find ~/artifacts -ls
             - run: echo "finished build_debs" && find $GOPATH/bin -ls
-            - run: mkdir -v ~/artifacts; cp -v honeytail*.{deb,rpm} ~/artifacts/
-            - run: |
-                mkdir /tmp/honeytail
-                cp $GOPATH/bin/* /tmp/honeytail/
-                cp ./honeytail.conf /tmp/honeytail/
-                find /tmp/honeytail -ls
-            - buildevents/berun:
-                bename: tar_honeytail
-                becommand: tar -cvf /tmp/honeytail.tar /tmp/honeytail
-            - run: cp /tmp/honeytail.tar ~/artifacts/
-            - run: tar -cvf ~/artifacts/honeytail_all.tar ~/artifacts/honeytail*
             - persist_to_workspace:
                 root: ~/
                 paths:
-                  - artifacts/honeytail_all.tar
+                  - artifacts
             - store_artifacts:
-                path: ~/artifacts/
+                path: ~/artifacts
 
-  publish:
+  publish_github:
     docker:
-      - image: cibuilds/github:0.12.1
+      - image: cibuilds/github:0.13.0
     steps:
       - buildevents/with_job_span:
           steps:
             - attach_workspace:
-                at: artifacts
+                at: ~/
             - run:
                 name: "Publish Release on GitHub"
                 command: |
                   echo "about to publish to tag ${CIRCLE_TAG}"
-                  tar -xvf artifacts/honeytail_all.tar
-                  ls -l *
-                  ghr -t ${GITHUB_TOKEN} -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} ${CIRCLE_TAG} ./artifacts/honeytail*.{deb,rpm} honeytail.tar
+                  ls -l ~/artifacts/*
+                  ghr -draft -n ${CIRCLE_TAG} -t ${GITHUB_TOKEN} -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} ${CIRCLE_TAG} ~/artifacts
+  publish_s3:
+    executor: linuxgo
+    steps:
+      - buildevents/with_job_span:
+          steps:
+            - attach_workspace:
+                at: ~/
+            - aws-cli/install
+            - aws-cli/configure:
+                aws-access-key-id: AWS_ACCESS_KEY_ID
+                aws-secret-access-key: AWS_SECRET_ACCESS_KEY
+                aws-region: AWS_REGION
+            - buildevents/berun:
+                bename: sync_s3_artifacts
+                becommand: aws s3 sync ~/artifacts s3://honeycomb-builds/honeycombio/honeytail/${CIRCLE_TAG}/
 
 workflows:
   build:
@@ -149,7 +153,17 @@ workflows:
           filters:
             tags:
               only: /.*/
-      - publish:
+      - publish_github:
+          context: Honeycomb Secrets
+          requires:
+            - build
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              ignore: /.*/
+      - publish_s3:
+          context: Honeycomb Secrets
           requires:
             - build
           filters:

@@ -78,7 +78,6 @@ jobs:
             - buildevents/berun:
                 bename: gem_install
                 becommand: sudo gem install fpm
-            - run:
             - run: $GOPATH/bin/honeytail-linux-amd64 --write_default_config > ./honeytail.conf
             - run: mkdir -p ~/artifacts
             - buildevents/berun:

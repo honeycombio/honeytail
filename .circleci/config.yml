@@ -78,6 +78,7 @@ jobs:
             - buildevents/berun:
                 bename: gem_install
                 becommand: sudo gem install fpm
+            - run:
             - run: $GOPATH/bin/honeytail-linux-amd64 --write_default_config > ./honeytail.conf
             - run: mkdir -p ~/artifacts
             - buildevents/berun:
@@ -89,8 +90,10 @@ jobs:
             - buildevents/berun:
                 bename: build_rpm_amd64
                 becommand: ./build-pkg.sh -m amd64 -v "${CIRCLE_TAG}" -t rpm && mv *.rpm ~/artifacts
-            - run: echo "finished build_debs" && find ~/artifacts -ls
-            - run: echo "finished build_debs" && find $GOPATH/bin -ls
+            - buildevents/berun:
+                bename: copy_binaries
+                becommand: cp $GOPATH/bin/honeytail-* ~/artifacts
+            - run: echo "finished builds" && find ~/artifacts -ls
             - persist_to_workspace:
                 root: ~/
                 paths:

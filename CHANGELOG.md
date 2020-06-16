@@ -1,5 +1,11 @@
 # Honeytail Changelog
 
+## 1.1.4
+
+Bug Fixes:
+
+- Fixed issue with bad tag for 1.1.3 causing issues with go modules. No other changes.
+
 ## 1.1.3
 
 Bug Fixes:

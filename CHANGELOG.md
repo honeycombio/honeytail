@@ -1,5 +1,11 @@
 # Honeytail Changelog
 
+## 1.1.5
+
+Bug Fixes:
+
+- Upgraded to latest version of libhoney (1.12.4) to fix a broken msgpack indirect dependency.
+
 ## 1.1.4
 
 Bug Fixes:

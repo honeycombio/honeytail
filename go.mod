@@ -8,7 +8,7 @@ require (
 	github.com/honeycombio/dynsampler-go v0.2.1
 	github.com/honeycombio/gonx v1.3.1-0.20171118020637-f9b2468e9ef8
 	github.com/honeycombio/libhoney-go v1.12.4
-	github.com/honeycombio/mongodbtools v0.0.0-20180629202505-358295c47f68
+	github.com/honeycombio/mongodbtools v0.0.0-20201022144302-c92638964ed8
 	github.com/honeycombio/mysqltools v0.0.1
 	github.com/honeycombio/sqlparser v0.0.0-20180730202938-aab361df519b // indirect
 	github.com/honeycombio/urlshaper v0.0.0-20170302202025-2baba9ae5b5f

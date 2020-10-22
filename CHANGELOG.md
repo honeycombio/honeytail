@@ -1,5 +1,11 @@
 # Honeytail Changelog
 
+## 1.2.0
+
+Improvements:
+
+- Add support for UUID parsing within lsid block to mongodb log parser.
+
 ## 1.1.5
 
 Bug Fixes:

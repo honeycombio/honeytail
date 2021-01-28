@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/honeycombio/libhoney-go"
 	flag "github.com/jessevdk/go-flags"
+	"github.com/sirupsen/logrus"
 
 	"github.com/honeycombio/honeytail/httime"
 	"github.com/honeycombio/honeytail/parsers/arangodb"
@@ -86,6 +86,7 @@ type GlobalOptions struct {
 	MinSampleRate       int      `long:"dynsample_minimum" description:"if the rate of traffic falls below this, dynsampler won't sample" default:"1"`
 	JSONFields          []string `long:"json_field" description:"JSON fields encoded as string to unescape and properly parse before sending"`
 	FilterFiles         []string `short:"F" long:"filter-file" description:"Log file(s) to exclude from --file glob. Can specify multiple times, including multiple globs."`
+	RenameFields        []string `long:"rename_field" description:"Format: 'before=after'. Rename field called 'before' from parsed lines to field name 'after' in Honeycomb events."`
 
 	Reqs  RequiredOptions `group:"Required Options"`
 	Modes OtherModes      `group:"Other Modes"`

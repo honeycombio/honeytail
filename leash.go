@@ -462,7 +462,7 @@ func modifyEventContents(toBeSent chan event.Event, options GlobalOptions) chan 
 							kvPair := strings.Split(kv, "=")
 							if len(kvPair) != 2 {
 								logrus.WithField("arg", kv).
-									Error("Invalid rename_fields arg. Should be format 'before=after' ")
+									Error("Invalid --rename_field arg. Should be format 'before=after' ")
 								continue
 							}
 							val, ok := ev.Data[kvPair[0]]

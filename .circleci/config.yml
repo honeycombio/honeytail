@@ -76,6 +76,7 @@ jobs:
             echo "about to publish to tag ${CIRCLE_TAG}"
             ls -l ~/artifacts/*
             ghr -draft -n ${CIRCLE_TAG} -t ${GITHUB_TOKEN} -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} ${CIRCLE_TAG} ~/artifacts
+
   publish_s3:
     executor: aws-cli/default
     steps:
@@ -86,7 +87,9 @@ jobs:
           aws-access-key-id: AWS_ACCESS_KEY_ID
           aws-secret-access-key: AWS_SECRET_ACCESS_KEY
           aws-region: AWS_REGION
-      -run: aws s3 sync ~/artifacts s3://honeycomb-builds/honeycombio/honeytail/${CIRCLE_TAG}/
+      - run:
+          name: sync_s3_artifacts
+          command: aws s3 sync ~/artifacts s3://honeycomb-builds/honeycombio/honeytail/${CIRCLE_TAG}/
 
 workflows:
   version: 2

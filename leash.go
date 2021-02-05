@@ -457,6 +457,25 @@ func modifyEventContents(toBeSent chan event.Event, options GlobalOptions) chan 
 							ev.Data[field] = jsonMap
 						}
 					}
+					if len(options.RenameFields) > 0 {
+						for _, kv := range options.RenameFields {
+							kvPair := strings.Split(kv, "=")
+							if len(kvPair) != 2 {
+								logrus.WithField("arg", kv).
+									Error("Invalid --rename_field arg. Should be format 'before=after' ")
+								continue
+							}
+							val, ok := ev.Data[kvPair[0]]
+							if !ok {
+								logrus.WithField("before_field", kvPair[0]).
+									WithField("after_field", kvPair[1]).
+									Error("Did not find before_field in event.")
+								continue
+							}
+							delete(ev.Data, kvPair[0])
+							ev.Data[kvPair[1]] = val
+						}
+					}
 					newSent <- ev
 				}
 				wg.Done()

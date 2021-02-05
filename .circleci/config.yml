@@ -36,6 +36,8 @@ jobs:
       - run: go test --timeout 10s -v ./...
 
   build_packages:
+    docker:
+      - image: circleci/golang:1.13
     steps:
       - checkout
       - go-build:

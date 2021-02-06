@@ -2,7 +2,7 @@ version: 2.1
 
 orbs:
   aws-cli: circleci/aws-cli@0.1.13
-  docekr: circleci/docker@1.3.0
+  docker: circleci/docker@1.3.0
 
 
 commands:

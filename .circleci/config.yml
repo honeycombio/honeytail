@@ -1,15 +1,9 @@
 version: 2.1
 
 orbs:
-  buildevents: honeycombio/buildevents@0.2.6
   aws-cli: circleci/aws-cli@0.1.13
+  docker: circleci/docker@1.3.0
 
-executors:
-  linuxgo:
-    parameters:
-    working_directory: /go/src/github.com/honeycombio/honeytail
-    docker:
-      - image: circleci/golang:1.14
 
 commands:
   go-build:
@@ -28,141 +22,98 @@ commands:
       - run: |
           GOOS=<< parameters.os >> \
           GOARCH=<< parameters.arch >> \
-          buildevents cmd $CIRCLE_WORKFLOW_ID $BUILDEVENTS_SPAN_ID go_build -- \
           go build -ldflags "-X main.BuildID=${CIRCLE_TAG}" \
           -o $GOPATH/bin/honeytail-<< parameters.os >>-<< parameters.arch >> \
           .
 
 jobs:
-  setup:
-    executor: linuxgo
-    steps:
-      - buildevents/start_trace
-
-  watch:
-    executor: linuxgo
-    steps:
-      - buildevents/watch_build_and_finish
-
   test:
-    executor: linuxgo
+    docker:
+      - image: circleci/golang:1.13
     steps:
-      - buildevents/with_job_span:
-          steps:
-            - checkout
-            - buildevents/berun:
-                bename: go_test
-                becommand: go test --timeout 10s -v ./...
+      - checkout
+      - run: go test --timeout 10s -v ./...
 
-  build:
-    executor: linuxgo
+  build_packages:
+    docker:
+      - image: circleci/golang:1.13
     steps:
-      - buildevents/with_job_span:
-          steps:
-            - checkout
-            - go-build:
-                os: linux
-                arch: amd64
-            - go-build:
-                os: linux
-                arch: arm64
-            - go-build:
-                os: darwin
-                arch: amd64
-            - buildevents/berun:
-                bename: apt_get_update
-                becommand: sudo apt-get -qq update
-            - buildevents/berun:
-                bename: apt_get_install
-                becommand: sudo apt-get install -y build-essential rpm ruby ruby-dev
-            - buildevents/berun:
-                bename: gem_install
-                becommand: sudo gem install fpm
-            - run: $GOPATH/bin/honeytail-linux-amd64 --write_default_config > ./honeytail.conf
-            - run: mkdir -p ~/artifacts
-            - buildevents/berun:
-                bename: build_deb_amd64
-                becommand: ./build-pkg.sh -m amd64 -v "${CIRCLE_TAG}" -t deb && mv *.deb ~/artifacts
-            - buildevents/berun:
-                bename: build_deb_arm64
-                becommand: ./build-pkg.sh -m arm64 -v "${CIRCLE_TAG}" -t deb && mv *.deb ~/artifacts
-            - buildevents/berun:
-                bename: build_rpm_amd64
-                becommand: ./build-pkg.sh -m amd64 -v "${CIRCLE_TAG}" -t rpm && mv *.rpm ~/artifacts
-            - buildevents/berun:
-                bename: copy_binaries
-                becommand: cp $GOPATH/bin/honeytail-* ~/artifacts
-            - run: echo "finished builds" && find ~/artifacts -ls
-            - persist_to_workspace:
-                root: ~/
-                paths:
-                  - artifacts
-            - store_artifacts:
-                path: ~/artifacts
+      - checkout
+      - go-build:
+          os: linux
+          arch: amd64
+      - go-build:
+          os: linux
+          arch: arm64
+      - go-build:
+          os: darwin
+          arch: amd64
+      - run: sudo apt-get -qq update
+      - run: sudo apt-get install -y build-essential rpm ruby ruby-dev
+      - run: sudo gem install fpm
+      - run: $GOPATH/bin/honeytail-linux-amd64 --write_default_config > ./honeytail.conf
+      - run: mkdir -p ~/artifacts
+      - run: ./build-pkg.sh -m amd64 -v "${CIRCLE_TAG}" -t deb && mv *.deb ~/artifacts
+      - run: ./build-pkg.sh -m arm64 -v "${CIRCLE_TAG}" -t deb && mv *.deb ~/artifacts
+      - run: ./build-pkg.sh -m amd64 -v "${CIRCLE_TAG}" -t rpm && mv *.rpm ~/artifacts
+      - run: cp $GOPATH/bin/honeytail-* ~/artifacts
+      - run: echo "finished builds" && find ~/artifacts -ls
+      - persist_to_workspace:
+          root: ~/
+          paths:
+            - artifacts
+      - store_artifacts:
+          path: ~/artifacts
 
   publish_github:
     docker:
       - image: cibuilds/github:0.13.0
     steps:
-      - buildevents/with_job_span:
-          steps:
-            - attach_workspace:
-                at: ~/
-            - run:
-                name: "Publish Release on GitHub"
-                command: |
-                  echo "about to publish to tag ${CIRCLE_TAG}"
-                  ls -l ~/artifacts/*
-                  ghr -draft -n ${CIRCLE_TAG} -t ${GITHUB_TOKEN} -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} ${CIRCLE_TAG} ~/artifacts
+      - attach_workspace:
+          at: ~/
+      - run:
+          name: "Publish Release on GitHub"
+          command: |
+            echo "about to publish to tag ${CIRCLE_TAG}"
+            ls -l ~/artifacts/*
+            ghr -draft -n ${CIRCLE_TAG} -t ${GITHUB_TOKEN} -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} ${CIRCLE_TAG} ~/artifacts
+
   publish_s3:
-    executor: linuxgo
+    executor: aws-cli/default
     steps:
-      - buildevents/with_job_span:
-          steps:
-            - attach_workspace:
-                at: ~/
-            - aws-cli/install
-            - aws-cli/configure:
-                aws-access-key-id: AWS_ACCESS_KEY_ID
-                aws-secret-access-key: AWS_SECRET_ACCESS_KEY
-                aws-region: AWS_REGION
-            - buildevents/berun:
-                bename: sync_s3_artifacts
-                becommand: aws s3 sync ~/artifacts s3://honeycomb-builds/honeycombio/honeytail/${CIRCLE_TAG}/
+      - attach_workspace:
+          at: ~/
+      - aws-cli/install
+      - aws-cli/configure:
+          aws-access-key-id: AWS_ACCESS_KEY_ID
+          aws-secret-access-key: AWS_SECRET_ACCESS_KEY
+          aws-region: AWS_REGION
+      - run:
+          name: sync_s3_artifacts
+          command: aws s3 sync ~/artifacts s3://honeycomb-builds/honeycombio/honeytail/${CIRCLE_TAG}/
 
 workflows:
+  version: 2
   build:
     jobs:
-      - setup:
-          context: Honeycomb Secrets for Public Repos
-          filters:
-            tags:
-              only: /.*/
-      - watch:
-          context: Honeycomb Secrets for Public Repos
-          requires:
-            - setup
-          filters:
-            tags:
-              only: /.*/
       - test:
           context: Honeycomb Secrets for Public Repos
-          requires:
-            - setup
           filters:
             tags:
               only: /.*/
-      - build:
+      - build_packages:
           context: Honeycomb Secrets for Public Repos
           requires:
             - test
           filters:
             tags:
-              only: /.*/
+              only: /^v.*/
+            branches:
+              ignore: /.*/
       - publish_github:
           context: Honeycomb Secrets for Public Repos
           requires:
-            - build
+            - test
           filters:
             tags:
               only: /^v.*/
@@ -171,7 +122,7 @@ workflows:
       - publish_s3:
           context: Honeycomb Secrets for Public Repos
           requires:
-            - build
+            - test
           filters:
             tags:
               only: /^v.*/

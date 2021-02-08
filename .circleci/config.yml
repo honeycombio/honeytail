@@ -114,6 +114,7 @@ workflows:
           context: Honeycomb Secrets for Public Repos
           requires:
             - test
+            - build_packages
           filters:
             tags:
               only: /^v.*/
@@ -123,6 +124,7 @@ workflows:
           context: Honeycomb Secrets for Public Repos
           requires:
             - test
+            - build_packages
           filters:
             tags:
               only: /^v.*/

@@ -76,7 +76,6 @@ jobs:
           command: |
             echo "about to publish to tag ${CIRCLE_TAG}"
             ls -l ~/artifacts/*
-            ghr -draft -n ${CIRCLE_TAG} -t ${GITHUB_TOKEN} -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} ${CIRCLE_TAG} ~/artifacts
 
   publish_s3:
     executor: aws-cli/default
@@ -89,8 +88,9 @@ jobs:
           aws-secret-access-key: AWS_SECRET_ACCESS_KEY
           aws-region: AWS_REGION
       - run:
-          name: sync_s3_artifacts
-          command: aws s3 sync ~/artifacts s3://honeycomb-builds/honeycombio/honeytail/${CIRCLE_TAG}/
+          name: "sync_s3_artifacts test"
+          command: |
+            ls -l ~/artifacts/*
 
 workflows:
   version: 2
@@ -105,26 +105,11 @@ workflows:
           context: Honeycomb Secrets for Public Repos
           requires:
             - test
-          filters:
-            tags:
-              only: /^v.*/
-            branches:
-              ignore: /.*/
       - publish_github:
           context: Honeycomb Secrets for Public Repos
           requires:
             - build_packages
-          filters:
-            tags:
-              only: /^v.*/
-            branches:
-              ignore: /.*/
       - publish_s3:
           context: Honeycomb Secrets for Public Repos
           requires:
             - build_packages
-          filters:
-            tags:
-              only: /^v.*/
-            branches:
-              ignore: /.*/

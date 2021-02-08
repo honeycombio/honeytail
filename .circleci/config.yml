@@ -113,7 +113,6 @@ workflows:
       - publish_github:
           context: Honeycomb Secrets for Public Repos
           requires:
-            - test
             - build_packages
           filters:
             tags:
@@ -123,7 +122,6 @@ workflows:
       - publish_s3:
           context: Honeycomb Secrets for Public Repos
           requires:
-            - test
             - build_packages
           filters:
             tags:

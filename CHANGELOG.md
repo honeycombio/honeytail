@@ -1,5 +1,9 @@
 # Honeytail Changelog
 
+## 1.3.0
+
+Add rename_field flag that allows users to map fields to alternative field names.
+
 ## 1.2.0
 
 Improvements:

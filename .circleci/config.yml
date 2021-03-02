@@ -97,7 +97,6 @@ workflows:
   build:
     jobs:
       - test:
-          context: Honeycomb Secrets for Public Repos
           filters:
             tags:
               only: /.*/

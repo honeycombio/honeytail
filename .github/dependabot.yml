@@ -9,5 +9,7 @@ updates:
     directory: "/" # Location of package manifests
     schedule:
       interval: "weekly"
+    labels:
+      - "type: maintenance"
     reviewers:
       - "honeycombio/integrations-team"

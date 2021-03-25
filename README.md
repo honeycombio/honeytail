@@ -13,7 +13,7 @@ Our complete list of parsers can be found in the [`parsers/` directory](parsers/
 - [ArangoDB](parsers/arangodb/)
 - [MongoDB](parsers/mongodb/)
 - [MySQL](parsers/mysql/)
-- [PostgreSQL](parsers/postgresql/)
+- [PostgreSQL](parsers/postgresql/) (Note: does not support quoted table or column names in queries.)
 - [nginx](parsers/nginx/)
 - [regex](parsers/regex/)
 - [keyval](parsers/keyval/)([logfmt](https://brandur.org/logfmt))

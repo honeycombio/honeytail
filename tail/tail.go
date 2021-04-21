@@ -7,6 +7,7 @@ package tail
 import (
 	"bufio"
 	"context"
+	"crypto/sha1"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,8 +17,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/hpcloud/tail"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 )
 
@@ -32,10 +33,11 @@ const (
 )
 
 type TailOptions struct {
-	ReadFrom  string `long:"read_from" description:"Location in the file from which to start reading. Values: beginning, end, last. Last picks up where it left off, if the file has not been rotated, otherwise beginning. When --backfill is set, it will override this option=beginning" default:"last"`
-	Stop      bool   `long:"stop" description:"Stop reading the file after reaching the end rather than continuing to tail. When --backfill is set, it will override this option=true"`
-	Poll      bool   `long:"poll" description:"use poll instead of inotify to tail files"`
-	StateFile string `long:"statefile" description:"File in which to store the last read position. Defaults to a file in /tmp named $logfile.leash.state. If tailing multiple files, default is forced."`
+	ReadFrom              string `long:"read_from" description:"Location in the file from which to start reading. Values: beginning, end, last. Last picks up where it left off, if the file has not been rotated, otherwise beginning. When --backfill is set, it will override this option=beginning" default:"last"`
+	Stop                  bool   `long:"stop" description:"Stop reading the file after reaching the end rather than continuing to tail. When --backfill is set, it will override this option=true"`
+	Poll                  bool   `long:"poll" description:"use poll instead of inotify to tail files"`
+	StateFile             string `long:"statefile" description:"File in which to store the last read position. Defaults to a file in /tmp named $logfile.leash.state. If tailing multiple files, default is forced."`
+	HashStateFileDirPaths bool   `long:"hash_statefile_paths" description:"Generates a hash of the directory path for each file that is used to uniquely identify each statefile. Prevents re-using the same statefile for tailed files that have the same name."`
 }
 
 // Statefile mechanics when ReadFrom is 'last'
@@ -415,7 +417,13 @@ func getStateFile(conf Config, filename string, numFiles int) string {
 		}
 	}
 
-	stateFileName := strings.TrimSuffix(filepath.Base(filename), ".log") + ".leash.state"
+	var stateFileName string
+	if conf.Options.HashStateFileDirPaths {
+		// generate hash based on filepath, in format 'filename.leash.state-{hash}'
+		stateFileName = strings.TrimSuffix(filepath.Base(filename), ".log") + ".leash.state" + fmt.Sprintf("-%x", sha1.Sum([]byte(confStateFile)))
+	} else {
+		stateFileName = strings.TrimSuffix(filepath.Base(filename), ".log") + ".leash.state"
+	}
 	return filepath.Join(confStateFile, stateFileName)
 }
 

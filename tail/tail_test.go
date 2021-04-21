@@ -2,6 +2,7 @@ package tail
 
 import (
 	"context"
+	"crypto/sha1"
 	"fmt"
 	"io/ioutil"
 	"math/rand"
@@ -294,6 +295,52 @@ func TestGetStateFile(t *testing.T) {
 		{ts.tmpdir, 2, filepath.Join(ts.tmpdir, statefilename)},
 		{"", 1, filepath.Join(os.TempDir(), statefilename)},
 		{"", 2, filepath.Join(os.TempDir(), statefilename)},
+	}
+
+	for _, tt := range tsts {
+		conf.Options.StateFile = tt.stateFileConfig
+		actual := getStateFile(conf, filename, tt.numFiles)
+		if actual != tt.expected {
+			t.Errorf("getStateFile with config statefile: %s\n\tgot: %s, expected: %s",
+				tt.stateFileConfig, actual, tt.expected)
+		}
+	}
+}
+func TestGetFileStateWithHashPathEnabled(t *testing.T) {
+	ts := &testSetup{}
+	ts.start(t)
+	defer ts.stop()
+
+	conf := Config{
+		Paths: make([]string, 3),
+		Options: TailOptions{
+			ReadFrom:              "start",
+			Stop:                  true,
+			HashStateFileDirPaths: true,
+		},
+	}
+
+	filename := "foobar.log"
+	osTempStatefilename := fmt.Sprintf("foobar.leash.state-%x", sha1.Sum([]byte(os.TempDir())))
+	tsTempStatefilename := fmt.Sprintf("foobar.leash.state-%x", sha1.Sum([]byte(ts.tmpdir)))
+
+	existingStateFile := filepath.Join(ts.tmpdir, "existing.state")
+	ts.writeFile(t, existingStateFile, "")
+	newStateFile := filepath.Join(ts.tmpdir, "new.state")
+
+	tsts := []struct {
+		stateFileConfig string
+		numFiles        int
+		expected        string
+	}{
+		{existingStateFile, 1, existingStateFile},
+		{existingStateFile, 2, filepath.Join(os.TempDir(), osTempStatefilename)},
+		{newStateFile, 1, newStateFile},
+		{newStateFile, 2, filepath.Join(os.TempDir(), osTempStatefilename)},
+		{ts.tmpdir, 1, filepath.Join(ts.tmpdir, tsTempStatefilename)},
+		{ts.tmpdir, 2, filepath.Join(ts.tmpdir, tsTempStatefilename)},
+		{"", 1, filepath.Join(os.TempDir(), osTempStatefilename)},
+		{"", 2, filepath.Join(os.TempDir(), osTempStatefilename)},
 	}
 
 	for _, tt := range tsts {

@@ -364,7 +364,7 @@ func TestStatefilesWithDifferentPathsGetDifferentHashes(t *testing.T) {
 	statefile1 := getStateFile(conf, "/var/logs/app-1/foobar.log", 1)
 	statefile2 := getStateFile(conf, "/var/logs/app-2/foobar.log", 1)
 	if statefile1 == statefile2 {
-		t.Error("state files with different paths should not be equel")
+		t.Error("state files with different paths should not be equal")
 	}
 }
 

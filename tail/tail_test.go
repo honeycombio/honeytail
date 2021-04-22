@@ -320,9 +320,8 @@ func TestGetFileStateWithHashPathEnabled(t *testing.T) {
 		},
 	}
 
-	filename := "foobar.log"
-	osTempStatefilename := fmt.Sprintf("foobar.leash.state-%x", sha1.Sum([]byte(os.TempDir())))
-	tsTempStatefilename := fmt.Sprintf("foobar.leash.state-%x", sha1.Sum([]byte(ts.tmpdir)))
+	filename := "/var/logs/foobar.log"
+	statefilename := fmt.Sprintf("foobar.leash.state-%x", sha1.Sum([]byte(filename)))
 
 	existingStateFile := filepath.Join(ts.tmpdir, "existing.state")
 	ts.writeFile(t, existingStateFile, "")
@@ -334,13 +333,13 @@ func TestGetFileStateWithHashPathEnabled(t *testing.T) {
 		expected        string
 	}{
 		{existingStateFile, 1, existingStateFile},
-		{existingStateFile, 2, filepath.Join(os.TempDir(), osTempStatefilename)},
+		{existingStateFile, 2, filepath.Join(os.TempDir(), statefilename)},
 		{newStateFile, 1, newStateFile},
-		{newStateFile, 2, filepath.Join(os.TempDir(), osTempStatefilename)},
-		{ts.tmpdir, 1, filepath.Join(ts.tmpdir, tsTempStatefilename)},
-		{ts.tmpdir, 2, filepath.Join(ts.tmpdir, tsTempStatefilename)},
-		{"", 1, filepath.Join(os.TempDir(), osTempStatefilename)},
-		{"", 2, filepath.Join(os.TempDir(), osTempStatefilename)},
+		{newStateFile, 2, filepath.Join(os.TempDir(), statefilename)},
+		{ts.tmpdir, 1, filepath.Join(ts.tmpdir, statefilename)},
+		{ts.tmpdir, 2, filepath.Join(ts.tmpdir, statefilename)},
+		{"", 1, filepath.Join(os.TempDir(), statefilename)},
+		{"", 2, filepath.Join(os.TempDir(), statefilename)},
 	}
 
 	for _, tt := range tsts {
@@ -350,6 +349,22 @@ func TestGetFileStateWithHashPathEnabled(t *testing.T) {
 			t.Errorf("getStateFile with config statefile: %s\n\tgot: %s, expected: %s",
 				tt.stateFileConfig, actual, tt.expected)
 		}
+	}
+}
+func TestStatefilesWithDifferentPathsGetDifferentHashes(t *testing.T) {
+	conf := Config{
+		Paths: make([]string, 3),
+		Options: TailOptions{
+			ReadFrom:              "start",
+			Stop:                  true,
+			HashStateFileDirPaths: true,
+		},
+	}
+
+	statefile1 := getStateFile(conf, "/var/logs/app-1/foobar.log", 1)
+	statefile2 := getStateFile(conf, "/var/logs/app-2/foobar.log", 1)
+	if statefile1 == statefile2 {
+		t.Error("state files with different paths should not be equal")
 	}
 }
 

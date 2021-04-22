@@ -417,12 +417,10 @@ func getStateFile(conf Config, filename string, numFiles int) string {
 		}
 	}
 
-	var stateFileName string
+	stateFileName := strings.TrimSuffix(filepath.Base(filename), ".log") + ".leash.state"
 	if conf.Options.HashStateFileDirPaths {
 		// generate hash based on filepath, in format 'filename.leash.state-{hash}'
-		stateFileName = strings.TrimSuffix(filepath.Base(filename), ".log") + ".leash.state" + fmt.Sprintf("-%x", sha1.Sum([]byte(confStateFile)))
-	} else {
-		stateFileName = strings.TrimSuffix(filepath.Base(filename), ".log") + ".leash.state"
+		stateFileName += fmt.Sprintf("-%x", sha1.Sum([]byte(filename)))
 	}
 	return filepath.Join(confStateFile, stateFileName)
 }

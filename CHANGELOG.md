@@ -1,5 +1,11 @@
 # Honeytail Changelog
 
+## 1.4.1
+
+Fixes:
+
+- Generate statefile hash based on tailed file location (#193)
+
 ## 1.4.0
 
 Improvements:

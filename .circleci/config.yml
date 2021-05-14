@@ -11,7 +11,7 @@ commands:
       os:
         description: Target operating system
         type: enum
-        enum: ["linux", "darwin"]
+        enum: ["linux", "darwin", "windows"]
         default: "linux"
       arch:
         description: Target architecture
@@ -47,6 +47,12 @@ jobs:
           arch: arm64
       - go-build:
           os: darwin
+          arch: amd64
+      - go-build:
+          os: darwin
+          arch: arm64
+      - go-build:
+          os: windows
           arch: amd64
       - run: sudo apt-get -qq update
       - run: sudo apt-get install -y build-essential rpm ruby ruby-dev

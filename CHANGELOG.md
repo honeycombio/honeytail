@@ -1,5 +1,11 @@
 # Honeytail Changelog
 
+## 1.5.0
+
+Improvements:
+
+- Now building for darwin/arm64 (M1)!
+
 ## 1.4.1
 
 Fixes:

@@ -29,14 +29,14 @@ commands:
 jobs:
   test:
     docker:
-      - image: circleci/golang:1.13
+      - image: circleci/golang:1.16
     steps:
       - checkout
       - run: go test --timeout 10s -v ./...
 
   build_packages:
     docker:
-      - image: circleci/golang:1.13
+      - image: circleci/golang:1.16
     steps:
       - checkout
       - go-build:

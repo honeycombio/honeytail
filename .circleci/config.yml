@@ -52,6 +52,8 @@ jobs:
     docker:
       - image: circleci/golang:1.16
     steps:
+      - attach_workspace:
+          at: ~/
       - checkout
       - run: sudo apt-get -qq update
       - run: sudo apt-get install -y build-essential rpm ruby ruby-dev

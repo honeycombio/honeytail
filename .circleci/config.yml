@@ -41,12 +41,12 @@ jobs:
           GOOS=<< parameters.os >> \
           GOARCH=<< parameters.arch >> \
           go build -ldflags "-X main.BuildID=${CIRCLE_TAG}" \
-          -o $GOPATH/bin/honeytail-<< parameters.os >>-<< parameters.arch >> \
+          -o ~/artifacts/honeytail-<< parameters.os >>-<< parameters.arch >> \
           .
       - persist_to_workspace:
           root: ~/
           paths:
-            - bin
+            - artifacts
 
   build_packages:
     docker:
@@ -56,12 +56,10 @@ jobs:
       - run: sudo apt-get -qq update
       - run: sudo apt-get install -y build-essential rpm ruby ruby-dev
       - run: sudo gem install fpm
-      - run: $GOPATH/bin/honeytail-linux-amd64 --write_default_config > ./honeytail.conf
-      - run: mkdir -p ~/artifacts
+      - run: ~/artifacts/honeytail-linux-amd64 --write_default_config > ./honeytail.conf
       - run: ./build-pkg.sh -m amd64 -v "${CIRCLE_TAG}" -t deb && mv *.deb ~/artifacts
       - run: ./build-pkg.sh -m arm64 -v "${CIRCLE_TAG}" -t deb && mv *.deb ~/artifacts
       - run: ./build-pkg.sh -m amd64 -v "${CIRCLE_TAG}" -t rpm && mv *.rpm ~/artifacts
-      - run: cp $GOPATH/bin/honeytail-* ~/artifacts
       - run: echo "finished builds" && find ~/artifacts -ls
       - persist_to_workspace:
           root: ~/

@@ -36,7 +36,7 @@ fpm -s dir -n honeytail \
     -t $pkg_type \
     -a $arch \
     --pre-install=./preinstall \
-    $GOPATH/bin/honeytail-linux-${arch}=/usr/bin/honeytail \
+    ./artifacts/honeytail-linux-${arch}=/usr/bin/honeytail \
     ./honeytail.upstart=/etc/init/honeytail.conf \
     ./honeytail.service=/lib/systemd/system/honeytail.service \
     ./honeytail.conf=/etc/honeytail/honeytail.conf

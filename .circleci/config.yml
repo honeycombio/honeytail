@@ -7,11 +7,11 @@ orbs:
 platform_matrix: &platform_matrix
   matrix:
     parameters:
-      os: &oses ["linux", "darwin", "windows"]
+      os: &oses ["linux", "darwin"] # <-- "windows" in the future!
       arch: &arches ["amd64", "arm64"]
-    exclude:
-      - os: "windows"
-      - arch: "arm64"
+    # exclude: # And when Windows comes, we'll need to exclude the Win+arm64 combo somehow
+    #   - os: "windows"
+    #   - arch: "arm64"
 
 jobs:
   test:

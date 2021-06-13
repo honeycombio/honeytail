@@ -9,10 +9,10 @@ platform_matrix: &platform_matrix
     parameters:
       os: &oses ["linux", "darwin"] # <-- "windows" in the future!
       arch: &arches ["amd64", "arm64", "arm"]
-      exclude:
-        - os: darwin
-          arch: arm
-      # exclude: # And when Windows comes, we'll need to exclude the Win+arm64 combo:
+    exclude:
+      - os: darwin
+        arch: arm
+    # exclude: # And when Windows comes, we'll need to exclude the Win+arm64 combo:
     #   - os: "windows"
     #     arch: "arm64"
 

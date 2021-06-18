@@ -8,10 +8,13 @@ platform_matrix: &platform_matrix
   matrix:
     parameters:
       os: &oses ["linux", "darwin"] # <-- "windows" in the future!
-      arch: &arches ["amd64", "arm64"]
-    # exclude: # And when Windows comes, we'll need to exclude the Win+arm64 combo somehow
+      arch: &arches ["amd64", "arm64", "arm"]
+    exclude:
+      - os: darwin
+        arch: arm
+    # exclude: # And when Windows comes, we'll need to exclude the Win+arm64 combo:
     #   - os: "windows"
-    #   - arch: "arm64"
+    #     arch: "arm64"
 
 jobs:
   test:
@@ -61,7 +64,10 @@ jobs:
       - run: ~/artifacts/honeytail-linux-amd64 --write_default_config > ./honeytail.conf
       - run: ./build-pkg.sh -m amd64 -v "${CIRCLE_TAG}" -t deb && mv *.deb ~/artifacts
       - run: ./build-pkg.sh -m arm64 -v "${CIRCLE_TAG}" -t deb && mv *.deb ~/artifacts
+      - run: ./build-pkg.sh -m arm -v "${CIRCLE_TAG}" -t deb && mv *.deb ~/artifacts
       - run: ./build-pkg.sh -m amd64 -v "${CIRCLE_TAG}" -t rpm && mv *.rpm ~/artifacts
+      - run: ./build-pkg.sh -m arm64 -v "${CIRCLE_TAG}" -t rpm && mv *.rpm ~/artifacts
+      - run: ./build-pkg.sh -m arm -v "${CIRCLE_TAG}" -t rpm && mv *.rpm ~/artifacts
       - run: echo "finished builds" && find ~/artifacts -ls
       - persist_to_workspace:
           root: ~/

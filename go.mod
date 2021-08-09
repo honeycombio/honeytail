@@ -15,7 +15,7 @@ require (
 	github.com/hpcloud/tail v1.0.1-0.20170814160653-37f427138745
 	github.com/jeromer/syslogparser v0.0.0-20190429161531-5fbaaf06d9e7
 	github.com/jessevdk/go-flags v1.5.0
-	github.com/klauspost/compress v1.13.1
+	github.com/klauspost/compress v1.13.3
 	github.com/kr/logfmt v0.0.0-20140226030751-b84e30acd515
 	github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e // indirect
 	github.com/sirupsen/logrus v1.8.1

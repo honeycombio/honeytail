@@ -1,4 +1,6 @@
-# honeytail [![CircleCI](https://circleci.com/gh/honeycombio/honeytail.svg?style=shield)](https://circleci.com/gh/honeycombio/honeytail)
+# honeytail
+
+[![CircleCI](https://circleci.com/gh/honeycombio/honeytail.svg?style=shield)](https://circleci.com/gh/honeycombio/honeytail)
 
 [![OSS Lifecycle](https://img.shields.io/osslifecycle/honeycombio/REPO)](https://github.com/honeycombio/home/blob/main/honeycomb-oss-lifecycle-and-practices.md)
 

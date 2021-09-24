@@ -1,6 +1,6 @@
 # honeytail
 
-[![OSS Lifecycle](https://img.shields.io/osslifecycle/honeycombio/honeytail)](https://github.com/honeycombio/home/blob/main/honeycomb-oss-lifecycle-and-practices.md)
+[![OSS Lifecycle](https://img.shields.io/osslifecycle/honeycombio/honeytail?color=success)](https://github.com/honeycombio/home/blob/main/honeycomb-oss-lifecycle-and-practices.md)
 [![CircleCI](https://circleci.com/gh/honeycombio/honeytail.svg?style=shield)](https://circleci.com/gh/honeycombio/honeytail)
 
 `honeytail` is [Honeycomb](https://honeycomb.io)'s agent for ingesting log file data into Honeycomb and making it available for exploration. Its favorite format is **JSON**, but understands how to parse a range of other well-known log formats.

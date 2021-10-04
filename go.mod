@@ -7,7 +7,7 @@ require (
 	github.com/go-sql-driver/mysql v1.6.0
 	github.com/honeycombio/dynsampler-go v0.2.1
 	github.com/honeycombio/gonx v1.3.1-0.20171118020637-f9b2468e9ef8
-	github.com/honeycombio/libhoney-go v1.15.4
+	github.com/honeycombio/libhoney-go v1.15.5
 	github.com/honeycombio/mongodbtools v0.0.0-20201022144302-c92638964ed8
 	github.com/honeycombio/mysqltools v0.0.1
 	github.com/honeycombio/sqlparser v0.0.0-20180730202938-aab361df519b // indirect

@@ -57,10 +57,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/honeycombio/honeytail/event"
 	"github.com/honeycombio/honeytail/parsers"
 	"github.com/honeycombio/mysqltools/query/normalizer"
+	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -68,10 +68,16 @@ const (
 	timestampRe   = `\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}[.0-9]* [A-Z]+`
 	defaultPrefix = "%t [%p-%l] %u@%d"
 	// Regex string that matches the header of a slow query log line
-	slowQueryHeader = `\s*(?P<level>[A-Z0-9]+):\s+duration: (?P<duration>[0-9\.]+) ms\s+(?:(statement)|(execute \S+)): `
+	slowQueryHeader      = `\s*(?P<level>[A-Z0-9]+):\s+duration: (?P<duration>[0-9\.]+) ms\s+(?:(statement)|(execute \S+)): `
+	traceFromTrace1      = `\/\*.*trace_id=['"](?P<trace_id>[^'"]+)['"].*parent_id=['"](?P<parent_id>[^'"]+)['"].*\*\/`
+	traceFromTrace2      = `\/\*.*parent_id=['"](?P<parent_id>[^'"]+)['"].*trace_id=['"](?P<trace_id>[^'"]+)['"].*\*\/`
+	traceFromTraceParent = `\/\*.*traceparent=['"]\d{2}-(?P<trace_id>[^-]+)-(?P<parent_id>[^-]+)-\d{2}['"].*\*\/`
 )
 
-var slowQueryHeaderRegex = &parsers.ExtRegexp{regexp.MustCompile(slowQueryHeader)}
+var slowQueryHeaderRegex = &parsers.ExtRegexp{Regexp: regexp.MustCompile(slowQueryHeader)}
+var traceFromTraceRegex1 = &parsers.ExtRegexp{Regexp: regexp.MustCompile(traceFromTrace1)}
+var traceFromTraceRegex2 = &parsers.ExtRegexp{Regexp: regexp.MustCompile(traceFromTrace2)}
+var traceFromTraceParentRegex = &parsers.ExtRegexp{Regexp: regexp.MustCompile(traceFromTraceParent)}
 
 // prefixField represents a specific format specifier in the log_line_prefix string
 // (see module comment for details).
@@ -85,22 +91,22 @@ func (p *prefixField) ReString() string {
 }
 
 var prefixValues = map[string]prefixField{
-	"%a": prefixField{Name: "application", Pattern: "\\S+"},
-	"%u": prefixField{Name: "user", Pattern: "\\S+"},
-	"%d": prefixField{Name: "database", Pattern: "\\S+"},
-	"%r": prefixField{Name: "host_port", Pattern: "\\S+"},
-	"%h": prefixField{Name: "host", Pattern: "\\S+"},
-	"%p": prefixField{Name: "pid", Pattern: "\\d+"},
-	"%t": prefixField{Name: "timestamp", Pattern: timestampRe},
-	"%m": prefixField{Name: "timestamp_millis", Pattern: timestampRe},
-	"%n": prefixField{Name: "timestamp_unix", Pattern: "\\d+"},
-	"%i": prefixField{Name: "command_tag", Pattern: "\\S+"},
-	"%e": prefixField{Name: "sql_state", Pattern: "\\S+"},
-	"%c": prefixField{Name: "session_id", Pattern: "\\d+"},
-	"%l": prefixField{Name: "session_line_number", Pattern: "\\d+"},
-	"%s": prefixField{Name: "session_start", Pattern: timestampRe},
-	"%v": prefixField{Name: "virtual_transaction_id", Pattern: "\\S+"},
-	"%x": prefixField{Name: "transaction_id", Pattern: "\\S+"},
+	"%a": {Name: "application", Pattern: "\\S+"},
+	"%u": {Name: "user", Pattern: "\\S+"},
+	"%d": {Name: "database", Pattern: "\\S+"},
+	"%r": {Name: "host_port", Pattern: "\\S+"},
+	"%h": {Name: "host", Pattern: "\\S+"},
+	"%p": {Name: "pid", Pattern: "\\d+"},
+	"%t": {Name: "timestamp", Pattern: timestampRe},
+	"%m": {Name: "timestamp_millis", Pattern: timestampRe},
+	"%n": {Name: "timestamp_unix", Pattern: "\\d+"},
+	"%i": {Name: "command_tag", Pattern: "\\S+"},
+	"%e": {Name: "sql_state", Pattern: "\\S+"},
+	"%c": {Name: "session_id", Pattern: "\\d+"},
+	"%l": {Name: "session_line_number", Pattern: "\\d+"},
+	"%s": {Name: "session_start", Pattern: timestampRe},
+	"%v": {Name: "virtual_transaction_id", Pattern: "\\S+"},
+	"%x": {Name: "transaction_id", Pattern: "\\S+"},
 }
 
 type Options struct {
@@ -138,8 +144,7 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 			// of database logs. Don't confuse this with p.pgPrefixRegex, which
 			// is a compiled regex for parsing the postgres-specific line
 			// prefix.
-			var prefix string
-			prefix = prefixRegex.FindString(line)
+			var prefix = prefixRegex.FindString(line)
 			line = strings.TrimPrefix(line, prefix)
 		}
 		if !isContinuationLine(line) && len(groupedLines) > 0 {
@@ -214,18 +219,52 @@ func (p *Parser) handleEvent(rawEvent []string) *event.Event {
 	for _, line := range rawEvent[1:] {
 		query += " " + strings.TrimLeft(line, " \t")
 	}
+
+	// Also try to parse the trace data from a SQL comment
+	match, traceData := parseTraceData(query)
+
+	if match {
+		if traceId, ok := traceData["trace_id"]; ok {
+			ev.Data["trace.trace_id"] = traceId
+		}
+
+		if parentId, ok := traceData["parent_id"]; ok {
+			ev.Data["trace.parent_id"] = parentId
+		}
+	}
+
 	normalizedQuery := normalizer.NormalizeQuery(query)
 
 	ev.Data["query"] = query
 	ev.Data["normalized_query"] = normalizedQuery
+
 	if len(normalizer.LastTables) > 0 {
 		ev.Data["tables"] = strings.Join(normalizer.LastTables, " ")
 	}
+
 	if len(normalizer.LastComments) > 0 {
 		ev.Data["comments"] = "/* " + strings.Join(normalizer.LastComments, " */ /* ") + " */"
 	}
 
 	return ev
+}
+
+func parseTraceData(query string) (matched bool, fields map[string]string) {
+	match, _, traceData := parsePrefix(traceFromTraceRegex1, query)
+
+	if match {
+		return match, traceData
+	}
+
+	match, _, traceData = parsePrefix(traceFromTraceRegex2, query)
+
+	if match {
+		return match, traceData
+	}
+
+	match, _, traceData = parsePrefix(traceFromTraceParentRegex, query)
+
+	return match, traceData
 }
 
 func isContinuationLine(line string) bool {
@@ -291,5 +330,5 @@ func buildPrefixRegexp(prefixFormat string) (*parsers.ExtRegexp, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &parsers.ExtRegexp{re}, nil
+	return &parsers.ExtRegexp{Regexp: re}, nil
 }

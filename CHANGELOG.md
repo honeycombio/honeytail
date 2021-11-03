@@ -1,5 +1,32 @@
 # Honeytail Changelog
 
+## 1.6.0
+
+Improvements:
+
+- Parse trace data from SQL comments (#226) | [@endor](https://github.com/endor)
+
+Maintenance:
+
+- bump libhoney-go to v1.15.6 (#229)
+- empower apply-labels action to apply labels (#227)
+- Bump github.com/honeycombio/libhoney-go from 1.15.4 to 1.15.5 (#225)
+- Change maintenance badge to maintained (#223)
+- Adds Stalebot (#224)
+- Bump github.com/klauspost/compress from 1.13.4 to 1.13.6 (#222)
+- Bump github.com/honeycombio/libhoney-go from 1.15.3 to 1.15.4 (#212)
+- Bump github.com/klauspost/compress from 1.13.1 to 1.13.4 (#217)
+- Add issue and PR templates (#218)
+- Add OSS lifecycle badge (#216)
+- Add community health files (#215)
+- Bump github.com/klauspost/compress from 1.12.2 to 1.13.1 (#208)
+- Updates Github Action Workflows (#211)
+- Updates Dependabot Config (#210)
+- Switches CODEOWNERS to telemetry-team (#209)
+- Bump github.com/honeycombio/libhoney-go from 1.15.2 to 1.15.3 (#206)
+- arm[32] support, for raspberry pis. (raspberries pi?) (#205)
+- Bump github.com/klauspost/compress from 1.11.13 to 1.12.2 (#198)
+
 ## 1.5.0
 
 Improvements:

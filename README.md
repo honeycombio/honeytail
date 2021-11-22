@@ -28,13 +28,13 @@ Our complete list of parsers can be found in the [`parsers/` directory](parsers/
 Install from source:
 
 ```
-go get github.com/honeycombio/honeytail
+go install github.com/honeycombio/honeytail@latest
 ```
 
 to install to a specific path:
 
 ```
-GOPATH=/usr/local go get github.com/honeycombio/honeytail
+GOPATH=/usr/local go install github.com/honeycombio/honeytail@latest
 ```
 
 the binary will install to `/usr/local/bin/honeytail`

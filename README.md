@@ -43,8 +43,16 @@ Use a prebuilt binary: find the latest version on [Honeycomb.io](https://honeyco
 
 ## Usage
 
-```
+Using command line arguments:
+
+```shell
 honeytail --writekey=YOUR_WRITE_KEY --dataset='Best Data Ever' --parser=json --file=/var/log/api_server.log
+```
+
+Using a config file:
+
+```shell
+honeytail --config honeytail-conf.ini
 ```
 
 For more advanced usage, options, and the ability to scrub or drop specific fields, see [our documentation](https://honeycomb.io/docs/send-data/agent).

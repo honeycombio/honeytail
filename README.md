@@ -45,7 +45,7 @@ Use a prebuilt binary: find the latest version on [Honeycomb.io](https://honeyco
 
 Using command line arguments:
 
-```shel
+```shell
 honeytail --writekey=YOUR_WRITE_KEY --dataset='Best Data Ever' --parser=json --file=/var/log/api_server.log
 ```
 

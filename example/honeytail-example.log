@@ -1,0 +1,7 @@
+time="2021-12-08T21:16:04.155700308Z" level=debug msg="EnableService 49f92179af6b93864dd69de743312e196efc98be131fc35f19aea6f1dfa2e3af DONE"
+time="2021-12-08T21:16:04.159635917Z" level=debug msg="bundle dir created" bundle=/var/run/docker/containerd/49f92179af6b93864dd69de743312e196efc98be131fc35f19aea6f1dfa2e3af module=libcontainerd namespace=moby root=/var/lib/docker/overlay2/e206dbff938f529daf7e5f385d1bdcc945b688d7c13bd5f073edb861449969b0/merged
+time="2021-12-08T21:16:04Z" level=debug msg="event published" module="containerd/containers" ns=moby topic="/containers/create" type=containerd.events.ContainerCreate
+time="2021-12-08T21:16:04Z" level=info msg="shim docker-containerd-shim started" address="/containerd-shim/moby/49f92179af6b93864dd69de743312e196efc98be131fc35f19aea6f1dfa2e3af/shim.sock" debug=true module="containerd/tasks" pid=1676
+time="2021-12-08T21:16:04Z" level=debug msg="registering ttrpc server"
+time="2021-12-08T21:16:04Z" level=debug msg="serving api on unix socket" socket="[inherited from parent]"
+time="2021-12-08T21:16:04.281146967Z" level=debug msg="sandbox set key processing took 49.81037ms for container 49f92179af6b93864dd69de743312e196efc98be131fc35f19aea6f1dfa2e3af"

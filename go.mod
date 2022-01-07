@@ -1,6 +1,6 @@
 module github.com/honeycombio/honeytail
 
-go 1.13
+go 1.17
 
 require (
 	github.com/fsnotify/fsnotify v1.4.7 // indirect

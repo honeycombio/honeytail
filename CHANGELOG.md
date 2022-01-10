@@ -1,5 +1,16 @@
 # Honeytail Changelog
 
+## 1.6.1
+
+## Maintenance
+
+- Update go and libhoney (#236) | [@MikeGoldsmith](https://github.com/MikeGoldsmith)
+- gh: add re-triage workflow (#235) | [@vreynolds](https://github.com/vreynolds)
+- docs: add example (#232) | [@JamieDanielson](https://github.com/jamiedanielson)
+- Update dependabot to monthly (#233) | [@vreynolds](https://github.com/vreynolds)
+- docs: add config usage to readme (#231) | [@vreynolds](https://github.com/vreynolds)
+- Update install docs for modern go versions (#230) | [@vreynolds](https://github.com/vreynolds)
+
 ## 1.6.0
 
 Improvements:

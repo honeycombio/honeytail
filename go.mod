@@ -16,7 +16,7 @@ require (
 	github.com/klauspost/compress v1.15.1
 	github.com/kr/logfmt v0.0.0-20140226030751-b84e30acd515
 	github.com/sirupsen/logrus v1.8.1
-	github.com/stretchr/testify v1.7.0
+	github.com/stretchr/testify v1.7.1
 	golang.org/x/sys v0.0.0-20210320140829-1e4c9ba3b0c4
 )
 

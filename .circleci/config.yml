@@ -19,14 +19,14 @@ platform_matrix: &platform_matrix
 jobs:
   test:
     docker:
-      - image: circleci/golang:1.17
+      - image: cimg/go:1.18
     steps:
       - checkout
       - run: go test --timeout 10s -v ./...
 
   go-build:
     docker:
-      - image: circleci/golang:1.17
+      - image: cimg/go:1.18
     parameters:
       os:
         description: Target operating system
@@ -53,7 +53,7 @@ jobs:
 
   build_packages:
     docker:
-      - image: circleci/golang:1.17
+      - image: cimg/go:1.18
     steps:
       - attach_workspace:
           at: ~/

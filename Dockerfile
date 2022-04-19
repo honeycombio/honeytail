@@ -1,5 +1,5 @@
 # This builds the binary inside an Alpine Linux container, which is small
-FROM alpine:3.11
+FROM alpine:3.13
 MAINTAINER Ben Hartshorne <ben@honeycomb.io>
 
 # Set us up so we can build the binary

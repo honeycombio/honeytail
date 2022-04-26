@@ -1,5 +1,14 @@
 # Honeytail Changelog
 
+## 1.6.2
+
+## Maintenance
+
+- [maint] update circle to cimg/go:1.18, update alpine to 3.13 (#246) | [@JamieDanielson](https://github.com/JamieDanielson)
+  - fixes openSSL CVE
+- Bump github.com/stretchr/testify from 1.7.0 to 1.7.1 (#244) | [dependabot](https://github.com/dependabot)
+- Bump github.com/klauspost/compress from 1.13.6 to 1.15.1 (#245) | [dependabot](https://github.com/dependabot)
+
 ## 1.6.1
 
 ## Maintenance

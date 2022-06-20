@@ -34,7 +34,7 @@ func TestSingleQueryParsing(t *testing.T) {
 				Data: map[string]interface{}{
 					"user":                "postgres",
 					"database":            "postgres",
-					"duration":            0.681,
+					"duration_ms":         0.681,
 					"pid":                 3053,
 					"session_line_number": 3,
 					"query":               "SELECT d.datname as \"Name\", pg_catalog.pg_get_userbyid(d.datdba) as \"Owner\", pg_catalog.pg_encoding_to_char(d.encoding) as \"Encoding\", d.datcollate as \"Collate\", d.datctype as \"Ctype\", pg_catalog.array_to_string(d.datacl, E'\\n') AS \"Access privileges\" FROM pg_catalog.pg_database d ORDER BY 1;",
@@ -51,7 +51,7 @@ func TestSingleQueryParsing(t *testing.T) {
 				Data: map[string]interface{}{
 					"user":                   "postgres",
 					"database":               "test",
-					"duration":               2.753,
+					"duration_ms":            2.753,
 					"pid":                    8544,
 					"session_line_number":    1,
 					"virtual_transaction_id": "3/0",
@@ -73,7 +73,7 @@ func TestSingleQueryParsing(t *testing.T) {
 				Data: map[string]interface{}{
 					"user":                "postgres",
 					"database":            "test",
-					"duration":            2.753,
+					"duration_ms":         2.753,
 					"pid":                 8544,
 					"session_line_number": 1,
 					"query":               "select * from test;",
@@ -90,7 +90,7 @@ func TestSingleQueryParsing(t *testing.T) {
 				Data: map[string]interface{}{
 					"user":                "postgres",
 					"database":            "postgres",
-					"duration":            0.681,
+					"duration_ms":         0.681,
 					"pid":                 3053,
 					"session_line_number": 3,
 					"query":               "SELECT c FROM sbtest1 WHERE id=$1",
@@ -107,7 +107,7 @@ func TestSingleQueryParsing(t *testing.T) {
 				Data: map[string]interface{}{
 					"user":                "postgres",
 					"database":            "test",
-					"duration":            2.753,
+					"duration_ms":         2.753,
 					"pid":                 8544,
 					"session_line_number": 1,
 					"query":               "select * from test /* trace_id='5bd66ef5095369c7b0d1f8f4bd33716a', parent_id='c532cb4098ac3dd2' */",
@@ -127,7 +127,7 @@ func TestSingleQueryParsing(t *testing.T) {
 				Data: map[string]interface{}{
 					"user":                "postgres",
 					"database":            "test",
-					"duration":            2.753,
+					"duration_ms":         2.753,
 					"pid":                 8544,
 					"session_line_number": 1,
 					"query":               "select * from test /* trace_id=\"5bd66ef5095369c7b0d1f8f4bd33716a\", parent_id=\"c532cb4098ac3dd2\" */",
@@ -147,7 +147,7 @@ func TestSingleQueryParsing(t *testing.T) {
 				Data: map[string]interface{}{
 					"user":                "postgres",
 					"database":            "test",
-					"duration":            2.753,
+					"duration_ms":         2.753,
 					"pid":                 8544,
 					"session_line_number": 1,
 					"query":               "select * from test /* parent_id='c532cb4098ac3dd2' trace_id='5bd66ef5095369c7b0d1f8f4bd33716a' */",
@@ -174,7 +174,7 @@ func TestSingleQueryParsing(t *testing.T) {
 				Data: map[string]interface{}{
 					"user":                "postgres",
 					"database":            "postgres",
-					"duration":            0.681,
+					"duration_ms":         0.681,
 					"pid":                 3053,
 					"session_line_number": 3,
 					"query":               "SELECT d.datname as \"Name\", pg_catalog.pg_get_userbyid(d.datdba) as \"Owner\", pg_catalog.pg_encoding_to_char(d.encoding) as \"Encoding\", d.datcollate as \"Collate\", d.datctype as \"Ctype\", pg_catalog.array_to_string(d.datacl, E'\\n') AS \"Access privileges\" FROM pg_catalog.pg_database d ORDER BY 1 /* trace.trace_id='5bd66ef5095369c7b0d1f8f4bd33716a', trace.parent_id='c532cb4098ac3dd2' */;",
@@ -193,7 +193,7 @@ func TestSingleQueryParsing(t *testing.T) {
 				Data: map[string]interface{}{
 					"user":                "postgres",
 					"database":            "test",
-					"duration":            2.753,
+					"duration_ms":         2.753,
 					"pid":                 8544,
 					"session_line_number": 1,
 					"query":               "select * from test /* traceparent='00-5bd66ef5095369c7b0d1f8f4bd33716a-c532cb4098ac3dd2-01', */",
@@ -239,7 +239,7 @@ func TestMultipleQueryParsing(t *testing.T) {
 			Data: map[string]interface{}{
 				"user":                "postgres",
 				"database":            "test",
-				"duration":            9.263,
+				"duration_ms":         9.263,
 				"pid":                 3542,
 				"session_line_number": 5,
 				"query":               "INSERT INTO test (id, name, value) VALUES (1, 'Alice', 'foo');",
@@ -251,7 +251,7 @@ func TestMultipleQueryParsing(t *testing.T) {
 			Data: map[string]interface{}{
 				"user":                "postgres",
 				"database":            "test",
-				"duration":            0.841,
+				"duration_ms":         0.841,
 				"pid":                 3542,
 				"session_line_number": 6,
 				"query":               "INSERT INTO test (id, name, value) VALUES (2, 'Bob', 'bar');",
@@ -263,7 +263,7 @@ func TestMultipleQueryParsing(t *testing.T) {
 			Data: map[string]interface{}{
 				"user":                "postgres",
 				"database":            "test",
-				"duration":            15.577,
+				"duration_ms":         15.577,
 				"pid":                 3542,
 				"session_line_number": 7,
 				"query":               "SELECT * FROM test WHERE id=1;",
@@ -275,7 +275,7 @@ func TestMultipleQueryParsing(t *testing.T) {
 			Data: map[string]interface{}{
 				"user":                "postgres",
 				"database":            "test",
-				"duration":            0.501,
+				"duration_ms":         0.501,
 				"pid":                 3542,
 				"session_line_number": 8,
 				"query":               "SELECT * FROM test WHERE id=2;",
@@ -338,7 +338,7 @@ func TestCustomLogLinePrefix(t *testing.T) {
 	expected := &event.Event{
 		Timestamp: time.Date(0001, 1, 1, 0, 0, 0, 0, time.UTC),
 		Data: map[string]interface{}{
-			"duration":            1050.729,
+			"duration_ms":         1050.729,
 			"pid":                 200,
 			"session_line_number": 1,
 			"query":               "UPDATE \"repositories\" SET \"current_build_id\" = 341933279, \"updated_at\" = '2018-02-15 15:21:55.174858' WHERE \"repositories\".\"id\" = 16235973",

@@ -34,6 +34,7 @@ func TestSingleQueryParsing(t *testing.T) {
 				Data: map[string]interface{}{
 					"user":                "postgres",
 					"database":            "postgres",
+					"duration":            0.681,
 					"duration_ms":         0.681,
 					"pid":                 3053,
 					"session_line_number": 3,
@@ -51,6 +52,7 @@ func TestSingleQueryParsing(t *testing.T) {
 				Data: map[string]interface{}{
 					"user":                   "postgres",
 					"database":               "test",
+					"duration":               2.753,
 					"duration_ms":            2.753,
 					"pid":                    8544,
 					"session_line_number":    1,
@@ -73,6 +75,7 @@ func TestSingleQueryParsing(t *testing.T) {
 				Data: map[string]interface{}{
 					"user":                "postgres",
 					"database":            "test",
+					"duration":            2.753,
 					"duration_ms":         2.753,
 					"pid":                 8544,
 					"session_line_number": 1,
@@ -90,6 +93,7 @@ func TestSingleQueryParsing(t *testing.T) {
 				Data: map[string]interface{}{
 					"user":                "postgres",
 					"database":            "postgres",
+					"duration":            0.681,
 					"duration_ms":         0.681,
 					"pid":                 3053,
 					"session_line_number": 3,
@@ -107,6 +111,7 @@ func TestSingleQueryParsing(t *testing.T) {
 				Data: map[string]interface{}{
 					"user":                "postgres",
 					"database":            "test",
+					"duration":            2.753,
 					"duration_ms":         2.753,
 					"pid":                 8544,
 					"session_line_number": 1,
@@ -127,6 +132,7 @@ func TestSingleQueryParsing(t *testing.T) {
 				Data: map[string]interface{}{
 					"user":                "postgres",
 					"database":            "test",
+					"duration":            2.753,
 					"duration_ms":         2.753,
 					"pid":                 8544,
 					"session_line_number": 1,
@@ -147,6 +153,7 @@ func TestSingleQueryParsing(t *testing.T) {
 				Data: map[string]interface{}{
 					"user":                "postgres",
 					"database":            "test",
+					"duration":            2.753,
 					"duration_ms":         2.753,
 					"pid":                 8544,
 					"session_line_number": 1,
@@ -174,6 +181,7 @@ func TestSingleQueryParsing(t *testing.T) {
 				Data: map[string]interface{}{
 					"user":                "postgres",
 					"database":            "postgres",
+					"duration":            0.681,
 					"duration_ms":         0.681,
 					"pid":                 3053,
 					"session_line_number": 3,
@@ -193,6 +201,7 @@ func TestSingleQueryParsing(t *testing.T) {
 				Data: map[string]interface{}{
 					"user":                "postgres",
 					"database":            "test",
+					"duration":            2.753,
 					"duration_ms":         2.753,
 					"pid":                 8544,
 					"session_line_number": 1,
@@ -239,6 +248,7 @@ func TestMultipleQueryParsing(t *testing.T) {
 			Data: map[string]interface{}{
 				"user":                "postgres",
 				"database":            "test",
+				"duration":            9.263,
 				"duration_ms":         9.263,
 				"pid":                 3542,
 				"session_line_number": 5,
@@ -251,6 +261,7 @@ func TestMultipleQueryParsing(t *testing.T) {
 			Data: map[string]interface{}{
 				"user":                "postgres",
 				"database":            "test",
+				"duration":            0.841,
 				"duration_ms":         0.841,
 				"pid":                 3542,
 				"session_line_number": 6,
@@ -263,6 +274,7 @@ func TestMultipleQueryParsing(t *testing.T) {
 			Data: map[string]interface{}{
 				"user":                "postgres",
 				"database":            "test",
+				"duration":            15.577,
 				"duration_ms":         15.577,
 				"pid":                 3542,
 				"session_line_number": 7,
@@ -275,6 +287,7 @@ func TestMultipleQueryParsing(t *testing.T) {
 			Data: map[string]interface{}{
 				"user":                "postgres",
 				"database":            "test",
+				"duration":            0.501,
 				"duration_ms":         0.501,
 				"pid":                 3542,
 				"session_line_number": 8,
@@ -338,6 +351,7 @@ func TestCustomLogLinePrefix(t *testing.T) {
 	expected := &event.Event{
 		Timestamp: time.Date(0001, 1, 1, 0, 0, 0, 0, time.UTC),
 		Data: map[string]interface{}{
+			"duration":            1050.729,
 			"duration_ms":         1050.729,
 			"pid":                 200,
 			"session_line_number": 1,

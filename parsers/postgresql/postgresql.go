@@ -209,7 +209,8 @@ func (p *Parser) handleEvent(rawEvent []string) *event.Event {
 
 	if rawDuration, ok := slowQueryMeta["duration"]; ok {
 		duration, _ := strconv.ParseFloat(rawDuration, 64)
-		ev.Data["duration"] = duration
+		ev.Data["duration"] = duration // Backwards compatibility
+		ev.Data["duration_ms"] = duration
 	} else {
 		logrus.WithField("query", query).Debug("Failed to find query duration in log line")
 	}

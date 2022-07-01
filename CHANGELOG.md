@@ -1,8 +1,18 @@
 # Honeytail Changelog
 
+## 1.7.0
+
+### Fixes
+
+- fix(postgres): report query duration as duration_ms (#251) | [pckilgore](https://github.com/pckilgore)
+
+### Maintenance
+
+- Bump github.com/klauspost/compress from 1.15.1 to 1.15.5 (#249)
+
 ## 1.6.2
 
-## Maintenance
+### Maintenance
 
 - [maint] update circle to cimg/go:1.18, update alpine to 3.13 (#246) | [@JamieDanielson](https://github.com/JamieDanielson)
   - fixes openSSL CVE
@@ -11,7 +21,7 @@
 
 ## 1.6.1
 
-## Maintenance
+### Maintenance
 
 - Update go and libhoney (#236) | [@MikeGoldsmith](https://github.com/MikeGoldsmith)
 - gh: add re-triage workflow (#235) | [@vreynolds](https://github.com/vreynolds)

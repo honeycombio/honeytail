@@ -1,5 +1,12 @@
 # Honeytail Changelog
 
+## 1.7.1
+
+### Maintenance
+
+- Bump github.com/klauspost/compress from 1.15.5 to 1.15.8 (#255) | dependabot
+- fixes openSSL CVE
+
 ## 1.7.0
 
 ### Fixes

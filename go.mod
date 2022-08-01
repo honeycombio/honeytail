@@ -13,7 +13,7 @@ require (
 	github.com/hpcloud/tail v1.0.1-0.20170814160653-37f427138745
 	github.com/jeromer/syslogparser v0.0.0-20190429161531-5fbaaf06d9e7
 	github.com/jessevdk/go-flags v1.5.0
-	github.com/klauspost/compress v1.15.8
+	github.com/klauspost/compress v1.15.9
 	github.com/kr/logfmt v0.0.0-20140226030751-b84e30acd515
 	github.com/sirupsen/logrus v1.8.1
 	github.com/stretchr/testify v1.8.0

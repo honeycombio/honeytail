@@ -11,9 +11,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/honeycombio/mysqltools/query/normalizer"
+	"github.com/sirupsen/logrus"
 
 	"github.com/honeycombio/honeytail/event"
 	"github.com/honeycombio/honeytail/httime"
@@ -132,9 +132,9 @@ type Options struct {
 	Host          string `long:"host" description:"MySQL host in the format (address:port)"`
 	User          string `long:"user" description:"MySQL username"`
 	Pass          string `long:"pass" description:"MySQL password"`
-	QueryInterval uint   `long:"interval" description:"interval for querying the MySQL DB in seconds" default:"30"`
+	QueryInterval uint   `long:"interval" description:"interval for querying the MySQL DB in seconds"`
 
-	NumParsers int `hidden:"true" description:"number of MySQL parsers to spin up"`
+	NumParsers int `hidden:"true" description:"number of MySQL parsers to spin up" yaml:"-"`
 }
 
 type Parser struct {
@@ -178,9 +178,13 @@ func (p *Parser) Init(options interface{}) error {
 		p.role = role
 
 		// update hostedOn and readOnly every <n> seconds
+		queryInterval := p.conf.QueryInterval
+		if queryInterval == 0 {
+			queryInterval = 30
+		}
 		go func() {
 			defer db.Close()
-			ticker := time.NewTicker(time.Second * time.Duration(p.conf.QueryInterval))
+			ticker := time.NewTicker(time.Second * time.Duration(queryInterval))
 			for _ = range ticker.C {
 				readOnly, err := getReadOnly(db)
 				if err != nil {

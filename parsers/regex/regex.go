@@ -23,10 +23,10 @@ type Options struct {
 	// Note: `LineRegex` and `line_regex` are named as singular so that
 	// it's less confusing to users to input them.
 	// Might be worth making this consistent across the entire repo
-	LineRegex       []string `long:"line_regex" description:"Regular expression with named capture groups representing the fields you want parsed (RE2 syntax). You can enter multiple regexes to match (--regex.line_regex=\"(?P<foo>re)\" --regex.line_regex=\"(?P<bar>...)\"). Parses using the first regex to match a line, so list them in most-to-least-specific order."`
-	TimeFieldName   string   `long:"timefield" description:"Name of the field that contains a timestamp"`
-	TimeFieldFormat string   `long:"time_format" description:"Timestamp format to use (strftime and Golang time.Parse supported)"`
-	NumParsers      int      `hidden:"true" description:"number of regex parsers to spin up"`
+	LineRegex       []string `long:"line_regex" description:"Regular expression with named capture groups representing the fields you want parsed (RE2 syntax). You can enter multiple regexes to match (--regex.line_regex=\"(?P<foo>re)\" --regex.line_regex=\"(?P<bar>...)\"). Parses using the first regex to match a line, so list them in most-to-least-specific order." yaml:"line_regex,omitempty"`
+	TimeFieldName   string   `long:"timefield" description:"Name of the field that contains a timestamp" yaml:"timefield,omitempty"`
+	TimeFieldFormat string   `long:"time_format" description:"Timestamp format to use (strftime and Golang time.Parse supported)" yaml:"time_format,omitempty"`
+	NumParsers      int      `hidden:"true" description:"number of regex parsers to spin up" yaml:"-"`
 }
 
 type Parser struct {

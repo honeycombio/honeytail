@@ -17,10 +17,11 @@ import (
 // Options defines the options relevant to the CSV parser
 type Options struct {
 	Fields           string `long:"fields" description:"Comma separated list of CSV fields, in order."`
-	TimeFieldName    string `long:"timefield" description:"Name of the field that contains a timestamp"`
-	TimeFieldFormat  string `long:"time_format" description:"Timestamp format to use (strftime and Golang time.Parse supported)"`
-	NumParsers       int    `hidden:"true" description:"number of csv parsers to spin up"`
-	TrimLeadingSpace bool   `bool:"trim_leading_space" description:"trim leading whitespace in CSV fields and values" default:"false"`
+	TimeFieldName    string `long:"timefield" description:"Name of the field that contains a timestamp" yaml:"timefield,omitempty"`
+	TimeFieldFormat  string `long:"time_format" description:"Timestamp format to use (strftime and Golang time.Parse supported)" yaml:"time_format,omitempty"`
+	TrimLeadingSpace bool   `long:"trim_leading_space" description:"trim leading whitespace in CSV fields and values" yaml:"trim_leading_space,omitempty"`
+
+	NumParsers int `hidden:"true" description:"number of csv parsers to spin up" yaml:"-"`
 }
 
 // Parser implements the Parser interface

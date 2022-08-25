@@ -15,10 +15,10 @@ import (
 )
 
 type Options struct {
-	TimeFieldName   string `long:"timefield" description:"Name of the field that contains a timestamp"`
-	TimeFieldFormat string `long:"format" description:"Format of the timestamp found in timefield (supports strftime and Golang time formats)"`
+	TimeFieldName   string `long:"timefield" description:"Name of the field that contains a timestamp" yaml:"timefield,omitempty"`
+	TimeFieldFormat string `long:"format" description:"Format of the timestamp found in timefield (supports strftime and Golang time formats)" yaml:"format,omitempty"`
 
-	NumParsers int `hidden:"true" description:"number of htjson parsers to spin up"`
+	NumParsers int `hidden:"true" description:"number of htjson parsers to spin up" yaml:"-"`
 }
 
 type Parser struct {

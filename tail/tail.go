@@ -33,11 +33,11 @@ const (
 )
 
 type TailOptions struct {
-	ReadFrom              string `long:"read_from" description:"Location in the file from which to start reading. Values: beginning, end, last. Last picks up where it left off, if the file has not been rotated, otherwise beginning. When --backfill is set, it will override this option=beginning" default:"last"`
-	Stop                  bool   `long:"stop" description:"Stop reading the file after reaching the end rather than continuing to tail. When --backfill is set, it will override this option=true"`
-	Poll                  bool   `long:"poll" description:"use poll instead of inotify to tail files"`
-	StateFile             string `long:"statefile" description:"File in which to store the last read position. Defaults to a file in /tmp named $logfile.leash.state. If tailing multiple files, default is forced."`
-	HashStateFileDirPaths bool   `long:"hash_statefile_paths" description:"Generates a hash of the directory path for each file that is used to uniquely identify each statefile. Prevents re-using the same statefile for tailed files that have the same name."`
+	ReadFrom              string `long:"read_from" description:"Location in the file from which to start reading. Values: beginning, end, last. Last picks up where it left off, if the file has not been rotated, otherwise beginning. When --backfill is set, it will override this option to beginning" yaml:"read_from,omitempty"`
+	Stop                  bool   `long:"stop" description:"Stop reading the file after reaching the end rather than continuing to tail. When --backfill is set, it will override this option=true" yaml:"stop,omitempty"`
+	Poll                  bool   `long:"poll" description:"use poll instead of inotify to tail files" yaml:"poll,omitempty"`
+	StateFile             string `long:"statefile" description:"File in which to store the last read position. Defaults to a file in /tmp named $logfile.leash.state. If tailing multiple files, default is forced." yaml:"statefile,omitempty"`
+	HashStateFileDirPaths bool   `long:"hash_statefile_paths" description:"Generates a hash of the directory path for each file that is used to uniquely identify each statefile. Prevents re-using the same statefile for tailed files that have the same name." yaml:"hash_statefile_paths,omitempty"`
 }
 
 // Statefile mechanics when ReadFrom is 'last'
@@ -349,7 +349,11 @@ func getTailer(conf Config, file string, stateFile string) (*tail.Tail, error) {
 	// tail a real file
 	var loc *tail.SeekInfo // 0 value means start at beginning
 	var reOpen, follow bool = true, true
-	switch conf.Options.ReadFrom {
+	var readFrom = conf.Options.ReadFrom
+	if readFrom == "" {
+		readFrom = "last"
+	}
+	switch readFrom {
 	case "start", "beginning":
 		// 0 value for tail.SeekInfo means start at beginning
 	case "end":
@@ -360,8 +364,7 @@ func getTailer(conf Config, file string, stateFile string) (*tail.Tail, error) {
 	case "last":
 		loc = getStartLocation(stateFile, file)
 	default:
-		errMsg := fmt.Sprintf("unknown option to --read_from: %s",
-			conf.Options.ReadFrom)
+		errMsg := fmt.Sprintf("unknown option to --read_from: %s", readFrom)
 		return nil, errors.New(errMsg)
 	}
 	if conf.Options.Stop {
@@ -391,10 +394,10 @@ func getTailer(conf Config, file string, stateFile string) (*tail.Tail, error) {
 // It might describe an existing file, an existing directory, or a new path.
 //
 // If tailing a single logfile, we will use the specified --tail.statefile:
-// - if it points to an existing file, that statefile will be used directly
-// - if it points to a new path, that path will be written to directly
-// - if it points to an existing directory, the statefile will be placed inside
-//   the directory (and the statefile's name will be derived from the logfile).
+//   - if it points to an existing file, that statefile will be used directly
+//   - if it points to a new path, that path will be written to directly
+//   - if it points to an existing directory, the statefile will be placed inside
+//     the directory (and the statefile's name will be derived from the logfile).
 //
 // If honeytail is asked to tail multiple files, we will only respect the
 // third case, where --tail.statefile describes an existing directory.

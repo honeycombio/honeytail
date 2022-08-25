@@ -7,8 +7,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/sirupsen/logrus"
 	"github.com/kr/logfmt"
+	"github.com/sirupsen/logrus"
 
 	"github.com/honeycombio/honeytail/event"
 	"github.com/honeycombio/honeytail/httime"
@@ -16,12 +16,12 @@ import (
 )
 
 type Options struct {
-	TimeFieldName   string `long:"timefield" description:"Name of the field that contains a timestamp"`
-	TimeFieldFormat string `long:"format" description:"Format of the timestamp found in timefield (supports strftime and Golang time formats)"`
-	FilterRegex     string `long:"filter_regex" description:"a regular expression that will filter the input stream and only parse lines that match"`
-	InvertFilter    bool   `long:"invert_filter" description:"change the filter_regex to only process lines that do *not* match"`
+	TimeFieldName   string `long:"timefield" description:"Name of the field that contains a timestamp" yaml:"timefield,omitempty"`
+	TimeFieldFormat string `long:"format" description:"Format of the timestamp found in timefield (supports strftime and Golang time formats)" yaml:"format,omitempty"`
+	FilterRegex     string `long:"filter_regex" description:"a regular expression that will filter the input stream and only parse lines that match" yaml:"filter_regex,omitempty"`
+	InvertFilter    bool   `long:"invert_filter" description:"change the filter_regex to only process lines that do *not* match" yaml:"invert_filter,omitempty"`
 
-	NumParsers int `hidden:"true" description:"number of keyval parsers to spin up"`
+	NumParsers int `hidden:"true" description:"number of keyval parsers to spin up" yaml:"-"`
 }
 
 type Parser struct {

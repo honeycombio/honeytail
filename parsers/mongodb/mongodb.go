@@ -7,9 +7,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/honeycombio/mongodbtools/logparser"
 	queryshape "github.com/honeycombio/mongodbtools/queryshape"
+	"github.com/sirupsen/logrus"
 
 	"github.com/honeycombio/honeytail/event"
 	"github.com/honeycombio/honeytail/httime"
@@ -48,9 +48,9 @@ var timestampFormats = []string{
 }
 
 type Options struct {
-	LogPartials bool `long:"log_partials" description:"Send what was successfully parsed from a line (only if the error occured in the log line's message)."`
+	LogPartials bool `long:"log_partials" description:"Send what was successfully parsed from a line (only if the error occured in the log line's message)." yaml:"log_partials,omitempty"`
 
-	NumParsers int `hidden:"true" description:"number of mongo parsers to spin up"`
+	NumParsers int `hidden:"true" description:"number of mongo parsers to spin up" yaml:"-"`
 }
 
 type Parser struct {

@@ -152,16 +152,18 @@ func GetTimestamp(m map[string]interface{}, timeFieldName, timeFieldFormat strin
 		delete(m, timeFieldName)
 		return ts
 	}
+
 	// go through all the possible fields that might have a timestamp
 	// for the first one we find, if it's a string field, try and parse it
-	// if we succeed, stop looking. Otherwise keep trying
+	// if we succeed, stop looking. Otherwise keep trying.
 	for _, timeField := range possibleTimeFieldNames {
 		if t, found := m[timeField]; found {
 			timeStr, found := t.(string)
 			if found {
-				foundFieldName = timeField
 				ts = tryTimeFormats(timeStr, timeFieldFormat)
 				if !ts.IsZero() {
+					// Only set foundFieldName if we were able to parse it as a time
+					foundFieldName = timeField
 					break
 				}
 				warnAboutTime(timeField, t, timeFoundInvalidFormatMsg)
@@ -171,7 +173,9 @@ func GetTimestamp(m map[string]interface{}, timeFieldName, timeFieldFormat strin
 	if ts.IsZero() {
 		ts = Now()
 	}
-	delete(m, foundFieldName)
+	if foundFieldName != "" {
+		delete(m, foundFieldName)
+	}
 	return ts
 }
 

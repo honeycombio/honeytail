@@ -7,13 +7,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/honeycombio/mongodbtools/logparser"
-	queryshape "github.com/honeycombio/mongodbtools/queryshape"
 	"github.com/sirupsen/logrus"
 
 	"github.com/honeycombio/honeytail/event"
 	"github.com/honeycombio/honeytail/httime"
 	"github.com/honeycombio/honeytail/parsers"
+	"github.com/honeycombio/honeytail/parsers/mongodb/logparser"
+	"github.com/honeycombio/honeytail/parsers/mongodb/queryshape"
 )
 
 const (

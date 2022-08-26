@@ -1,5 +1,22 @@
 # Honeytail Changelog
 
+## 1.8.0
+
+### Enhancements:
+
+- Support YAML configs (#262) | [@kentquirk](https://github.com/kentquirk)
+
+### Maintenance:
+
+- Bump github.com/sirupsen/logrus from 1.8.1 to 1.9.0 (#258) | dependabot
+- Bump github.com/honeycombio/libhoney-go from 1.15.8 to 1.16.0 (#259) | dependabot
+- Bump github.com/klauspost/compress from 1.15.8 to 1.15.9 (#260) | dependabot
+
+### Fixes:
+
+- Fix consistency bugs in timestamp processing (#263) | [@kentquirk](https://github.com/kentquirk)
+- Remove dependency on (sunsetted) mongodbtools (#264) | [@kentquirk](https://github.com/kentquirk)
+
 ## 1.7.1
 
 ### Maintenance

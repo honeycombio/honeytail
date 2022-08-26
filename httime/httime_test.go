@@ -190,15 +190,23 @@ func TestGetTimestampValid(t *testing.T) {
 	for i, tTimeSet := range tts {
 		Location = tTimeSet.tz
 		if tTimeSet.auto {
-			resp := GetTimestamp(map[string]interface{}{tTimeSet.fieldName: tTimeSet.input}, "", "")
+			fields := map[string]interface{}{tTimeSet.fieldName: tTimeSet.input}
+			resp := GetTimestamp(fields, "", "")
 			if !resp.Equal(tTimeSet.expected) {
 				t.Errorf("time %d: should've been parsed automatically, without required config", i)
 			}
+			if len(fields) != 0 {
+				t.Error("time field should have been deleted, but was not")
+			}
 		}
 
-		resp := GetTimestamp(map[string]interface{}{tTimeSet.fieldName: tTimeSet.input}, tTimeSet.fieldName, tTimeSet.format)
+		fields := map[string]interface{}{tTimeSet.fieldName: tTimeSet.input}
+		resp := GetTimestamp(fields, tTimeSet.fieldName, tTimeSet.format)
 		if !approxEqual(resp, tTimeSet.expected, tTimeSet.diffThreshold) {
 			t.Errorf("time %d: resp time %s didn't match expected time %s", i, resp, tTimeSet.expected)
+		}
+		if len(fields) != 0 {
+			t.Error("time field should have been deleted, but was not")
 		}
 	}
 }
@@ -218,6 +226,14 @@ func TestGetTimestampInvalid(t *testing.T) {
 	resp = GetTimestamp(map[string]interface{}{"time": "not a valid date"}, "", "")
 	if !resp.Equal(Now()) {
 		t.Errorf("resp time %s didn't match expected time %s", resp, Now())
+	}
+	fields := map[string]interface{}{"time": "not a valid date", "key": "value"}
+	resp = GetTimestamp(fields, "", "")
+	if !resp.Equal(Now()) {
+		t.Errorf("resp time %s didn't match expected time %s", resp, Now())
+	}
+	if len(fields) != 2 {
+		t.Error("fields was modified despite not having a valid timestamp")
 	}
 }
 

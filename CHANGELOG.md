@@ -1,5 +1,10 @@
 # Honeytail Changelog
 
+## 1.8.1
+
+### Fixes
+- Correct Dockerfile to use Go 1.18 properly (#266) | [@kentquirk](https://github.com/kentquirk)
+
 ## 1.8.0
 
 ### Enhancements:

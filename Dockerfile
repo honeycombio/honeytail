@@ -1,6 +1,5 @@
 # This builds the binary inside an Alpine Linux container, which is small
-FROM alpine:3.13
-MAINTAINER Ben Hartshorne <ben@honeycomb.io>
+FROM alpine:3.16
 
 # Set us up so we can build the binary
 ENV GOROOT /usr/lib/go
@@ -22,7 +21,7 @@ RUN apk add --update \
     && ver=$(git rev-parse --short HEAD) \
     && git clean -f \
     && rm -rf .git \
-    && go get -ldflags="-X main.BuildID=${ver}" github.com/honeycombio/honeytail \
+    && go install -ldflags="-X main.BuildID=${ver}" github.com/honeycombio/honeytail \
     && apk del git go \
     && rm -rf /var/cache/apk/*
 

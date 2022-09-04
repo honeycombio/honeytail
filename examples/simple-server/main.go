@@ -15,7 +15,7 @@ func main() {
 	router.HandleFunc("/hello/{person}", helloHandler)
 
 	fmt.Println("Listening on localhost:8080...")
-	log.Fatal(http.ListenAndServe("localhost:8080", router))
+	log.Fatal(http.ListenAndServe(":8080", router))
 }
 
 func mainHandler(w http.ResponseWriter, _ *http.Request) {

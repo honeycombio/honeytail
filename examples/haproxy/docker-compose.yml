@@ -1,0 +1,55 @@
+version: '3'
+
+services:
+  api:
+    build: ../simple-server
+    networks:
+    - main
+    restart: on-failure
+
+  reverse_proxy:
+    image: haproxy:alpine
+    ports:
+    - "80:80"
+    networks:
+    - main
+    volumes:
+    - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg
+    depends_on:
+    - "api"
+    - "rsyslog"
+    
+  rsyslog:
+    build:
+      context: .
+      dockerfile: rsyslog.Dockerfile
+    ports:
+    - "10514:10514/udp"
+    networks:
+    - main
+    volumes:
+    - ./rsyslog.conf:/config/rsyslog.conf
+    - honeytail-logs:/var/log/honeytail
+    environment:
+      RSYSLOG_CONF: "/config/rsyslog.conf"
+
+  honeytail:
+    build: ../../.
+    volumes:
+    - ./hny-haproxy.conf:/etc/hny-conf/hny-haproxy.conf
+    - honeytail-logs:/var/log/honeytail
+    - honeytail-tmp:/tmp # Used to maintain state of what's already been processed
+    command: honeytail --debug --parser=nginx --dataset=examples.honeytail.haproxy --writekey=$HONEYCOMB_WRITE_KEY --nginx.conf=/etc/hny-conf/hny-haproxy.conf --nginx.format=haproxy --file=/var/log/honeytail/access.log
+    environment:
+      HONEYCOMB_WRITE_KEY:
+    depends_on:
+    - "reverse_proxy"
+    restart: on-failure
+
+volumes:
+  honeytail-logs:
+  honeytail-tmp:
+
+networks:
+  main:
+    driver: bridge

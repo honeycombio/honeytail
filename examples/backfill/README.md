@@ -1,4 +1,4 @@
-# honeytail example
+# honeytail backfill example
 
 There is an example log file (`honeytail-example.log`) to see how this would show up in Honeycomb.
 We are using the `--backfill` option to get the existing logs.

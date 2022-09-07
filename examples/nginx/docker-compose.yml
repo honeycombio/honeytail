@@ -1,0 +1,42 @@
+version: '3'
+
+services:
+  api:
+    build: ../simple-server
+    networks:
+    - main
+    restart: on-failure
+
+  reverse_proxy:
+    build: .
+    ports:
+    - "80:80"
+    networks:
+    - main
+    volumes:
+    # Nginx conf normally wouldn't be a volume, but used here to share the file
+    # between containers.  In Kubernetes you would probably use a ConfigMap for
+    # this.
+    - nginx-conf:/etc/nginx
+    - honeytail-logs:/var/log/honeytail
+    restart: on-failure
+
+  honeytail:
+    build: ../../.
+    volumes:
+    - nginx-conf:/etc/nginx
+    - honeytail-logs:/var/log/honeytail
+    - honeytail-tmp:/tmp # Used to maintain state of what's already been processed
+    command: honeytail --debug --parser=nginx --dataset=examples.honeytail.nginx --writekey=$HONEYCOMB_WRITE_KEY --nginx.conf=/etc/nginx/nginx.conf --nginx.format=honeytail --file=/var/log/honeytail/access.log
+    environment:
+      HONEYCOMB_WRITE_KEY:
+    restart: always
+
+volumes:
+  nginx-conf:
+  honeytail-logs:
+  honeytail-tmp:
+
+networks:
+  main:
+    driver: bridge

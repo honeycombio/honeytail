@@ -1,0 +1,51 @@
+version: '3'
+
+services:
+  # Basic MySQL setup with slow query logging enabled.
+  db:
+    build:
+      context: .
+      dockerfile: mysql.Dockerfile
+    networks:
+    - main
+    volumes:
+    - db:/var/lib
+
+    # Containers need to share the file on disk, shared volume is the easiest
+    # way. These containers would likely be in the same pod in Kubernetes.
+    - logs:/var/log
+    environment:
+      # not recommended to have empty pass in production, just for ease of use
+      # here
+      MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+      MYSQL_DATABASE: "mysqlslap"
+
+  # Uses mysqlslap to generate load on the database so the log fills up with
+  # something.
+  slapper:
+    image: mysql
+    networks:
+    - main
+    restart: on-failure
+    command: mysqlslap --host=db --concurrency=10 --iterations=5000 --number-int-cols=2 --number-char-cols=3 --auto-generate-sql
+
+  # Honeytail actually tails the MySQL slow query log, parses out structured
+  # events, and sends them to Honeycomb.
+  honeytail:
+    build: ../../.
+    volumes:
+    - logs:/var/log
+    - honeytail-tmp:/tmp # Used to maintain state of what's already been processed
+    command: honeytail --debug --add_field=hostname=shard0 --parser=mysql --dataset=examples.honeytail.mysql --writekey=$HONEYCOMB_WRITE_KEY --file=/var/log/slowquery.log --drop_field=query
+    environment:
+      HONEYCOMB_WRITE_KEY:
+    restart: always
+
+volumes:
+  db:
+  logs:
+  honeytail-tmp:
+
+networks:
+  main:
+    driver: bridge

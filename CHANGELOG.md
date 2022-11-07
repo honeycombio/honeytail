@@ -2,19 +2,17 @@
 
 ## 1.8.2
 
-Re-release to address OpenSSL CVE. Incorporates latest doc and maintenance.
-
 ### Maintenance
 
-b074aad Bump github.com/stretchr/testify from 1.8.0 to 1.8.1 (#280) | dependabot
-c29c201 Bump github.com/klauspost/compress from 1.15.9 to 1.15.12 (#279) | dependabot
-e773f68 Bump github.com/honeycombio/libhoney-go from 1.16.0 to 1.18.0 (#278) | dependabot
-bf99b7a maint: delete workflows for old board (#277) | [@vreynolds](https://github.com/vreynolds)
-29b9e97 maint: add release file (#275) | [@vreynolds](https://github.com/vreynolds)
-3a2be84 maint: add new project workflow (#274) | [@vreynolds](https://github.com/vreynolds)
-c6a3544 doc: add mysql example (#270) | [@vreynolds](https://github.com/vreynolds)
-53b9813 doc: add nginx example (#269) | [@vreynolds](https://github.com/vreynolds)
-d1de95d doc: add haproxy example (#268) | [@vreynolds](https://github.com/vreynolds)
+- Bump github.com/stretchr/testify from 1.8.0 to 1.8.1 (#280) | dependabot
+- Bump github.com/klauspost/compress from 1.15.9 to 1.15.12 (#279) | dependabot
+- Bump github.com/honeycombio/libhoney-go from 1.16.0 to 1.18.0 (#278) | dependabot
+- maint: delete workflows for old board (#277) | [@vreynolds](https://github.com/vreynolds)
+- maint: add release file (#275) | [@vreynolds](https://github.com/vreynolds)
+- maint: add new project workflow (#274) | [@vreynolds](https://github.com/vreynolds)
+- doc: add mysql example (#270) | [@vreynolds](https://github.com/vreynolds)
+- doc: add nginx example (#269) | [@vreynolds](https://github.com/vreynolds)
+- doc: add haproxy example (#268) | [@vreynolds](https://github.com/vreynolds)
 
 ## 1.8.1
 

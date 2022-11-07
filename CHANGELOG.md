@@ -1,5 +1,19 @@
 # Honeytail Changelog
 
+## 1.8.2
+
+### Maintenance
+
+- Bump github.com/stretchr/testify from 1.8.0 to 1.8.1 (#280) | dependabot
+- Bump github.com/klauspost/compress from 1.15.9 to 1.15.12 (#279) | dependabot
+- Bump github.com/honeycombio/libhoney-go from 1.16.0 to 1.18.0 (#278) | dependabot
+- maint: delete workflows for old board (#277) | [@vreynolds](https://github.com/vreynolds)
+- maint: add release file (#275) | [@vreynolds](https://github.com/vreynolds)
+- maint: add new project workflow (#274) | [@vreynolds](https://github.com/vreynolds)
+- doc: add mysql example (#270) | [@vreynolds](https://github.com/vreynolds)
+- doc: add nginx example (#269) | [@vreynolds](https://github.com/vreynolds)
+- doc: add haproxy example (#268) | [@vreynolds](https://github.com/vreynolds)
+
 ## 1.8.1
 
 ### Fixes

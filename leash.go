@@ -87,7 +87,7 @@ func run(ctx context.Context, options GlobalOptions) {
 	}
 	if err := libhoney.Init(libhConfig); err != nil {
 		logrus.WithFields(logrus.Fields{"err": err}).Fatal(
-			"Error occured while spinning up Transimission")
+			"Error occurred while spinning up Transimission")
 	}
 
 	if options.Backfill {

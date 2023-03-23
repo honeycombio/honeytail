@@ -116,7 +116,7 @@ Fixes:
 
 Improvements:
 
-- Add tail option to generate hash per state file when tailing multile files with same name (#191)
+- Add tail option to generate hash per state file when tailing multiple files with same name (#191)
 - Include note about quoted table/column names in PG (#186)
 
 Maintenance:

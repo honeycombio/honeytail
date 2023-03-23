@@ -613,7 +613,7 @@ func sendToLibhoney(ctx context.Context, toBeSent chan event.Event, toBeResent c
 		case ev, ok := <-toBeSent:
 			if !ok {
 				// channel is closed
-				// NOTE: any unrtransmitted retransmittable events will be dropped
+				// NOTE: any untransmitted retransmittable events will be dropped
 				doneSending <- true
 				return
 			}

@@ -632,7 +632,7 @@ func sendEvent(ev event.Event) {
 		// drop the event!
 		logrus.WithFields(logrus.Fields{
 			"event": ev,
-		}).Debug("droppped event due to sampling")
+		}).Debug("dropped event due to sampling")
 		return
 	}
 	libhEv := libhoney.NewEvent()

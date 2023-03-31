@@ -93,7 +93,7 @@ Maintenance:
 - Add OSS lifecycle badge (#216)
 - Add community health files (#215)
 - Bump github.com/klauspost/compress from 1.12.2 to 1.13.1 (#208)
-- Updates Github Action Workflows (#211)
+- Updates GitHub Action Workflows (#211)
 - Updates Dependabot Config (#210)
 - Switches CODEOWNERS to telemetry-team (#209)
 - Bump github.com/honeycombio/libhoney-go from 1.15.2 to 1.15.3 (#206)
@@ -116,7 +116,7 @@ Fixes:
 
 Improvements:
 
-- Add tail option to generate hash per state file when tailing multile files with same name (#191)
+- Add tail option to generate hash per state file when tailing multiple files with same name (#191)
 - Include note about quoted table/column names in PG (#186)
 
 Maintenance:

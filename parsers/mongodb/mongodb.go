@@ -48,7 +48,7 @@ var timestampFormats = []string{
 }
 
 type Options struct {
-	LogPartials bool `long:"log_partials" description:"Send what was successfully parsed from a line (only if the error occured in the log line's message)." yaml:"log_partials,omitempty"`
+	LogPartials bool `long:"log_partials" description:"Send what was successfully parsed from a line (only if the error occurred in the log line's message)." yaml:"log_partials,omitempty"`
 
 	NumParsers int `hidden:"true" description:"number of mongo parsers to spin up" yaml:"-"`
 }

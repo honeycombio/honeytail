@@ -87,7 +87,7 @@ func run(ctx context.Context, options GlobalOptions) {
 	}
 	if err := libhoney.Init(libhConfig); err != nil {
 		logrus.WithFields(logrus.Fields{"err": err}).Fatal(
-			"Error occured while spinning up Transimission")
+			"Error occurred while spinning up Transmission")
 	}
 
 	if options.Backfill {
@@ -613,7 +613,7 @@ func sendToLibhoney(ctx context.Context, toBeSent chan event.Event, toBeResent c
 		case ev, ok := <-toBeSent:
 			if !ok {
 				// channel is closed
-				// NOTE: any unrtransmitted retransmittable events will be dropped
+				// NOTE: any untransmitted retransmittable events will be dropped
 				doneSending <- true
 				return
 			}
@@ -632,7 +632,7 @@ func sendEvent(ev event.Event) {
 		// drop the event!
 		logrus.WithFields(logrus.Fields{
 			"event": ev,
-		}).Debug("droppped event due to sampling")
+		}).Debug("dropped event due to sampling")
 		return
 	}
 	libhEv := libhoney.NewEvent()

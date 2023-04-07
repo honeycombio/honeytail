@@ -24,6 +24,13 @@ jobs:
       - checkout
       - run: go test --timeout 10s -v ./...
 
+  verify-licenses:
+    docker:
+      - image: cimg/go:1.18
+    steps:
+      - checkout
+      - run: make verify-licenses
+
   go-build:
     docker:
       - image: cimg/go:1.18
@@ -108,6 +115,10 @@ workflows:
   build:
     jobs:
       - test:
+          filters:
+            tags:
+              only: /.*/
+      - verify-licenses:
           filters:
             tags:
               only: /.*/

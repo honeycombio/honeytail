@@ -17,8 +17,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hpcloud/tail"
 	"github.com/sirupsen/logrus"
+	"github.com/tenebris-tech/tail"
 	"golang.org/x/sys/unix"
 )
 

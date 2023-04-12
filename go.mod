@@ -9,14 +9,14 @@ require (
 	github.com/honeycombio/libhoney-go v1.18.0
 	github.com/honeycombio/mysqltools v0.0.1
 	github.com/honeycombio/urlshaper v0.0.0-20170302202025-2baba9ae5b5f
-	github.com/hpcloud/tail v1.0.1-0.20170814160653-37f427138745
 	github.com/jeromer/syslogparser v1.1.0
 	github.com/jessevdk/go-flags v1.5.0
 	github.com/klauspost/compress v1.16.0
 	github.com/kr/logfmt v0.0.0-20140226030751-b84e30acd515
 	github.com/sirupsen/logrus v1.9.0
 	github.com/stretchr/testify v1.8.1
-	golang.org/x/sys v0.0.0-20220825204002-c680a09ffe64
+	github.com/tenebris-tech/tail v1.0.5
+	golang.org/x/sys v0.5.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -25,7 +25,7 @@ require (
 	github.com/facebookgo/clock v0.0.0-20150410010913-600d898af40a // indirect
 	github.com/facebookgo/limitgroup v0.0.0-20150612190941-6abd8d71ec01 // indirect
 	github.com/facebookgo/muster v0.0.0-20150708232844-fd3d7953fd52 // indirect
-	github.com/fsnotify/fsnotify v1.4.7 // indirect
+	github.com/fsnotify/fsnotify v1.6.0 // indirect
 	github.com/honeycombio/sqlparser v0.0.0-20180730202938-aab361df519b // indirect
 	github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
@@ -35,6 +35,5 @@ require (
 	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2 // indirect
 	gopkg.in/alexcesaro/statsd.v2 v2.0.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f // indirect
-	gopkg.in/fsnotify.v1 v1.4.7 // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
 )

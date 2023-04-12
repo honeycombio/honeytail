@@ -35,8 +35,8 @@ github.com/honeycombio/urlshaper v0.0.0-20170302202025-2baba9ae5b5f h1:sFlcFcBhP
 github.com/honeycombio/urlshaper v0.0.0-20170302202025-2baba9ae5b5f/go.mod h1:2CQJZ3RJ2uC2Mp3zJbSkVbFw9iZdCpWwymuADPZYFu4=
 github.com/hpcloud/tail v1.0.1-0.20170814160653-37f427138745 h1:8as8OQ+RF1QrsHvWWsKBtBKINhD9QaD1iozA1wrO4aA=
 github.com/hpcloud/tail v1.0.1-0.20170814160653-37f427138745/go.mod h1:ab1qPbhIpdTxEkNHXyeSf5vhxWSCs/tWer42PpOxQnU=
-github.com/jeromer/syslogparser v0.0.0-20190429161531-5fbaaf06d9e7 h1:FRDp/rRU2sThfssdHIUATCKJOms8R6A9rrhdC1sLqFI=
-github.com/jeromer/syslogparser v0.0.0-20190429161531-5fbaaf06d9e7/go.mod h1:mQyv/QAgjs9+PTi/iXveno+U86nKGsltjqf3ilYx4Bg=
+github.com/jeromer/syslogparser v1.1.0 h1:HES0EviO9iPvCu56LjVFVhbM3o0BckDlIbQfkkaRJAw=
+github.com/jeromer/syslogparser v1.1.0/go.mod h1:zfowyus/j2SEgW31bIntTvEBE2zCSndtFsCC6NcW4S4=
 github.com/jessevdk/go-flags v1.5.0 h1:1jKYvbxEjfUl0fmqTCOfonvskHHXMjBySTLW4y9LFvc=
 github.com/jessevdk/go-flags v1.5.0/go.mod h1:Fw0T6WPc1dYxT4mKEZRfG5kJhaTDP9pj1c2EWnYs/m4=
 github.com/jtolds/gls v4.20.0+incompatible h1:xdiiI2gbIgH/gLH7ADydsJ1uDOEzR8yvV7C0MuV77Wo=

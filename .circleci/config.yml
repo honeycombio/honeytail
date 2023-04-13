@@ -2,7 +2,7 @@ version: 2.1
 
 orbs:
   aws-cli: circleci/aws-cli@0.1.13
-  docker: circleci/docker@1.3.0
+  docker: circleci/docker@1.7.0
 
 platform_matrix: &platform_matrix
   matrix:
@@ -19,21 +19,21 @@ platform_matrix: &platform_matrix
 jobs:
   test:
     docker:
-      - image: cimg/go:1.18
+      - image: cimg/go:1.20
     steps:
       - checkout
       - run: go test --timeout 10s -v ./...
 
   verify-licenses:
     docker:
-      - image: cimg/go:1.18
+      - image: cimg/go:1.20
     steps:
       - checkout
       - run: make verify-licenses
 
   go-build:
     docker:
-      - image: cimg/go:1.18
+      - image: cimg/go:1.20
     parameters:
       os:
         description: Target operating system
@@ -60,7 +60,7 @@ jobs:
 
   build_packages:
     docker:
-      - image: cimg/go:1.18
+      - image: cimg/go:1.20
     steps:
       - attach_workspace:
           at: ~/

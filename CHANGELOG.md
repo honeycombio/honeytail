@@ -1,5 +1,23 @@
 # Honeytail Changelog
 
+## 1.8.3
+
+### Maintenance
+
+- maint: Use latest go and a more recent docker (#299) | [Kent Quirk](https://github.com/kentquirk)
+- maint: Update tail lib to one that's maintained; fix licenses. (#298) | [Kent Quirk](https://github.com/kentquirk)
+- maint(deps): bump github.com/jeromer/syslogparser from 0.0.0-20190429161531-5fbaaf06d9e7 to 1.1.0 (#293) | [dependabot[bot]](https://github.com/dependabot[bot])
+- maint(deps): bump github.com/klauspost/compress from 1.15.12 to 1.16.0 (#292) | [dependabot[bot]](https://github.com/dependabot[bot])
+- maint(deps): bump github.com/go-sql-driver/mysql from 1.6.0 to 1.7.0 (#288) | [dependabot[bot]](https://github.com/dependabot[bot])
+- maint(deps): bump github.com/honeycombio/dynsampler-go from 0.2.1 to 0.3.0 (#286) | [dependabot[bot]](https://github.com/dependabot[bot])
+- maint: Include LICENSES in distributions (#297) | [Tyler Helmuth](https://github.com/TylerHelmuth)
+- chore: Spelling (#296) | [Josh Soref](https://github.com/jsoref)
+- chore: Update CODEOWNERS (#289) | [Tyler Helmuth](https://github.com/TylerHelmuth)
+- chore: Update workflow (#290) | [Tyler Helmuth](https://github.com/TylerHelmuth)
+- chore: add maint: to dependabot prs (#285) | [Jamie Danielson](https://github.com/JamieDanielson)
+- ci: update validate PR title workflow (#283) | [Purvi Kanal](https://github.com/pkanal)
+- ci: validate PR title (#282) | [Purvi Kanal](https://github.com/pkanal)
+
 ## 1.8.2
 
 ### Maintenance

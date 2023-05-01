@@ -4,7 +4,7 @@ go 1.17
 
 require (
 	github.com/go-sql-driver/mysql v1.7.0
-	github.com/honeycombio/dynsampler-go v0.3.0
+	github.com/honeycombio/dynsampler-go v0.4.0
 	github.com/honeycombio/gonx v1.3.1-0.20171118020637-f9b2468e9ef8
 	github.com/honeycombio/libhoney-go v1.18.0
 	github.com/honeycombio/mysqltools v0.0.1
@@ -14,7 +14,7 @@ require (
 	github.com/klauspost/compress v1.16.0
 	github.com/kr/logfmt v0.0.0-20140226030751-b84e30acd515
 	github.com/sirupsen/logrus v1.9.0
-	github.com/stretchr/testify v1.8.1
+	github.com/stretchr/testify v1.8.2
 	github.com/tenebris-tech/tail v1.0.5
 	golang.org/x/sys v0.5.0
 	gopkg.in/yaml.v3 v3.0.1

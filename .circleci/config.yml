@@ -1,7 +1,7 @@
 version: 2.1
 
 orbs:
-  aws-cli: circleci/aws-cli@0.1.13
+  aws-cli: circleci/aws-cli@3.2.0
   docker: circleci/docker@1.7.0
 
 platform_matrix: &platform_matrix
@@ -101,10 +101,9 @@ jobs:
     steps:
       - attach_workspace:
           at: ~/
-      - aws-cli/install
-      - aws-cli/configure:
-          aws-access-key-id: AWS_ACCESS_KEY_ID
-          aws-secret-access-key: AWS_SECRET_ACCESS_KEY
+      - aws-cli/setup:
+          role-arn: "arn:aws:iam::702835727665:role/circleci-public-repos"
+          role-session-name: "honeytail"
           aws-region: AWS_REGION
       - run:
           name: sync_s3_artifacts

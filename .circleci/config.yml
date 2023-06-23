@@ -101,7 +101,7 @@ jobs:
     steps:
       - attach_workspace:
           at: ~/
-      - aws-cli/configure:
+      - aws-cli/setup:
           role-arn: "arn:aws:iam::702835727665:role/circleci-public-repos"
           role-session-name: "honeytail"
           aws-region: AWS_REGION

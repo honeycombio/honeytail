@@ -13,7 +13,7 @@ require (
 	github.com/jessevdk/go-flags v1.5.0
 	github.com/klauspost/compress v1.16.7
 	github.com/kr/logfmt v0.0.0-20140226030751-b84e30acd515
-	github.com/sirupsen/logrus v1.9.0
+	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.8.4
 	github.com/tenebris-tech/tail v1.0.5
 	golang.org/x/sys v0.5.0

@@ -92,6 +92,8 @@ type GlobalOptions struct {
 	FilterFiles         []string `short:"F" long:"filter-file" description:"Log file(s) to exclude from --file glob. May have multiple values, including multiple globs." yaml:"filter-file,omitempty"`
 	RenameFields        []string `long:"rename_field" description:"Format: 'before=after'. Rename field called 'before' from parsed lines to field name 'after' in Honeycomb events. May have multiple values." yaml:"rename_field,omitempty"`
 
+	LogLevel string `long:"log_level" description:"Set the log level. Valid values are 'debug', 'info', 'warn', 'error', 'fatal', 'panic'." default:"info" yaml:"log_level,omitempty"`
+
 	Reqs  RequiredOptions `group:"Required Options" yaml:"required_options,omitempty"`
 	Modes OtherModes      `group:"Other Modes" yaml:"-"`
 
@@ -174,6 +176,13 @@ See https://honeycomb.io/docs/connect/agent/ for more detailed usage instruction
 
 	if options.Debug {
 		logrus.SetLevel(logrus.DebugLevel)
+	} else if options.LogLevel != "" {
+		level, err := logrus.ParseLevel(options.LogLevel)
+		if err != nil {
+			fmt.Printf("invalid log level: %s\n", options.LogLevel)
+			os.Exit(1)
+		}
+		logrus.SetLevel(level)
 	}
 
 	// Support flag alias: --backfill should cover --backoff --tail.read_from=beginning --tail.stop

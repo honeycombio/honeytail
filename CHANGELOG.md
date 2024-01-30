@@ -1,5 +1,28 @@
 # Honeytail Changelog
 
+## 1.9.0
+
+### Enhacements
+
+- feat: Add config option for log level (#332) | @MikeGoldsmith
+
+### Maintenance
+
+- maint: update codeowners to pipeline-team (#329) | @JamieDanielson
+- maint: update project workflow for pipeline (#328) | @JamieDanielson
+- maint: update codeowners to pipeline (#327) | @JamieDanielson
+- maint: Bump deps (#319) | @TylerHelmuth
+- chore: use temp credentials for CI (#310) | @TylerHelmuth
+- maint: update dependabot.yml (#307) | @NLincoln
+- maint(deps): bump golang.org/x/sys from 0.13.0 to 0.16.0 (#331) | @Dependabot
+- maint(deps): bump github.com/klauspost/compress from 1.17.2 to 1.17.4 (#325) | @Dependabot
+- maint(deps): bump github.com/klauspost/compress from 1.16.7 to 1.17.2 (#324) | @Dependabot
+- maint(deps): bump golang.org/x/sys from 0.11.0 to 0.13.0 (#323) | @Dependabot
+- maint(deps): bump github.com/honeycombio/libhoney-go from 1.18.0 to 1.20.0 (#316) | @Dependabot
+- maint(deps): bump golang.org/x/sys from 0.5.0 to 0.11.0 (#318) | @Dependabot
+- maint(deps): bump github.com/klauspost/compress from 1.16.0 to 1.16.7 (#315) | @Dependabot
+- maint(deps): bump github.com/honeycombio/dynsampler-go from 0.3.0 to 0.5.1 (#312) | @Dependabot
+
 ## 1.8.3
 
 ### Maintenance

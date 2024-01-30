@@ -2,7 +2,7 @@
 
 ## 1.9.0
 
-### Enhacements
+### Enhancements
 
 - feat: Add config option for log level (#332) | @MikeGoldsmith
 

@@ -21,8 +21,8 @@ github.com/go-sql-driver/mysql v1.7.1 h1:lUIinVbN1DY0xBg0eMOzmmtGoHwWBbvnWubQUrt
 github.com/go-sql-driver/mysql v1.7.1/go.mod h1:OXbVy3sEdcQ2Doequ6Z5BW6fXNQTmx+9S1MCJN5yJMI=
 github.com/gopherjs/gopherjs v0.0.0-20181017120253-0766667cb4d1 h1:EGx4pi6eqNxGaHF6qqu48+N2wcFQ5qg5FXgOdqsJ5d8=
 github.com/gopherjs/gopherjs v0.0.0-20181017120253-0766667cb4d1/go.mod h1:wJfORRmW1u3UXTncJ5qlYoELFm8eSnnEO6hX4iZ3EWY=
-github.com/honeycombio/dynsampler-go v0.5.1 h1:rwOsxLaSlE8RiriiCgBo/LoZjiLEe24CuXPABOGXV+k=
-github.com/honeycombio/dynsampler-go v0.5.1/go.mod h1:pJqWFeoMN3syX74PEvlusieyGBbtIBjmTVjLc3thmK4=
+github.com/honeycombio/dynsampler-go v0.6.0 h1:fs4mrfeFGU5V+ClwpblFzbWqn4Apb+lKlE7Ja5zL22I=
+github.com/honeycombio/dynsampler-go v0.6.0/go.mod h1:pJqWFeoMN3syX74PEvlusieyGBbtIBjmTVjLc3thmK4=
 github.com/honeycombio/gonx v1.3.1-0.20171118020637-f9b2468e9ef8 h1:rOkOm6ixU8JxjK/OmJBaWhGQ4YX0sO/e8YUz7twniRc=
 github.com/honeycombio/gonx v1.3.1-0.20171118020637-f9b2468e9ef8/go.mod h1:b5vehEHPr2kpld6NR9gSja7nMX8lGQbU5ACKOd9aa9g=
 github.com/honeycombio/libhoney-go v1.20.0 h1:PL54R0P9vxIyb28H3twbLb+DCqQlJdMQM55VZg1abKA=

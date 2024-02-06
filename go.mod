@@ -4,7 +4,7 @@ go 1.17
 
 require (
 	github.com/go-sql-driver/mysql v1.7.1
-	github.com/honeycombio/dynsampler-go v0.5.1
+	github.com/honeycombio/dynsampler-go v0.6.0
 	github.com/honeycombio/gonx v1.3.1-0.20171118020637-f9b2468e9ef8
 	github.com/honeycombio/libhoney-go v1.20.0
 	github.com/honeycombio/mysqltools v0.0.1

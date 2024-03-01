@@ -25,8 +25,8 @@ github.com/honeycombio/dynsampler-go v0.6.0 h1:fs4mrfeFGU5V+ClwpblFzbWqn4Apb+lKl
 github.com/honeycombio/dynsampler-go v0.6.0/go.mod h1:pJqWFeoMN3syX74PEvlusieyGBbtIBjmTVjLc3thmK4=
 github.com/honeycombio/gonx v1.3.1-0.20171118020637-f9b2468e9ef8 h1:rOkOm6ixU8JxjK/OmJBaWhGQ4YX0sO/e8YUz7twniRc=
 github.com/honeycombio/gonx v1.3.1-0.20171118020637-f9b2468e9ef8/go.mod h1:b5vehEHPr2kpld6NR9gSja7nMX8lGQbU5ACKOd9aa9g=
-github.com/honeycombio/libhoney-go v1.20.0 h1:PL54R0P9vxIyb28H3twbLb+DCqQlJdMQM55VZg1abKA=
-github.com/honeycombio/libhoney-go v1.20.0/go.mod h1:RIaurCpfg5NDWSEV8t3QLcda9dUAiVNyWeHRAaSpN90=
+github.com/honeycombio/libhoney-go v1.21.0 h1:uiiSfUipFSrmBucKTrwD9Bm4K60kY98p0hVLjtSLseM=
+github.com/honeycombio/libhoney-go v1.21.0/go.mod h1:RIaurCpfg5NDWSEV8t3QLcda9dUAiVNyWeHRAaSpN90=
 github.com/honeycombio/mysqltools v0.0.1 h1:VyC2Z3npDpgXuwlBXwNcE/IH72STTZ1Tjt3pZlLPsDM=
 github.com/honeycombio/mysqltools v0.0.1/go.mod h1:r/WQhfDgxowZatJvhdy2VL801FOv5u8K6NzYqCGBJkQ=
 github.com/honeycombio/sqlparser v0.0.0-20180730202938-aab361df519b h1:SnUWJT5YfoZglKQu19Q9LaskN90+Hks9QB2+4FtrUeY=

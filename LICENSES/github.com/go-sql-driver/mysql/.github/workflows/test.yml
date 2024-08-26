@@ -11,6 +11,14 @@ env:
   MYSQL_TEST_CONCURRENT: 1
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dominikh/staticcheck-action@v1.3.0
+        with:
+          version: "2023.1.6"
+
   list:
     runs-on: ubuntu-latest
     outputs:
@@ -23,19 +31,18 @@ jobs:
           import os
           go = [
               # Keep the most recent production release at the top
-              '1.19',
+              '1.21',
               # Older production releases
+              '1.20',
+              '1.19',
               '1.18',
-              '1.17',
-              '1.16',
-              '1.15',
-              '1.14',
-              '1.13',
           ]
           mysql = [
+              '8.1',
               '8.0',
               '5.7',
               '5.6',
+              'mariadb-10.11',
               'mariadb-10.6',
               'mariadb-10.5',
               'mariadb-10.4',
@@ -45,7 +52,7 @@ jobs:
           includes = []
           # Go versions compatibility check
           for v in go[1:]:
-                  includes.append({'os': 'ubuntu-latest', 'go': v, 'mysql': mysql[0]})
+              includes.append({'os': 'ubuntu-latest', 'go': v, 'mysql': mysql[0]})
 
           matrix = {
               # OS vs MySQL versions
@@ -66,8 +73,8 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.list.outputs.matrix) }}
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-go@v2
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go }}
       - uses: shogo82148/actions-setup-mysql@v1
@@ -82,13 +89,14 @@ jobs:
             ; TestConcurrent fails if max_connections is too large
             max_connections=50
             local_infile=1
+            performance_schema=on
       - name: setup database
         run: |
           mysql --user 'root' --host '127.0.0.1' -e 'create database gotest;'
 
       - name: test
         run: |
-          go test -v '-covermode=count' '-coverprofile=coverage.out'
+          go test -v '-race' '-covermode=atomic' '-coverprofile=coverage.out' -parallel 10
 
       - name: Send coverage
         uses: shogo82148/actions-goveralls@v1

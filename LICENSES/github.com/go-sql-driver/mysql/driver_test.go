@@ -11,26 +11,38 @@ package mysql
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/tls"
 	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"math"
+	mrand "math/rand"
 	"net"
 	"net/url"
 	"os"
 	"reflect"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 )
+
+// This variable can be replaced with -ldflags like below:
+// go test "-ldflags=-X github.com/go-sql-driver/mysql.driverNameTest=custom"
+var driverNameTest string
+
+func init() {
+	if driverNameTest == "" {
+		driverNameTest = driverName
+	}
+}
 
 // Ensure that all the driver interfaces are implemented
 var (
@@ -83,7 +95,7 @@ func init() {
 }
 
 type DBTest struct {
-	*testing.T
+	testing.TB
 	db *sql.DB
 }
 
@@ -112,12 +124,14 @@ func runTestsWithMultiStatement(t *testing.T, dsn string, tests ...func(dbt *DBT
 	dsn += "&multiStatements=true"
 	var db *sql.DB
 	if _, err := ParseDSN(dsn); err != errInvalidDSNUnsafeCollation {
-		db, err = sql.Open("mysql", dsn)
+		db, err = sql.Open(driverNameTest, dsn)
 		if err != nil {
 			t.Fatalf("error connecting: %s", err.Error())
 		}
 		defer db.Close()
 	}
+	// Previous test may be skipped without dropping the test table
+	db.Exec("DROP TABLE IF EXISTS test")
 
 	dbt := &DBTest{t, db}
 	for _, test := range tests {
@@ -131,59 +145,111 @@ func runTests(t *testing.T, dsn string, tests ...func(dbt *DBTest)) {
 		t.Skipf("MySQL server not running on %s", netAddr)
 	}
 
-	db, err := sql.Open("mysql", dsn)
+	db, err := sql.Open(driverNameTest, dsn)
 	if err != nil {
 		t.Fatalf("error connecting: %s", err.Error())
 	}
 	defer db.Close()
 
-	db.Exec("DROP TABLE IF EXISTS test")
+	cleanup := func() {
+		db.Exec("DROP TABLE IF EXISTS test")
+	}
 
 	dsn2 := dsn + "&interpolateParams=true"
 	var db2 *sql.DB
 	if _, err := ParseDSN(dsn2); err != errInvalidDSNUnsafeCollation {
-		db2, err = sql.Open("mysql", dsn2)
+		db2, err = sql.Open(driverNameTest, dsn2)
 		if err != nil {
 			t.Fatalf("error connecting: %s", err.Error())
 		}
 		defer db2.Close()
 	}
 
-	dsn3 := dsn + "&multiStatements=true"
-	var db3 *sql.DB
-	if _, err := ParseDSN(dsn3); err != errInvalidDSNUnsafeCollation {
-		db3, err = sql.Open("mysql", dsn3)
-		if err != nil {
-			t.Fatalf("error connecting: %s", err.Error())
+	for _, test := range tests {
+		test := test
+		t.Run("default", func(t *testing.T) {
+			dbt := &DBTest{t, db}
+			t.Cleanup(cleanup)
+			test(dbt)
+		})
+		if db2 != nil {
+			t.Run("interpolateParams", func(t *testing.T) {
+				dbt2 := &DBTest{t, db2}
+				t.Cleanup(cleanup)
+				test(dbt2)
+			})
 		}
-		defer db3.Close()
+	}
+}
+
+// runTestsParallel runs the tests in parallel with a separate database connection for each test.
+func runTestsParallel(t *testing.T, dsn string, tests ...func(dbt *DBTest, tableName string)) {
+	if !available {
+		t.Skipf("MySQL server not running on %s", netAddr)
 	}
 
-	dbt := &DBTest{t, db}
-	dbt2 := &DBTest{t, db2}
-	dbt3 := &DBTest{t, db3}
-	for _, test := range tests {
-		test(dbt)
-		dbt.db.Exec("DROP TABLE IF EXISTS test")
-		if db2 != nil {
-			test(dbt2)
-			dbt2.db.Exec("DROP TABLE IF EXISTS test")
+	newTableName := func(t *testing.T) string {
+		t.Helper()
+		var buf [8]byte
+		if _, err := rand.Read(buf[:]); err != nil {
+			t.Fatal(err)
 		}
-		if db3 != nil {
-			test(dbt3)
-			dbt3.db.Exec("DROP TABLE IF EXISTS test")
+		return fmt.Sprintf("test_%x", buf[:])
+	}
+
+	t.Parallel()
+	for _, test := range tests {
+		test := test
+
+		t.Run("default", func(t *testing.T) {
+			t.Parallel()
+
+			tableName := newTableName(t)
+			db, err := sql.Open("mysql", dsn)
+			if err != nil {
+				t.Fatalf("error connecting: %s", err.Error())
+			}
+			t.Cleanup(func() {
+				db.Exec("DROP TABLE IF EXISTS " + tableName)
+				db.Close()
+			})
+
+			dbt := &DBTest{t, db}
+			test(dbt, tableName)
+		})
+
+		dsn2 := dsn + "&interpolateParams=true"
+		if _, err := ParseDSN(dsn2); err == errInvalidDSNUnsafeCollation {
+			t.Run("interpolateParams", func(t *testing.T) {
+				t.Parallel()
+
+				tableName := newTableName(t)
+				db, err := sql.Open("mysql", dsn2)
+				if err != nil {
+					t.Fatalf("error connecting: %s", err.Error())
+				}
+				t.Cleanup(func() {
+					db.Exec("DROP TABLE IF EXISTS " + tableName)
+					db.Close()
+				})
+
+				dbt := &DBTest{t, db}
+				test(dbt, tableName)
+			})
 		}
 	}
 }
 
 func (dbt *DBTest) fail(method, query string, err error) {
+	dbt.Helper()
 	if len(query) > 300 {
 		query = "[query too large to print]"
 	}
 	dbt.Fatalf("error on %s %s: %s", method, query, err.Error())
 }
 
-func (dbt *DBTest) mustExec(query string, args ...interface{}) (res sql.Result) {
+func (dbt *DBTest) mustExec(query string, args ...any) (res sql.Result) {
+	dbt.Helper()
 	res, err := dbt.db.Exec(query, args...)
 	if err != nil {
 		dbt.fail("exec", query, err)
@@ -191,7 +257,8 @@ func (dbt *DBTest) mustExec(query string, args ...interface{}) (res sql.Result) 
 	return res
 }
 
-func (dbt *DBTest) mustQuery(query string, args ...interface{}) (rows *sql.Rows) {
+func (dbt *DBTest) mustQuery(query string, args ...any) (rows *sql.Rows) {
+	dbt.Helper()
 	rows, err := dbt.db.Query(query, args...)
 	if err != nil {
 		dbt.fail("query", query, err)
@@ -211,7 +278,7 @@ func maybeSkip(t *testing.T, err error, skipErrno uint16) {
 }
 
 func TestEmptyQuery(t *testing.T) {
-	runTests(t, dsn, func(dbt *DBTest) {
+	runTestsParallel(t, dsn, func(dbt *DBTest, _ string) {
 		// just a comment, no query
 		rows := dbt.mustQuery("--")
 		defer rows.Close()
@@ -223,20 +290,20 @@ func TestEmptyQuery(t *testing.T) {
 }
 
 func TestCRUD(t *testing.T) {
-	runTests(t, dsn, func(dbt *DBTest) {
+	runTestsParallel(t, dsn, func(dbt *DBTest, tbl string) {
 		// Create Table
-		dbt.mustExec("CREATE TABLE test (value BOOL)")
+		dbt.mustExec("CREATE TABLE " + tbl + " (value BOOL)")
 
 		// Test for unexpected data
 		var out bool
-		rows := dbt.mustQuery("SELECT * FROM test")
+		rows := dbt.mustQuery("SELECT * FROM " + tbl)
 		if rows.Next() {
 			dbt.Error("unexpected data in empty table")
 		}
 		rows.Close()
 
 		// Create Data
-		res := dbt.mustExec("INSERT INTO test VALUES (1)")
+		res := dbt.mustExec("INSERT INTO " + tbl + " VALUES (1)")
 		count, err := res.RowsAffected()
 		if err != nil {
 			dbt.Fatalf("res.RowsAffected() returned error: %s", err.Error())
@@ -254,7 +321,7 @@ func TestCRUD(t *testing.T) {
 		}
 
 		// Read
-		rows = dbt.mustQuery("SELECT value FROM test")
+		rows = dbt.mustQuery("SELECT value FROM " + tbl)
 		if rows.Next() {
 			rows.Scan(&out)
 			if true != out {
@@ -270,7 +337,7 @@ func TestCRUD(t *testing.T) {
 		rows.Close()
 
 		// Update
-		res = dbt.mustExec("UPDATE test SET value = ? WHERE value = ?", false, true)
+		res = dbt.mustExec("UPDATE "+tbl+" SET value = ? WHERE value = ?", false, true)
 		count, err = res.RowsAffected()
 		if err != nil {
 			dbt.Fatalf("res.RowsAffected() returned error: %s", err.Error())
@@ -280,7 +347,7 @@ func TestCRUD(t *testing.T) {
 		}
 
 		// Check Update
-		rows = dbt.mustQuery("SELECT value FROM test")
+		rows = dbt.mustQuery("SELECT value FROM " + tbl)
 		if rows.Next() {
 			rows.Scan(&out)
 			if false != out {
@@ -296,7 +363,7 @@ func TestCRUD(t *testing.T) {
 		rows.Close()
 
 		// Delete
-		res = dbt.mustExec("DELETE FROM test WHERE value = ?", false)
+		res = dbt.mustExec("DELETE FROM "+tbl+" WHERE value = ?", false)
 		count, err = res.RowsAffected()
 		if err != nil {
 			dbt.Fatalf("res.RowsAffected() returned error: %s", err.Error())
@@ -306,13 +373,58 @@ func TestCRUD(t *testing.T) {
 		}
 
 		// Check for unexpected rows
-		res = dbt.mustExec("DELETE FROM test")
+		res = dbt.mustExec("DELETE FROM " + tbl)
 		count, err = res.RowsAffected()
 		if err != nil {
 			dbt.Fatalf("res.RowsAffected() returned error: %s", err.Error())
 		}
 		if count != 0 {
 			dbt.Fatalf("expected 0 affected row, got %d", count)
+		}
+	})
+}
+
+// TestNumbers test that selecting numeric columns.
+// Both of textRows and binaryRows should return same type and value.
+func TestNumbersToAny(t *testing.T) {
+	runTestsParallel(t, dsn, func(dbt *DBTest, tbl string) {
+		dbt.mustExec("CREATE TABLE " + tbl + " (id INT PRIMARY KEY, b BOOL, i8 TINYINT, " +
+			"i16 SMALLINT, i32 INT, i64 BIGINT, f32 FLOAT, f64 DOUBLE, iu32 INT UNSIGNED)")
+		dbt.mustExec("INSERT INTO " + tbl + " VALUES (1, true, 127, 32767, 2147483647, 9223372036854775807, 1.25, 2.5, 4294967295)")
+
+		// Use binaryRows for interpolateParams=false and textRows for interpolateParams=true.
+		rows := dbt.mustQuery("SELECT b, i8, i16, i32, i64, f32, f64, iu32 FROM "+tbl+" WHERE id=?", 1)
+		if !rows.Next() {
+			dbt.Fatal("no data")
+		}
+		var b, i8, i16, i32, i64, f32, f64, iu32 any
+		err := rows.Scan(&b, &i8, &i16, &i32, &i64, &f32, &f64, &iu32)
+		if err != nil {
+			dbt.Fatal(err)
+		}
+		if b.(int64) != 1 {
+			dbt.Errorf("b != 1")
+		}
+		if i8.(int64) != 127 {
+			dbt.Errorf("i8 != 127")
+		}
+		if i16.(int64) != 32767 {
+			dbt.Errorf("i16 != 32767")
+		}
+		if i32.(int64) != 2147483647 {
+			dbt.Errorf("i32 != 2147483647")
+		}
+		if i64.(int64) != 9223372036854775807 {
+			dbt.Errorf("i64 != 9223372036854775807")
+		}
+		if f32.(float32) != 1.25 {
+			dbt.Errorf("f32 != 1.25")
+		}
+		if f64.(float64) != 2.5 {
+			dbt.Errorf("f64 != 2.5")
+		}
+		if iu32.(int64) != 4294967295 {
+			dbt.Errorf("iu32 != 4294967295")
 		}
 	})
 }
@@ -347,8 +459,8 @@ func TestMultiQuery(t *testing.T) {
 		rows := dbt.mustQuery("SELECT value FROM test WHERE id=1;")
 		if rows.Next() {
 			rows.Scan(&out)
-			if 5 != out {
-				dbt.Errorf("5 != %d", out)
+			if out != 5 {
+				dbt.Errorf("expected 5, got %d", out)
 			}
 
 			if rows.Next() {
@@ -363,7 +475,7 @@ func TestMultiQuery(t *testing.T) {
 }
 
 func TestInt(t *testing.T) {
-	runTests(t, dsn, func(dbt *DBTest) {
+	runTestsParallel(t, dsn, func(dbt *DBTest, tbl string) {
 		types := [5]string{"TINYINT", "SMALLINT", "MEDIUMINT", "INT", "BIGINT"}
 		in := int64(42)
 		var out int64
@@ -371,11 +483,11 @@ func TestInt(t *testing.T) {
 
 		// SIGNED
 		for _, v := range types {
-			dbt.mustExec("CREATE TABLE test (value " + v + ")")
+			dbt.mustExec("CREATE TABLE " + tbl + " (value " + v + ")")
 
-			dbt.mustExec("INSERT INTO test VALUES (?)", in)
+			dbt.mustExec("INSERT INTO "+tbl+" VALUES (?)", in)
 
-			rows = dbt.mustQuery("SELECT value FROM test")
+			rows = dbt.mustQuery("SELECT value FROM " + tbl)
 			if rows.Next() {
 				rows.Scan(&out)
 				if in != out {
@@ -386,16 +498,16 @@ func TestInt(t *testing.T) {
 			}
 			rows.Close()
 
-			dbt.mustExec("DROP TABLE IF EXISTS test")
+			dbt.mustExec("DROP TABLE IF EXISTS " + tbl)
 		}
 
 		// UNSIGNED ZEROFILL
 		for _, v := range types {
-			dbt.mustExec("CREATE TABLE test (value " + v + " ZEROFILL)")
+			dbt.mustExec("CREATE TABLE " + tbl + " (value " + v + " ZEROFILL)")
 
-			dbt.mustExec("INSERT INTO test VALUES (?)", in)
+			dbt.mustExec("INSERT INTO "+tbl+" VALUES (?)", in)
 
-			rows = dbt.mustQuery("SELECT value FROM test")
+			rows = dbt.mustQuery("SELECT value FROM " + tbl)
 			if rows.Next() {
 				rows.Scan(&out)
 				if in != out {
@@ -406,21 +518,21 @@ func TestInt(t *testing.T) {
 			}
 			rows.Close()
 
-			dbt.mustExec("DROP TABLE IF EXISTS test")
+			dbt.mustExec("DROP TABLE IF EXISTS " + tbl)
 		}
 	})
 }
 
 func TestFloat32(t *testing.T) {
-	runTests(t, dsn, func(dbt *DBTest) {
+	runTestsParallel(t, dsn, func(dbt *DBTest, tbl string) {
 		types := [2]string{"FLOAT", "DOUBLE"}
 		in := float32(42.23)
 		var out float32
 		var rows *sql.Rows
 		for _, v := range types {
-			dbt.mustExec("CREATE TABLE test (value " + v + ")")
-			dbt.mustExec("INSERT INTO test VALUES (?)", in)
-			rows = dbt.mustQuery("SELECT value FROM test")
+			dbt.mustExec("CREATE TABLE " + tbl + " (value " + v + ")")
+			dbt.mustExec("INSERT INTO "+tbl+" VALUES (?)", in)
+			rows = dbt.mustQuery("SELECT value FROM " + tbl)
 			if rows.Next() {
 				rows.Scan(&out)
 				if in != out {
@@ -430,21 +542,21 @@ func TestFloat32(t *testing.T) {
 				dbt.Errorf("%s: no data", v)
 			}
 			rows.Close()
-			dbt.mustExec("DROP TABLE IF EXISTS test")
+			dbt.mustExec("DROP TABLE IF EXISTS " + tbl)
 		}
 	})
 }
 
 func TestFloat64(t *testing.T) {
-	runTests(t, dsn, func(dbt *DBTest) {
+	runTestsParallel(t, dsn, func(dbt *DBTest, tbl string) {
 		types := [2]string{"FLOAT", "DOUBLE"}
 		var expected float64 = 42.23
 		var out float64
 		var rows *sql.Rows
 		for _, v := range types {
-			dbt.mustExec("CREATE TABLE test (value " + v + ")")
-			dbt.mustExec("INSERT INTO test VALUES (42.23)")
-			rows = dbt.mustQuery("SELECT value FROM test")
+			dbt.mustExec("CREATE TABLE " + tbl + " (value " + v + ")")
+			dbt.mustExec("INSERT INTO " + tbl + " VALUES (42.23)")
+			rows = dbt.mustQuery("SELECT value FROM " + tbl)
 			if rows.Next() {
 				rows.Scan(&out)
 				if expected != out {
@@ -454,21 +566,21 @@ func TestFloat64(t *testing.T) {
 				dbt.Errorf("%s: no data", v)
 			}
 			rows.Close()
-			dbt.mustExec("DROP TABLE IF EXISTS test")
+			dbt.mustExec("DROP TABLE IF EXISTS " + tbl)
 		}
 	})
 }
 
 func TestFloat64Placeholder(t *testing.T) {
-	runTests(t, dsn, func(dbt *DBTest) {
+	runTestsParallel(t, dsn, func(dbt *DBTest, tbl string) {
 		types := [2]string{"FLOAT", "DOUBLE"}
 		var expected float64 = 42.23
 		var out float64
 		var rows *sql.Rows
 		for _, v := range types {
-			dbt.mustExec("CREATE TABLE test (id int, value " + v + ")")
-			dbt.mustExec("INSERT INTO test VALUES (1, 42.23)")
-			rows = dbt.mustQuery("SELECT value FROM test WHERE id = ?", 1)
+			dbt.mustExec("CREATE TABLE " + tbl + " (id int, value " + v + ")")
+			dbt.mustExec("INSERT INTO " + tbl + " VALUES (1, 42.23)")
+			rows = dbt.mustQuery("SELECT value FROM "+tbl+" WHERE id = ?", 1)
 			if rows.Next() {
 				rows.Scan(&out)
 				if expected != out {
@@ -478,24 +590,24 @@ func TestFloat64Placeholder(t *testing.T) {
 				dbt.Errorf("%s: no data", v)
 			}
 			rows.Close()
-			dbt.mustExec("DROP TABLE IF EXISTS test")
+			dbt.mustExec("DROP TABLE IF EXISTS " + tbl)
 		}
 	})
 }
 
 func TestString(t *testing.T) {
-	runTests(t, dsn, func(dbt *DBTest) {
+	runTestsParallel(t, dsn, func(dbt *DBTest, tbl string) {
 		types := [6]string{"CHAR(255)", "VARCHAR(255)", "TINYTEXT", "TEXT", "MEDIUMTEXT", "LONGTEXT"}
 		in := "κόσμε üöäßñóùéàâÿœ'îë Árvíztűrő いろはにほへとちりぬるを イロハニホヘト דג סקרן чащах  น่าฟังเอย"
 		var out string
 		var rows *sql.Rows
 
 		for _, v := range types {
-			dbt.mustExec("CREATE TABLE test (value " + v + ") CHARACTER SET utf8")
+			dbt.mustExec("CREATE TABLE " + tbl + " (value " + v + ") CHARACTER SET utf8")
 
-			dbt.mustExec("INSERT INTO test VALUES (?)", in)
+			dbt.mustExec("INSERT INTO "+tbl+" VALUES (?)", in)
 
-			rows = dbt.mustQuery("SELECT value FROM test")
+			rows = dbt.mustQuery("SELECT value FROM " + tbl)
 			if rows.Next() {
 				rows.Scan(&out)
 				if in != out {
@@ -506,11 +618,11 @@ func TestString(t *testing.T) {
 			}
 			rows.Close()
 
-			dbt.mustExec("DROP TABLE IF EXISTS test")
+			dbt.mustExec("DROP TABLE IF EXISTS " + tbl)
 		}
 
 		// BLOB
-		dbt.mustExec("CREATE TABLE test (id int, value BLOB) CHARACTER SET utf8")
+		dbt.mustExec("CREATE TABLE " + tbl + " (id int, value BLOB) CHARACTER SET utf8")
 
 		id := 2
 		in = "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, " +
@@ -521,9 +633,9 @@ func TestString(t *testing.T) {
 			"sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, " +
 			"sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. " +
 			"Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet."
-		dbt.mustExec("INSERT INTO test VALUES (?, ?)", id, in)
+		dbt.mustExec("INSERT INTO "+tbl+" VALUES (?, ?)", id, in)
 
-		err := dbt.db.QueryRow("SELECT value FROM test WHERE id = ?", id).Scan(&out)
+		err := dbt.db.QueryRow("SELECT value FROM "+tbl+" WHERE id = ?", id).Scan(&out)
 		if err != nil {
 			dbt.Fatalf("Error on BLOB-Query: %s", err.Error())
 		} else if out != in {
@@ -533,7 +645,7 @@ func TestString(t *testing.T) {
 }
 
 func TestRawBytes(t *testing.T) {
-	runTests(t, dsn, func(dbt *DBTest) {
+	runTestsParallel(t, dsn, func(dbt *DBTest, _ string) {
 		v1 := []byte("aaa")
 		v2 := []byte("bbb")
 		rows := dbt.mustQuery("SELECT ?, ?", v1, v2)
@@ -562,7 +674,7 @@ func TestRawBytes(t *testing.T) {
 }
 
 func TestRawMessage(t *testing.T) {
-	runTests(t, dsn, func(dbt *DBTest) {
+	runTestsParallel(t, dsn, func(dbt *DBTest, _ string) {
 		v1 := json.RawMessage("{}")
 		v2 := json.RawMessage("[]")
 		rows := dbt.mustQuery("SELECT ?, ?", v1, v2)
@@ -593,14 +705,14 @@ func (tv testValuer) Value() (driver.Value, error) {
 }
 
 func TestValuer(t *testing.T) {
-	runTests(t, dsn, func(dbt *DBTest) {
+	runTestsParallel(t, dsn, func(dbt *DBTest, tbl string) {
 		in := testValuer{"a_value"}
 		var out string
 		var rows *sql.Rows
 
-		dbt.mustExec("CREATE TABLE test (value VARCHAR(255)) CHARACTER SET utf8")
-		dbt.mustExec("INSERT INTO test VALUES (?)", in)
-		rows = dbt.mustQuery("SELECT value FROM test")
+		dbt.mustExec("CREATE TABLE " + tbl + " (value VARCHAR(255)) CHARACTER SET utf8")
+		dbt.mustExec("INSERT INTO "+tbl+" VALUES (?)", in)
+		rows = dbt.mustQuery("SELECT value FROM " + tbl)
 		if rows.Next() {
 			rows.Scan(&out)
 			if in.value != out {
@@ -610,8 +722,6 @@ func TestValuer(t *testing.T) {
 			dbt.Errorf("Valuer: no data")
 		}
 		rows.Close()
-
-		dbt.mustExec("DROP TABLE IF EXISTS test")
 	})
 }
 
@@ -628,15 +738,15 @@ func (tv testValuerWithValidation) Value() (driver.Value, error) {
 }
 
 func TestValuerWithValidation(t *testing.T) {
-	runTests(t, dsn, func(dbt *DBTest) {
+	runTestsParallel(t, dsn, func(dbt *DBTest, tbl string) {
 		in := testValuerWithValidation{"a_value"}
 		var out string
 		var rows *sql.Rows
 
-		dbt.mustExec("CREATE TABLE testValuer (value VARCHAR(255)) CHARACTER SET utf8")
-		dbt.mustExec("INSERT INTO testValuer VALUES (?)", in)
+		dbt.mustExec("CREATE TABLE " + tbl + " (value VARCHAR(255)) CHARACTER SET utf8")
+		dbt.mustExec("INSERT INTO "+tbl+" VALUES (?)", in)
 
-		rows = dbt.mustQuery("SELECT value FROM testValuer")
+		rows = dbt.mustQuery("SELECT value FROM " + tbl)
 		defer rows.Close()
 
 		if rows.Next() {
@@ -648,19 +758,17 @@ func TestValuerWithValidation(t *testing.T) {
 			dbt.Errorf("Valuer: no data")
 		}
 
-		if _, err := dbt.db.Exec("INSERT INTO testValuer VALUES (?)", testValuerWithValidation{""}); err == nil {
+		if _, err := dbt.db.Exec("INSERT INTO "+tbl+" VALUES (?)", testValuerWithValidation{""}); err == nil {
 			dbt.Errorf("Failed to check valuer error")
 		}
 
-		if _, err := dbt.db.Exec("INSERT INTO testValuer VALUES (?)", nil); err != nil {
+		if _, err := dbt.db.Exec("INSERT INTO "+tbl+" VALUES (?)", nil); err != nil {
 			dbt.Errorf("Failed to check nil")
 		}
 
-		if _, err := dbt.db.Exec("INSERT INTO testValuer VALUES (?)", map[string]bool{}); err == nil {
+		if _, err := dbt.db.Exec("INSERT INTO "+tbl+" VALUES (?)", map[string]bool{}); err == nil {
 			dbt.Errorf("Failed to check not valuer")
 		}
-
-		dbt.mustExec("DROP TABLE IF EXISTS testValuer")
 	})
 }
 
@@ -737,7 +845,7 @@ func (t timeTest) run(dbt *DBTest, dbtype, tlayout string, mode timeMode) {
 		dbt.Errorf("%s [%s]: %s", dbtype, mode, err)
 		return
 	}
-	var dst interface{}
+	var dst any
 	err = rows.Scan(&dst)
 	if err != nil {
 		dbt.Errorf("%s [%s]: %s", dbtype, mode, err)
@@ -768,7 +876,7 @@ func (t timeTest) run(dbt *DBTest, dbtype, tlayout string, mode timeMode) {
 			t.s, val.Format(tlayout),
 		)
 	default:
-		fmt.Printf("%#v\n", []interface{}{dbtype, tlayout, mode, t.s, t.t})
+		fmt.Printf("%#v\n", []any{dbtype, tlayout, mode, t.s, t.t})
 		dbt.Errorf("%s [%s]: unhandled type %T (is '%v')",
 			dbtype, mode,
 			val, val,
@@ -894,7 +1002,7 @@ func TestTimestampMicros(t *testing.T) {
 	f0 := format[:19]
 	f1 := format[:21]
 	f6 := format[:26]
-	runTests(t, dsn, func(dbt *DBTest) {
+	runTestsParallel(t, dsn, func(dbt *DBTest, tbl string) {
 		// check if microseconds are supported.
 		// Do not use timestamp(x) for that check - before 5.5.6, x would mean display width
 		// and not precision.
@@ -909,7 +1017,7 @@ func TestTimestampMicros(t *testing.T) {
 			return
 		}
 		_, err := dbt.db.Exec(`
-			CREATE TABLE test (
+			CREATE TABLE ` + tbl + ` (
 				value0 TIMESTAMP NOT NULL DEFAULT '` + f0 + `',
 				value1 TIMESTAMP(1) NOT NULL DEFAULT '` + f1 + `',
 				value6 TIMESTAMP(6) NOT NULL DEFAULT '` + f6 + `'
@@ -918,10 +1026,10 @@ func TestTimestampMicros(t *testing.T) {
 		if err != nil {
 			dbt.Error(err)
 		}
-		defer dbt.mustExec("DROP TABLE IF EXISTS test")
-		dbt.mustExec("INSERT INTO test SET value0=?, value1=?, value6=?", f0, f1, f6)
+		defer dbt.mustExec("DROP TABLE IF EXISTS " + tbl)
+		dbt.mustExec("INSERT INTO "+tbl+" SET value0=?, value1=?, value6=?", f0, f1, f6)
 		var res0, res1, res6 string
-		rows := dbt.mustQuery("SELECT * FROM test")
+		rows := dbt.mustQuery("SELECT * FROM " + tbl)
 		defer rows.Close()
 		if !rows.Next() {
 			dbt.Errorf("test contained no selectable values")
@@ -943,7 +1051,7 @@ func TestTimestampMicros(t *testing.T) {
 }
 
 func TestNULL(t *testing.T) {
-	runTests(t, dsn, func(dbt *DBTest) {
+	runTestsParallel(t, dsn, func(dbt *DBTest, tbl string) {
 		nullStmt, err := dbt.db.Prepare("SELECT NULL")
 		if err != nil {
 			dbt.Fatal(err)
@@ -1075,12 +1183,12 @@ func TestNULL(t *testing.T) {
 		}
 
 		// Insert NULL
-		dbt.mustExec("CREATE TABLE test (dummmy1 int, value int, dummy2 int)")
+		dbt.mustExec("CREATE TABLE " + tbl + " (dummmy1 int, value int, dummy2 int)")
 
-		dbt.mustExec("INSERT INTO test VALUES (?, ?, ?)", 1, nil, 2)
+		dbt.mustExec("INSERT INTO "+tbl+" VALUES (?, ?, ?)", 1, nil, 2)
 
-		var out interface{}
-		rows := dbt.mustQuery("SELECT * FROM test")
+		var out any
+		rows := dbt.mustQuery("SELECT * FROM " + tbl)
 		defer rows.Close()
 		if rows.Next() {
 			rows.Scan(&out)
@@ -1104,7 +1212,7 @@ func TestUint64(t *testing.T) {
 		shigh = int64(uhigh)
 		stop  = ^shigh
 	)
-	runTests(t, dsn, func(dbt *DBTest) {
+	runTestsParallel(t, dsn, func(dbt *DBTest, _ string) {
 		stmt, err := dbt.db.Prepare(`SELECT ?, ?, ? ,?, ?, ?, ?, ?`)
 		if err != nil {
 			dbt.Fatal(err)
@@ -1168,7 +1276,7 @@ func TestLongData(t *testing.T) {
 				dbt.Fatalf("LONGBLOB: length in: %d, length out: %d", len(inS), len(out))
 			}
 			if rows.Next() {
-				dbt.Error("LONGBLOB: unexpexted row")
+				dbt.Error("LONGBLOB: unexpected row")
 			}
 		} else {
 			dbt.Fatalf("LONGBLOB: no data")
@@ -1187,7 +1295,7 @@ func TestLongData(t *testing.T) {
 				dbt.Fatalf("LONGBLOB: length in: %d, length out: %d", len(in), len(out))
 			}
 			if rows.Next() {
-				dbt.Error("LONGBLOB: unexpexted row")
+				dbt.Error("LONGBLOB: unexpected row")
 			}
 		} else {
 			if err = rows.Err(); err != nil {
@@ -1245,7 +1353,7 @@ func TestLoadData(t *testing.T) {
 		dbt.mustExec("CREATE TABLE test (id INT NOT NULL PRIMARY KEY, value TEXT NOT NULL) CHARACTER SET utf8")
 
 		// Local File
-		file, err := ioutil.TempFile("", "gotest")
+		file, err := os.CreateTemp("", "gotest")
 		defer os.Remove(file.Name())
 		if err != nil {
 			dbt.Fatal(err)
@@ -1263,7 +1371,7 @@ func TestLoadData(t *testing.T) {
 			dbt.Fatalf("unexpected row count: got %d, want 0", count)
 		}
 
-		// Then fille File with data and try to load it
+		// Then fill File with data and try to load it
 		file.WriteString("1\ta string\n2\ta string containing a \\t\n3\ta string containing a \\n\n4\ta string containing both \\t\\n\n")
 		file.Close()
 		dbt.mustExec(fmt.Sprintf("LOAD DATA LOCAL INFILE %q INTO TABLE test", file.Name()))
@@ -1294,18 +1402,18 @@ func TestLoadData(t *testing.T) {
 		_, err = dbt.db.Exec("LOAD DATA LOCAL INFILE 'Reader::doesnotexist' INTO TABLE test")
 		if err == nil {
 			dbt.Fatal("load non-existent Reader didn't fail")
-		} else if err.Error() != "Reader 'doesnotexist' is not registered" {
+		} else if err.Error() != "reader 'doesnotexist' is not registered" {
 			dbt.Fatal(err.Error())
 		}
 	})
 }
 
-func TestFoundRows(t *testing.T) {
-	runTests(t, dsn, func(dbt *DBTest) {
-		dbt.mustExec("CREATE TABLE test (id INT NOT NULL ,data INT NOT NULL)")
-		dbt.mustExec("INSERT INTO test (id, data) VALUES (0, 0),(0, 0),(1, 0),(1, 0),(1, 1)")
+func TestFoundRows1(t *testing.T) {
+	runTestsParallel(t, dsn, func(dbt *DBTest, tbl string) {
+		dbt.mustExec("CREATE TABLE " + tbl + " (id INT NOT NULL ,data INT NOT NULL)")
+		dbt.mustExec("INSERT INTO " + tbl + " (id, data) VALUES (0, 0),(0, 0),(1, 0),(1, 0),(1, 1)")
 
-		res := dbt.mustExec("UPDATE test SET data = 1 WHERE id = 0")
+		res := dbt.mustExec("UPDATE " + tbl + " SET data = 1 WHERE id = 0")
 		count, err := res.RowsAffected()
 		if err != nil {
 			dbt.Fatalf("res.RowsAffected() returned error: %s", err.Error())
@@ -1313,7 +1421,7 @@ func TestFoundRows(t *testing.T) {
 		if count != 2 {
 			dbt.Fatalf("Expected 2 affected rows, got %d", count)
 		}
-		res = dbt.mustExec("UPDATE test SET data = 1 WHERE id = 1")
+		res = dbt.mustExec("UPDATE " + tbl + " SET data = 1 WHERE id = 1")
 		count, err = res.RowsAffected()
 		if err != nil {
 			dbt.Fatalf("res.RowsAffected() returned error: %s", err.Error())
@@ -1322,11 +1430,14 @@ func TestFoundRows(t *testing.T) {
 			dbt.Fatalf("Expected 2 affected rows, got %d", count)
 		}
 	})
-	runTests(t, dsn+"&clientFoundRows=true", func(dbt *DBTest) {
-		dbt.mustExec("CREATE TABLE test (id INT NOT NULL ,data INT NOT NULL)")
-		dbt.mustExec("INSERT INTO test (id, data) VALUES (0, 0),(0, 0),(1, 0),(1, 0),(1, 1)")
+}
 
-		res := dbt.mustExec("UPDATE test SET data = 1 WHERE id = 0")
+func TestFoundRows2(t *testing.T) {
+	runTestsParallel(t, dsn+"&clientFoundRows=true", func(dbt *DBTest, tbl string) {
+		dbt.mustExec("CREATE TABLE " + tbl + " (id INT NOT NULL ,data INT NOT NULL)")
+		dbt.mustExec("INSERT INTO " + tbl + " (id, data) VALUES (0, 0),(0, 0),(1, 0),(1, 0),(1, 1)")
+
+		res := dbt.mustExec("UPDATE " + tbl + " SET data = 1 WHERE id = 0")
 		count, err := res.RowsAffected()
 		if err != nil {
 			dbt.Fatalf("res.RowsAffected() returned error: %s", err.Error())
@@ -1334,7 +1445,7 @@ func TestFoundRows(t *testing.T) {
 		if count != 2 {
 			dbt.Fatalf("Expected 2 matched rows, got %d", count)
 		}
-		res = dbt.mustExec("UPDATE test SET data = 1 WHERE id = 1")
+		res = dbt.mustExec("UPDATE " + tbl + " SET data = 1 WHERE id = 1")
 		count, err = res.RowsAffected()
 		if err != nil {
 			dbt.Fatalf("res.RowsAffected() returned error: %s", err.Error())
@@ -1402,6 +1513,7 @@ func TestReuseClosedConnection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error preparing statement: %s", err.Error())
 	}
+	//lint:ignore SA1019 this is a test
 	_, err = stmt.Exec(nil)
 	if err != nil {
 		t.Fatalf("error executing statement: %s", err.Error())
@@ -1416,6 +1528,7 @@ func TestReuseClosedConnection(t *testing.T) {
 			t.Errorf("panic after reusing a closed connection: %v", err)
 		}
 	}()
+	//lint:ignore SA1019 this is a test
 	_, err = stmt.Exec(nil)
 	if err != nil && err != driver.ErrBadConn {
 		t.Errorf("unexpected error '%s', expected '%s'",
@@ -1458,7 +1571,7 @@ func TestCharset(t *testing.T) {
 }
 
 func TestFailingCharset(t *testing.T) {
-	runTests(t, dsn+"&charset=none", func(dbt *DBTest) {
+	runTestsParallel(t, dsn+"&charset=none", func(dbt *DBTest, _ string) {
 		// run query to really establish connection...
 		_, err := dbt.db.Exec("SELECT 1")
 		if err == nil {
@@ -1507,7 +1620,7 @@ func TestCollation(t *testing.T) {
 }
 
 func TestColumnsWithAlias(t *testing.T) {
-	runTests(t, dsn+"&columnsWithAlias=true", func(dbt *DBTest) {
+	runTestsParallel(t, dsn+"&columnsWithAlias=true", func(dbt *DBTest, _ string) {
 		rows := dbt.mustQuery("SELECT 1 AS A")
 		defer rows.Close()
 		cols, _ := rows.Columns()
@@ -1531,7 +1644,7 @@ func TestColumnsWithAlias(t *testing.T) {
 }
 
 func TestRawBytesResultExceedsBuffer(t *testing.T) {
-	runTests(t, dsn, func(dbt *DBTest) {
+	runTestsParallel(t, dsn, func(dbt *DBTest, _ string) {
 		// defaultBufSize from buffer.go
 		expected := strings.Repeat("abc", defaultBufSize)
 
@@ -1590,7 +1703,7 @@ func TestTimezoneConversion(t *testing.T) {
 // Special cases
 
 func TestRowsClose(t *testing.T) {
-	runTests(t, dsn, func(dbt *DBTest) {
+	runTestsParallel(t, dsn, func(dbt *DBTest, _ string) {
 		rows, err := dbt.db.Query("SELECT 1")
 		if err != nil {
 			dbt.Fatal(err)
@@ -1615,7 +1728,7 @@ func TestRowsClose(t *testing.T) {
 // dangling statements
 // http://code.google.com/p/go/issues/detail?id=3865
 func TestCloseStmtBeforeRows(t *testing.T) {
-	runTests(t, dsn, func(dbt *DBTest) {
+	runTestsParallel(t, dsn, func(dbt *DBTest, _ string) {
 		stmt, err := dbt.db.Prepare("SELECT 1")
 		if err != nil {
 			dbt.Fatal(err)
@@ -1656,7 +1769,7 @@ func TestCloseStmtBeforeRows(t *testing.T) {
 // It is valid to have multiple Rows for the same Stmt
 // http://code.google.com/p/go/issues/detail?id=3734
 func TestStmtMultiRows(t *testing.T) {
-	runTests(t, dsn, func(dbt *DBTest) {
+	runTestsParallel(t, dsn, func(dbt *DBTest, _ string) {
 		stmt, err := dbt.db.Prepare("SELECT 1 UNION SELECT 0")
 		if err != nil {
 			dbt.Fatal(err)
@@ -1782,7 +1895,7 @@ func TestPreparedManyCols(t *testing.T) {
 
 		// create more parameters than fit into the buffer
 		// which will take nil-values
-		params := make([]interface{}, numParams)
+		params := make([]any, numParams)
 		rows, err := stmt.Query(params...)
 		if err != nil {
 			dbt.Fatal(err)
@@ -1807,13 +1920,13 @@ func TestConcurrent(t *testing.T) {
 	}
 
 	runTests(t, dsn, func(dbt *DBTest) {
-		var version string
-		if err := dbt.db.QueryRow("SELECT @@version").Scan(&version); err != nil {
-			dbt.Fatalf("%s", err.Error())
-		}
-		if strings.Contains(strings.ToLower(version), "mariadb") {
-			t.Skip(`TODO: "fix commands out of sync. Did you run multiple statements at once?" on MariaDB`)
-		}
+		// var version string
+		// if err := dbt.db.QueryRow("SELECT @@version").Scan(&version); err != nil {
+		// 	dbt.Fatal(err)
+		// }
+		// if strings.Contains(strings.ToLower(version), "mariadb") {
+		// 	t.Skip(`TODO: "fix commands out of sync. Did you run multiple statements at once?" on MariaDB`)
+		// }
 
 		var max int
 		err := dbt.db.QueryRow("SELECT @@max_connections").Scan(&max)
@@ -1829,7 +1942,7 @@ func TestConcurrent(t *testing.T) {
 
 		var fatalError string
 		var once sync.Once
-		fatalf := func(s string, vals ...interface{}) {
+		fatalf := func(s string, vals ...any) {
 			once.Do(func() {
 				fatalError = fmt.Sprintf(s, vals...)
 			})
@@ -1840,7 +1953,6 @@ func TestConcurrent(t *testing.T) {
 				defer wg.Done()
 
 				tx, err := dbt.db.Begin()
-				atomic.AddInt32(&remaining, -1)
 
 				if err != nil {
 					if err.Error() != "Error 1040: Too many connections" {
@@ -1850,7 +1962,7 @@ func TestConcurrent(t *testing.T) {
 				}
 
 				// keep the connection busy until all connections are open
-				for remaining > 0 {
+				for atomic.AddInt32(&remaining, -1) > 0 {
 					if _, err = tx.Exec("DO 1"); err != nil {
 						fatalf("error on conn %d: %s", id, err.Error())
 						return
@@ -1867,7 +1979,7 @@ func TestConcurrent(t *testing.T) {
 			}(i)
 		}
 
-		// wait until all conections are open
+		// wait until all connections are open
 		wg.Wait()
 
 		if fatalError != "" {
@@ -1883,7 +1995,7 @@ func testDialError(t *testing.T, dialErr error, expectErr error) {
 		return nil, dialErr
 	})
 
-	db, err := sql.Open("mysql", fmt.Sprintf("%s:%s@mydial(%s)/%s?timeout=30s", user, pass, addr, dbname))
+	db, err := sql.Open(driverNameTest, fmt.Sprintf("%s:%s@mydial(%s)/%s?timeout=30s", user, pass, addr, dbname))
 	if err != nil {
 		t.Fatalf("error connecting: %s", err.Error())
 	}
@@ -1916,13 +2028,13 @@ func TestCustomDial(t *testing.T) {
 		t.Skipf("MySQL server not running on %s", netAddr)
 	}
 
-	// our custom dial function which justs wraps net.Dial here
+	// our custom dial function which just wraps net.Dial here
 	RegisterDialContext("mydial", func(ctx context.Context, addr string) (net.Conn, error) {
 		var d net.Dialer
 		return d.DialContext(ctx, prot, addr)
 	})
 
-	db, err := sql.Open("mysql", fmt.Sprintf("%s:%s@mydial(%s)/%s?timeout=30s", user, pass, addr, dbname))
+	db, err := sql.Open(driverNameTest, fmt.Sprintf("%s:%s@mydial(%s)/%s?timeout=30s", user, pass, addr, dbname))
 	if err != nil {
 		t.Fatalf("error connecting: %s", err.Error())
 	}
@@ -1930,6 +2042,40 @@ func TestCustomDial(t *testing.T) {
 
 	if _, err = db.Exec("DO 1"); err != nil {
 		t.Fatalf("connection failed: %s", err.Error())
+	}
+}
+
+func TestBeforeConnect(t *testing.T) {
+	if !available {
+		t.Skipf("MySQL server not running on %s", netAddr)
+	}
+
+	// dbname is set in the BeforeConnect handle
+	cfg, err := ParseDSN(fmt.Sprintf("%s:%s@%s/%s?timeout=30s", user, pass, netAddr, "_"))
+	if err != nil {
+		t.Fatalf("error parsing DSN: %v", err)
+	}
+
+	cfg.Apply(BeforeConnect(func(ctx context.Context, c *Config) error {
+		c.DBName = dbname
+		return nil
+	}))
+
+	connector, err := NewConnector(cfg)
+	if err != nil {
+		t.Fatalf("error creating connector: %v", err)
+	}
+
+	db := sql.OpenDB(connector)
+	defer db.Close()
+
+	var connectedDb string
+	err = db.QueryRow("SELECT DATABASE();").Scan(&connectedDb)
+	if err != nil {
+		t.Fatalf("error executing query: %v", err)
+	}
+	if connectedDb != dbname {
+		t.Fatalf("expected to connect to DB %s, but connected to %s instead", dbname, connectedDb)
 	}
 }
 
@@ -1995,7 +2141,7 @@ func TestInsertRetrieveEscapedData(t *testing.T) {
 func TestUnixSocketAuthFail(t *testing.T) {
 	runTests(t, dsn, func(dbt *DBTest) {
 		// Save the current logger so we can restore it.
-		oldLogger := errLog
+		oldLogger := defaultLogger
 
 		// Set a new logger so we can capture its output.
 		buffer := bytes.NewBuffer(make([]byte, 0, 64))
@@ -2020,7 +2166,7 @@ func TestUnixSocketAuthFail(t *testing.T) {
 		}
 		t.Logf("socket: %s", socket)
 		badDSN := fmt.Sprintf("%s:%s@unix(%s)/%s?timeout=30s", user, badPass, socket, dbname)
-		db, err := sql.Open("mysql", badDSN)
+		db, err := sql.Open(driverNameTest, badDSN)
 		if err != nil {
 			t.Fatalf("error connecting: %s", err.Error())
 		}
@@ -2155,10 +2301,50 @@ func TestRejectReadOnly(t *testing.T) {
 }
 
 func TestPing(t *testing.T) {
+	ctx := context.Background()
 	runTests(t, dsn, func(dbt *DBTest) {
 		if err := dbt.db.Ping(); err != nil {
 			dbt.fail("Ping", "Ping", err)
 		}
+	})
+
+	runTests(t, dsn, func(dbt *DBTest) {
+		conn, err := dbt.db.Conn(ctx)
+		if err != nil {
+			dbt.fail("db", "Conn", err)
+		}
+
+		// Check that affectedRows and insertIds are cleared after each call.
+		conn.Raw(func(conn any) error {
+			c := conn.(*mysqlConn)
+
+			// Issue a query that sets affectedRows and insertIds.
+			q, err := c.Query(`SELECT 1`, nil)
+			if err != nil {
+				dbt.fail("Conn", "Query", err)
+			}
+			if got, want := c.result.affectedRows, []int64{0}; !reflect.DeepEqual(got, want) {
+				dbt.Fatalf("bad affectedRows: got %v, want=%v", got, want)
+			}
+			if got, want := c.result.insertIds, []int64{0}; !reflect.DeepEqual(got, want) {
+				dbt.Fatalf("bad insertIds: got %v, want=%v", got, want)
+			}
+			q.Close()
+
+			// Verify that Ping() clears both fields.
+			for i := 0; i < 2; i++ {
+				if err := c.Ping(ctx); err != nil {
+					dbt.fail("Pinger", "Ping", err)
+				}
+				if got, want := c.result.affectedRows, []int64(nil); !reflect.DeepEqual(got, want) {
+					t.Errorf("bad affectedRows: got %v, want=%v", got, want)
+				}
+				if got, want := c.result.insertIds, []int64(nil); !reflect.DeepEqual(got, want) {
+					t.Errorf("bad affectedRows: got %v, want=%v", got, want)
+				}
+			}
+			return nil
+		})
 	})
 }
 
@@ -2169,7 +2355,7 @@ func TestEmptyPassword(t *testing.T) {
 	}
 
 	dsn := fmt.Sprintf("%s:%s@%s/%s?timeout=30s", user, "", netAddr, dbname)
-	db, err := sql.Open("mysql", dsn)
+	db, err := sql.Open(driverNameTest, dsn)
 	if err == nil {
 		defer db.Close()
 		err = db.Ping()
@@ -2379,10 +2565,47 @@ func TestMultiResultSetNoSelect(t *testing.T) {
 	})
 }
 
+func TestExecMultipleResults(t *testing.T) {
+	ctx := context.Background()
+	runTestsWithMultiStatement(t, dsn, func(dbt *DBTest) {
+		dbt.mustExec(`
+		CREATE TABLE test (
+			id INT NOT NULL AUTO_INCREMENT,
+			value VARCHAR(255),
+			PRIMARY KEY (id)
+		)`)
+		conn, err := dbt.db.Conn(ctx)
+		if err != nil {
+			t.Fatalf("failed to connect: %v", err)
+		}
+		conn.Raw(func(conn any) error {
+			//lint:ignore SA1019 this is a test
+			ex := conn.(driver.Execer)
+			res, err := ex.Exec(`
+			INSERT INTO test (value) VALUES ('a'), ('b');
+			INSERT INTO test (value) VALUES ('c'), ('d'), ('e');
+			`, nil)
+			if err != nil {
+				t.Fatalf("insert statements failed: %v", err)
+			}
+			mres := res.(Result)
+			if got, want := mres.AllRowsAffected(), []int64{2, 3}; !reflect.DeepEqual(got, want) {
+				t.Errorf("bad AllRowsAffected: got %v, want=%v", got, want)
+			}
+			// For INSERTs containing multiple rows, LAST_INSERT_ID() returns the
+			// first inserted ID, not the last.
+			if got, want := mres.AllLastInsertIds(), []int64{1, 3}; !reflect.DeepEqual(got, want) {
+				t.Errorf("bad AllLastInsertIds: got %v, want %v", got, want)
+			}
+			return nil
+		})
+	})
+}
+
 // tests if rows are set in a proper state if some results were ignored before
 // calling rows.NextResultSet.
 func TestSkipResults(t *testing.T) {
-	runTests(t, dsn, func(dbt *DBTest) {
+	runTestsParallel(t, dsn, func(dbt *DBTest, _ string) {
 		rows := dbt.mustQuery("SELECT 1, 2")
 		defer rows.Close()
 
@@ -2400,8 +2623,44 @@ func TestSkipResults(t *testing.T) {
 	})
 }
 
+func TestQueryMultipleResults(t *testing.T) {
+	ctx := context.Background()
+	runTestsWithMultiStatement(t, dsn, func(dbt *DBTest) {
+		dbt.mustExec(`
+		CREATE TABLE test (
+			id INT NOT NULL AUTO_INCREMENT,
+			value VARCHAR(255),
+			PRIMARY KEY (id)
+		)`)
+		conn, err := dbt.db.Conn(ctx)
+		if err != nil {
+			t.Fatalf("failed to connect: %v", err)
+		}
+		conn.Raw(func(conn any) error {
+			//lint:ignore SA1019 this is a test
+			qr := conn.(driver.Queryer)
+			c := conn.(*mysqlConn)
+
+			// Demonstrate that repeated queries reset the affectedRows
+			for i := 0; i < 2; i++ {
+				_, err := qr.Query(`
+				INSERT INTO test (value) VALUES ('a'), ('b');
+				INSERT INTO test (value) VALUES ('c'), ('d'), ('e');
+			`, nil)
+				if err != nil {
+					t.Fatalf("insert statements failed: %v", err)
+				}
+				if got, want := c.result.affectedRows, []int64{2, 3}; !reflect.DeepEqual(got, want) {
+					t.Errorf("bad affectedRows: got %v, want=%v", got, want)
+				}
+			}
+			return nil
+		})
+	})
+}
+
 func TestPingContext(t *testing.T) {
-	runTests(t, dsn, func(dbt *DBTest) {
+	runTestsParallel(t, dsn, func(dbt *DBTest, _ string) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 		if err := dbt.db.PingContext(ctx); err != context.Canceled {
@@ -2411,8 +2670,8 @@ func TestPingContext(t *testing.T) {
 }
 
 func TestContextCancelExec(t *testing.T) {
-	runTests(t, dsn, func(dbt *DBTest) {
-		dbt.mustExec("CREATE TABLE test (v INTEGER)")
+	runTestsParallel(t, dsn, func(dbt *DBTest, tbl string) {
+		dbt.mustExec("CREATE TABLE " + tbl + " (v INTEGER)")
 		ctx, cancel := context.WithCancel(context.Background())
 
 		// Delay execution for just a bit until db.ExecContext has begun.
@@ -2420,7 +2679,7 @@ func TestContextCancelExec(t *testing.T) {
 
 		// This query will be canceled.
 		startTime := time.Now()
-		if _, err := dbt.db.ExecContext(ctx, "INSERT INTO test VALUES (SLEEP(1))"); err != context.Canceled {
+		if _, err := dbt.db.ExecContext(ctx, "INSERT INTO "+tbl+" VALUES (SLEEP(1))"); err != context.Canceled {
 			dbt.Errorf("expected context.Canceled, got %v", err)
 		}
 		if d := time.Since(startTime); d > 500*time.Millisecond {
@@ -2432,7 +2691,7 @@ func TestContextCancelExec(t *testing.T) {
 
 		// Check how many times the query is executed.
 		var v int
-		if err := dbt.db.QueryRow("SELECT COUNT(*) FROM test").Scan(&v); err != nil {
+		if err := dbt.db.QueryRow("SELECT COUNT(*) FROM " + tbl).Scan(&v); err != nil {
 			dbt.Fatalf("%s", err.Error())
 		}
 		if v != 1 { // TODO: need to kill the query, and v should be 0.
@@ -2440,14 +2699,14 @@ func TestContextCancelExec(t *testing.T) {
 		}
 
 		// Context is already canceled, so error should come before execution.
-		if _, err := dbt.db.ExecContext(ctx, "INSERT INTO test VALUES (1)"); err == nil {
+		if _, err := dbt.db.ExecContext(ctx, "INSERT INTO "+tbl+" VALUES (1)"); err == nil {
 			dbt.Error("expected error")
 		} else if err.Error() != "context canceled" {
 			dbt.Fatalf("unexpected error: %s", err)
 		}
 
 		// The second insert query will fail, so the table has no changes.
-		if err := dbt.db.QueryRow("SELECT COUNT(*) FROM test").Scan(&v); err != nil {
+		if err := dbt.db.QueryRow("SELECT COUNT(*) FROM " + tbl).Scan(&v); err != nil {
 			dbt.Fatalf("%s", err.Error())
 		}
 		if v != 1 {
@@ -2457,8 +2716,8 @@ func TestContextCancelExec(t *testing.T) {
 }
 
 func TestContextCancelQuery(t *testing.T) {
-	runTests(t, dsn, func(dbt *DBTest) {
-		dbt.mustExec("CREATE TABLE test (v INTEGER)")
+	runTestsParallel(t, dsn, func(dbt *DBTest, tbl string) {
+		dbt.mustExec("CREATE TABLE " + tbl + " (v INTEGER)")
 		ctx, cancel := context.WithCancel(context.Background())
 
 		// Delay execution for just a bit until db.ExecContext has begun.
@@ -2466,7 +2725,7 @@ func TestContextCancelQuery(t *testing.T) {
 
 		// This query will be canceled.
 		startTime := time.Now()
-		if _, err := dbt.db.QueryContext(ctx, "INSERT INTO test VALUES (SLEEP(1))"); err != context.Canceled {
+		if _, err := dbt.db.QueryContext(ctx, "INSERT INTO "+tbl+" VALUES (SLEEP(1))"); err != context.Canceled {
 			dbt.Errorf("expected context.Canceled, got %v", err)
 		}
 		if d := time.Since(startTime); d > 500*time.Millisecond {
@@ -2478,7 +2737,7 @@ func TestContextCancelQuery(t *testing.T) {
 
 		// Check how many times the query is executed.
 		var v int
-		if err := dbt.db.QueryRow("SELECT COUNT(*) FROM test").Scan(&v); err != nil {
+		if err := dbt.db.QueryRow("SELECT COUNT(*) FROM " + tbl).Scan(&v); err != nil {
 			dbt.Fatalf("%s", err.Error())
 		}
 		if v != 1 { // TODO: need to kill the query, and v should be 0.
@@ -2486,12 +2745,12 @@ func TestContextCancelQuery(t *testing.T) {
 		}
 
 		// Context is already canceled, so error should come before execution.
-		if _, err := dbt.db.QueryContext(ctx, "INSERT INTO test VALUES (1)"); err != context.Canceled {
+		if _, err := dbt.db.QueryContext(ctx, "INSERT INTO "+tbl+" VALUES (1)"); err != context.Canceled {
 			dbt.Errorf("expected context.Canceled, got %v", err)
 		}
 
 		// The second insert query will fail, so the table has no changes.
-		if err := dbt.db.QueryRow("SELECT COUNT(*) FROM test").Scan(&v); err != nil {
+		if err := dbt.db.QueryRow("SELECT COUNT(*) FROM " + tbl).Scan(&v); err != nil {
 			dbt.Fatalf("%s", err.Error())
 		}
 		if v != 1 {
@@ -2501,12 +2760,12 @@ func TestContextCancelQuery(t *testing.T) {
 }
 
 func TestContextCancelQueryRow(t *testing.T) {
-	runTests(t, dsn, func(dbt *DBTest) {
-		dbt.mustExec("CREATE TABLE test (v INTEGER)")
-		dbt.mustExec("INSERT INTO test VALUES (1), (2), (3)")
+	runTestsParallel(t, dsn, func(dbt *DBTest, tbl string) {
+		dbt.mustExec("CREATE TABLE " + tbl + " (v INTEGER)")
+		dbt.mustExec("INSERT INTO " + tbl + " VALUES (1), (2), (3)")
 		ctx, cancel := context.WithCancel(context.Background())
 
-		rows, err := dbt.db.QueryContext(ctx, "SELECT v FROM test")
+		rows, err := dbt.db.QueryContext(ctx, "SELECT v FROM "+tbl)
 		if err != nil {
 			dbt.Fatalf("%s", err.Error())
 		}
@@ -2534,7 +2793,7 @@ func TestContextCancelQueryRow(t *testing.T) {
 }
 
 func TestContextCancelPrepare(t *testing.T) {
-	runTests(t, dsn, func(dbt *DBTest) {
+	runTestsParallel(t, dsn, func(dbt *DBTest, _ string) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 		if _, err := dbt.db.PrepareContext(ctx, "SELECT 1"); err != context.Canceled {
@@ -2544,10 +2803,10 @@ func TestContextCancelPrepare(t *testing.T) {
 }
 
 func TestContextCancelStmtExec(t *testing.T) {
-	runTests(t, dsn, func(dbt *DBTest) {
-		dbt.mustExec("CREATE TABLE test (v INTEGER)")
+	runTestsParallel(t, dsn, func(dbt *DBTest, tbl string) {
+		dbt.mustExec("CREATE TABLE " + tbl + " (v INTEGER)")
 		ctx, cancel := context.WithCancel(context.Background())
-		stmt, err := dbt.db.PrepareContext(ctx, "INSERT INTO test VALUES (SLEEP(1))")
+		stmt, err := dbt.db.PrepareContext(ctx, "INSERT INTO "+tbl+" VALUES (SLEEP(1))")
 		if err != nil {
 			dbt.Fatalf("unexpected error: %v", err)
 		}
@@ -2569,7 +2828,7 @@ func TestContextCancelStmtExec(t *testing.T) {
 
 		// Check how many times the query is executed.
 		var v int
-		if err := dbt.db.QueryRow("SELECT COUNT(*) FROM test").Scan(&v); err != nil {
+		if err := dbt.db.QueryRow("SELECT COUNT(*) FROM " + tbl).Scan(&v); err != nil {
 			dbt.Fatalf("%s", err.Error())
 		}
 		if v != 1 { // TODO: need to kill the query, and v should be 0.
@@ -2579,10 +2838,10 @@ func TestContextCancelStmtExec(t *testing.T) {
 }
 
 func TestContextCancelStmtQuery(t *testing.T) {
-	runTests(t, dsn, func(dbt *DBTest) {
-		dbt.mustExec("CREATE TABLE test (v INTEGER)")
+	runTestsParallel(t, dsn, func(dbt *DBTest, tbl string) {
+		dbt.mustExec("CREATE TABLE " + tbl + " (v INTEGER)")
 		ctx, cancel := context.WithCancel(context.Background())
-		stmt, err := dbt.db.PrepareContext(ctx, "INSERT INTO test VALUES (SLEEP(1))")
+		stmt, err := dbt.db.PrepareContext(ctx, "INSERT INTO "+tbl+" VALUES (SLEEP(1))")
 		if err != nil {
 			dbt.Fatalf("unexpected error: %v", err)
 		}
@@ -2604,7 +2863,7 @@ func TestContextCancelStmtQuery(t *testing.T) {
 
 		// Check how many times the query is executed.
 		var v int
-		if err := dbt.db.QueryRow("SELECT COUNT(*) FROM test").Scan(&v); err != nil {
+		if err := dbt.db.QueryRow("SELECT COUNT(*) FROM " + tbl).Scan(&v); err != nil {
 			dbt.Fatalf("%s", err.Error())
 		}
 		if v != 1 { // TODO: need to kill the query, and v should be 0.
@@ -2618,8 +2877,8 @@ func TestContextCancelBegin(t *testing.T) {
 		t.Skip(`FIXME: it sometime fails with "expected driver.ErrBadConn, got sql: connection is already closed" on windows and macOS`)
 	}
 
-	runTests(t, dsn, func(dbt *DBTest) {
-		dbt.mustExec("CREATE TABLE test (v INTEGER)")
+	runTestsParallel(t, dsn, func(dbt *DBTest, tbl string) {
+		dbt.mustExec("CREATE TABLE " + tbl + " (v INTEGER)")
 		ctx, cancel := context.WithCancel(context.Background())
 		conn, err := dbt.db.Conn(ctx)
 		if err != nil {
@@ -2636,7 +2895,7 @@ func TestContextCancelBegin(t *testing.T) {
 
 		// This query will be canceled.
 		startTime := time.Now()
-		if _, err := tx.ExecContext(ctx, "INSERT INTO test VALUES (SLEEP(1))"); err != context.Canceled {
+		if _, err := tx.ExecContext(ctx, "INSERT INTO "+tbl+" VALUES (SLEEP(1))"); err != context.Canceled {
 			dbt.Errorf("expected context.Canceled, got %v", err)
 		}
 		if d := time.Since(startTime); d > 500*time.Millisecond {
@@ -2674,8 +2933,8 @@ func TestContextCancelBegin(t *testing.T) {
 }
 
 func TestContextBeginIsolationLevel(t *testing.T) {
-	runTests(t, dsn, func(dbt *DBTest) {
-		dbt.mustExec("CREATE TABLE test (v INTEGER)")
+	runTestsParallel(t, dsn, func(dbt *DBTest, tbl string) {
+		dbt.mustExec("CREATE TABLE " + tbl + " (v INTEGER)")
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
@@ -2693,17 +2952,17 @@ func TestContextBeginIsolationLevel(t *testing.T) {
 			dbt.Fatal(err)
 		}
 
-		_, err = tx1.ExecContext(ctx, "INSERT INTO test VALUES (1)")
+		_, err = tx1.ExecContext(ctx, "INSERT INTO "+tbl+" VALUES (1)")
 		if err != nil {
 			dbt.Fatal(err)
 		}
 
 		var v int
-		row := tx2.QueryRowContext(ctx, "SELECT COUNT(*) FROM test")
+		row := tx2.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+tbl)
 		if err := row.Scan(&v); err != nil {
 			dbt.Fatal(err)
 		}
-		// Because writer transaction wasn't commited yet, it should be available
+		// Because writer transaction wasn't committed yet, it should be available
 		if v != 0 {
 			dbt.Errorf("expected val to be 0, got %d", v)
 		}
@@ -2713,11 +2972,11 @@ func TestContextBeginIsolationLevel(t *testing.T) {
 			dbt.Fatal(err)
 		}
 
-		row = tx2.QueryRowContext(ctx, "SELECT COUNT(*) FROM test")
+		row = tx2.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+tbl)
 		if err := row.Scan(&v); err != nil {
 			dbt.Fatal(err)
 		}
-		// Data written by writer transaction is already commited, it should be selectable
+		// Data written by writer transaction is already committed, it should be selectable
 		if v != 1 {
 			dbt.Errorf("expected val to be 1, got %d", v)
 		}
@@ -2726,8 +2985,8 @@ func TestContextBeginIsolationLevel(t *testing.T) {
 }
 
 func TestContextBeginReadOnly(t *testing.T) {
-	runTests(t, dsn, func(dbt *DBTest) {
-		dbt.mustExec("CREATE TABLE test (v INTEGER)")
+	runTestsParallel(t, dsn, func(dbt *DBTest, tbl string) {
+		dbt.mustExec("CREATE TABLE " + tbl + " (v INTEGER)")
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
@@ -2742,14 +3001,14 @@ func TestContextBeginReadOnly(t *testing.T) {
 		}
 
 		// INSERT queries fail in a READ ONLY transaction.
-		_, err = tx.ExecContext(ctx, "INSERT INTO test VALUES (1)")
+		_, err = tx.ExecContext(ctx, "INSERT INTO "+tbl+" VALUES (1)")
 		if _, ok := err.(*MySQLError); !ok {
 			dbt.Errorf("expected MySQLError, got %v", err)
 		}
 
 		// SELECT queries can be executed.
 		var v int
-		row := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM test")
+		row := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+tbl)
 		if err := row.Scan(&v); err != nil {
 			dbt.Fatal(err)
 		}
@@ -2778,13 +3037,18 @@ func TestRowsColumnTypes(t *testing.T) {
 	nd1 := sql.NullTime{Time: time.Date(2006, 01, 02, 0, 0, 0, 0, time.UTC), Valid: true}
 	nd2 := sql.NullTime{Time: time.Date(2006, 03, 04, 0, 0, 0, 0, time.UTC), Valid: true}
 	ndNULL := sql.NullTime{Time: time.Time{}, Valid: false}
-	rbNULL := sql.RawBytes(nil)
-	rb0 := sql.RawBytes("0")
-	rb42 := sql.RawBytes("42")
-	rbTest := sql.RawBytes("Test")
-	rb0pad4 := sql.RawBytes("0\x00\x00\x00") // BINARY right-pads values with 0x00
-	rbx0 := sql.RawBytes("\x00")
-	rbx42 := sql.RawBytes("\x42")
+	bNULL := []byte(nil)
+	nsNULL := sql.NullString{String: "", Valid: false}
+	// Helper function to build NullString from string literal.
+	ns := func(s string) sql.NullString { return sql.NullString{String: s, Valid: true} }
+	ns0 := ns("0")
+	b0 := []byte("0")
+	b42 := []byte("42")
+	nsTest := ns("Test")
+	bTest := []byte("Test")
+	b0pad4 := []byte("0\x00\x00\x00") // BINARY right-pads values with 0x00
+	bx0 := []byte("\x00")
+	bx42 := []byte("\x42")
 
 	var columns = []struct {
 		name             string
@@ -2795,51 +3059,54 @@ func TestRowsColumnTypes(t *testing.T) {
 		precision        int64 // 0 if not ok
 		scale            int64
 		valuesIn         [3]string
-		valuesOut        [3]interface{}
+		valuesOut        [3]any
 	}{
-		{"bit8null", "BIT(8)", "BIT", scanTypeRawBytes, true, 0, 0, [3]string{"0x0", "NULL", "0x42"}, [3]interface{}{rbx0, rbNULL, rbx42}},
-		{"boolnull", "BOOL", "TINYINT", scanTypeNullInt, true, 0, 0, [3]string{"NULL", "true", "0"}, [3]interface{}{niNULL, ni1, ni0}},
-		{"bool", "BOOL NOT NULL", "TINYINT", scanTypeInt8, false, 0, 0, [3]string{"1", "0", "FALSE"}, [3]interface{}{int8(1), int8(0), int8(0)}},
-		{"intnull", "INTEGER", "INT", scanTypeNullInt, true, 0, 0, [3]string{"0", "NULL", "42"}, [3]interface{}{ni0, niNULL, ni42}},
-		{"smallint", "SMALLINT NOT NULL", "SMALLINT", scanTypeInt16, false, 0, 0, [3]string{"0", "-32768", "32767"}, [3]interface{}{int16(0), int16(-32768), int16(32767)}},
-		{"smallintnull", "SMALLINT", "SMALLINT", scanTypeNullInt, true, 0, 0, [3]string{"0", "NULL", "42"}, [3]interface{}{ni0, niNULL, ni42}},
-		{"int3null", "INT(3)", "INT", scanTypeNullInt, true, 0, 0, [3]string{"0", "NULL", "42"}, [3]interface{}{ni0, niNULL, ni42}},
-		{"int7", "INT(7) NOT NULL", "INT", scanTypeInt32, false, 0, 0, [3]string{"0", "-1337", "42"}, [3]interface{}{int32(0), int32(-1337), int32(42)}},
-		{"mediumintnull", "MEDIUMINT", "MEDIUMINT", scanTypeNullInt, true, 0, 0, [3]string{"0", "42", "NULL"}, [3]interface{}{ni0, ni42, niNULL}},
-		{"bigint", "BIGINT NOT NULL", "BIGINT", scanTypeInt64, false, 0, 0, [3]string{"0", "65535", "-42"}, [3]interface{}{int64(0), int64(65535), int64(-42)}},
-		{"bigintnull", "BIGINT", "BIGINT", scanTypeNullInt, true, 0, 0, [3]string{"NULL", "1", "42"}, [3]interface{}{niNULL, ni1, ni42}},
-		{"tinyuint", "TINYINT UNSIGNED NOT NULL", "UNSIGNED TINYINT", scanTypeUint8, false, 0, 0, [3]string{"0", "255", "42"}, [3]interface{}{uint8(0), uint8(255), uint8(42)}},
-		{"smalluint", "SMALLINT UNSIGNED NOT NULL", "UNSIGNED SMALLINT", scanTypeUint16, false, 0, 0, [3]string{"0", "65535", "42"}, [3]interface{}{uint16(0), uint16(65535), uint16(42)}},
-		{"biguint", "BIGINT UNSIGNED NOT NULL", "UNSIGNED BIGINT", scanTypeUint64, false, 0, 0, [3]string{"0", "65535", "42"}, [3]interface{}{uint64(0), uint64(65535), uint64(42)}},
-		{"uint13", "INT(13) UNSIGNED NOT NULL", "UNSIGNED INT", scanTypeUint32, false, 0, 0, [3]string{"0", "1337", "42"}, [3]interface{}{uint32(0), uint32(1337), uint32(42)}},
-		{"float", "FLOAT NOT NULL", "FLOAT", scanTypeFloat32, false, math.MaxInt64, math.MaxInt64, [3]string{"0", "42", "13.37"}, [3]interface{}{float32(0), float32(42), float32(13.37)}},
-		{"floatnull", "FLOAT", "FLOAT", scanTypeNullFloat, true, math.MaxInt64, math.MaxInt64, [3]string{"0", "NULL", "13.37"}, [3]interface{}{nf0, nfNULL, nf1337}},
-		{"float74null", "FLOAT(7,4)", "FLOAT", scanTypeNullFloat, true, math.MaxInt64, 4, [3]string{"0", "NULL", "13.37"}, [3]interface{}{nf0, nfNULL, nf1337}},
-		{"double", "DOUBLE NOT NULL", "DOUBLE", scanTypeFloat64, false, math.MaxInt64, math.MaxInt64, [3]string{"0", "42", "13.37"}, [3]interface{}{float64(0), float64(42), float64(13.37)}},
-		{"doublenull", "DOUBLE", "DOUBLE", scanTypeNullFloat, true, math.MaxInt64, math.MaxInt64, [3]string{"0", "NULL", "13.37"}, [3]interface{}{nf0, nfNULL, nf1337}},
-		{"decimal1", "DECIMAL(10,6) NOT NULL", "DECIMAL", scanTypeRawBytes, false, 10, 6, [3]string{"0", "13.37", "1234.123456"}, [3]interface{}{sql.RawBytes("0.000000"), sql.RawBytes("13.370000"), sql.RawBytes("1234.123456")}},
-		{"decimal1null", "DECIMAL(10,6)", "DECIMAL", scanTypeRawBytes, true, 10, 6, [3]string{"0", "NULL", "1234.123456"}, [3]interface{}{sql.RawBytes("0.000000"), rbNULL, sql.RawBytes("1234.123456")}},
-		{"decimal2", "DECIMAL(8,4) NOT NULL", "DECIMAL", scanTypeRawBytes, false, 8, 4, [3]string{"0", "13.37", "1234.123456"}, [3]interface{}{sql.RawBytes("0.0000"), sql.RawBytes("13.3700"), sql.RawBytes("1234.1235")}},
-		{"decimal2null", "DECIMAL(8,4)", "DECIMAL", scanTypeRawBytes, true, 8, 4, [3]string{"0", "NULL", "1234.123456"}, [3]interface{}{sql.RawBytes("0.0000"), rbNULL, sql.RawBytes("1234.1235")}},
-		{"decimal3", "DECIMAL(5,0) NOT NULL", "DECIMAL", scanTypeRawBytes, false, 5, 0, [3]string{"0", "13.37", "-12345.123456"}, [3]interface{}{rb0, sql.RawBytes("13"), sql.RawBytes("-12345")}},
-		{"decimal3null", "DECIMAL(5,0)", "DECIMAL", scanTypeRawBytes, true, 5, 0, [3]string{"0", "NULL", "-12345.123456"}, [3]interface{}{rb0, rbNULL, sql.RawBytes("-12345")}},
-		{"char25null", "CHAR(25)", "CHAR", scanTypeRawBytes, true, 0, 0, [3]string{"0", "NULL", "'Test'"}, [3]interface{}{rb0, rbNULL, rbTest}},
-		{"varchar42", "VARCHAR(42) NOT NULL", "VARCHAR", scanTypeRawBytes, false, 0, 0, [3]string{"0", "'Test'", "42"}, [3]interface{}{rb0, rbTest, rb42}},
-		{"binary4null", "BINARY(4)", "BINARY", scanTypeRawBytes, true, 0, 0, [3]string{"0", "NULL", "'Test'"}, [3]interface{}{rb0pad4, rbNULL, rbTest}},
-		{"varbinary42", "VARBINARY(42) NOT NULL", "VARBINARY", scanTypeRawBytes, false, 0, 0, [3]string{"0", "'Test'", "42"}, [3]interface{}{rb0, rbTest, rb42}},
-		{"tinyblobnull", "TINYBLOB", "BLOB", scanTypeRawBytes, true, 0, 0, [3]string{"0", "NULL", "'Test'"}, [3]interface{}{rb0, rbNULL, rbTest}},
-		{"tinytextnull", "TINYTEXT", "TEXT", scanTypeRawBytes, true, 0, 0, [3]string{"0", "NULL", "'Test'"}, [3]interface{}{rb0, rbNULL, rbTest}},
-		{"blobnull", "BLOB", "BLOB", scanTypeRawBytes, true, 0, 0, [3]string{"0", "NULL", "'Test'"}, [3]interface{}{rb0, rbNULL, rbTest}},
-		{"textnull", "TEXT", "TEXT", scanTypeRawBytes, true, 0, 0, [3]string{"0", "NULL", "'Test'"}, [3]interface{}{rb0, rbNULL, rbTest}},
-		{"mediumblob", "MEDIUMBLOB NOT NULL", "BLOB", scanTypeRawBytes, false, 0, 0, [3]string{"0", "'Test'", "42"}, [3]interface{}{rb0, rbTest, rb42}},
-		{"mediumtext", "MEDIUMTEXT NOT NULL", "TEXT", scanTypeRawBytes, false, 0, 0, [3]string{"0", "'Test'", "42"}, [3]interface{}{rb0, rbTest, rb42}},
-		{"longblob", "LONGBLOB NOT NULL", "BLOB", scanTypeRawBytes, false, 0, 0, [3]string{"0", "'Test'", "42"}, [3]interface{}{rb0, rbTest, rb42}},
-		{"longtext", "LONGTEXT NOT NULL", "TEXT", scanTypeRawBytes, false, 0, 0, [3]string{"0", "'Test'", "42"}, [3]interface{}{rb0, rbTest, rb42}},
-		{"datetime", "DATETIME", "DATETIME", scanTypeNullTime, true, 0, 0, [3]string{"'2006-01-02 15:04:05'", "'2006-01-02 15:04:05.1'", "'2006-01-02 15:04:05.111111'"}, [3]interface{}{nt0, nt0, nt0}},
-		{"datetime2", "DATETIME(2)", "DATETIME", scanTypeNullTime, true, 2, 2, [3]string{"'2006-01-02 15:04:05'", "'2006-01-02 15:04:05.1'", "'2006-01-02 15:04:05.111111'"}, [3]interface{}{nt0, nt1, nt2}},
-		{"datetime6", "DATETIME(6)", "DATETIME", scanTypeNullTime, true, 6, 6, [3]string{"'2006-01-02 15:04:05'", "'2006-01-02 15:04:05.1'", "'2006-01-02 15:04:05.111111'"}, [3]interface{}{nt0, nt1, nt6}},
-		{"date", "DATE", "DATE", scanTypeNullTime, true, 0, 0, [3]string{"'2006-01-02'", "NULL", "'2006-03-04'"}, [3]interface{}{nd1, ndNULL, nd2}},
-		{"year", "YEAR NOT NULL", "YEAR", scanTypeUint16, false, 0, 0, [3]string{"2006", "2000", "1994"}, [3]interface{}{uint16(2006), uint16(2000), uint16(1994)}},
+		{"bit8null", "BIT(8)", "BIT", scanTypeBytes, true, 0, 0, [3]string{"0x0", "NULL", "0x42"}, [3]any{bx0, bNULL, bx42}},
+		{"boolnull", "BOOL", "TINYINT", scanTypeNullInt, true, 0, 0, [3]string{"NULL", "true", "0"}, [3]any{niNULL, ni1, ni0}},
+		{"bool", "BOOL NOT NULL", "TINYINT", scanTypeInt8, false, 0, 0, [3]string{"1", "0", "FALSE"}, [3]any{int8(1), int8(0), int8(0)}},
+		{"intnull", "INTEGER", "INT", scanTypeNullInt, true, 0, 0, [3]string{"0", "NULL", "42"}, [3]any{ni0, niNULL, ni42}},
+		{"smallint", "SMALLINT NOT NULL", "SMALLINT", scanTypeInt16, false, 0, 0, [3]string{"0", "-32768", "32767"}, [3]any{int16(0), int16(-32768), int16(32767)}},
+		{"smallintnull", "SMALLINT", "SMALLINT", scanTypeNullInt, true, 0, 0, [3]string{"0", "NULL", "42"}, [3]any{ni0, niNULL, ni42}},
+		{"int3null", "INT(3)", "INT", scanTypeNullInt, true, 0, 0, [3]string{"0", "NULL", "42"}, [3]any{ni0, niNULL, ni42}},
+		{"int7", "INT(7) NOT NULL", "INT", scanTypeInt32, false, 0, 0, [3]string{"0", "-1337", "42"}, [3]any{int32(0), int32(-1337), int32(42)}},
+		{"mediumintnull", "MEDIUMINT", "MEDIUMINT", scanTypeNullInt, true, 0, 0, [3]string{"0", "42", "NULL"}, [3]any{ni0, ni42, niNULL}},
+		{"bigint", "BIGINT NOT NULL", "BIGINT", scanTypeInt64, false, 0, 0, [3]string{"0", "65535", "-42"}, [3]any{int64(0), int64(65535), int64(-42)}},
+		{"bigintnull", "BIGINT", "BIGINT", scanTypeNullInt, true, 0, 0, [3]string{"NULL", "1", "42"}, [3]any{niNULL, ni1, ni42}},
+		{"tinyuint", "TINYINT UNSIGNED NOT NULL", "UNSIGNED TINYINT", scanTypeUint8, false, 0, 0, [3]string{"0", "255", "42"}, [3]any{uint8(0), uint8(255), uint8(42)}},
+		{"smalluint", "SMALLINT UNSIGNED NOT NULL", "UNSIGNED SMALLINT", scanTypeUint16, false, 0, 0, [3]string{"0", "65535", "42"}, [3]any{uint16(0), uint16(65535), uint16(42)}},
+		{"biguint", "BIGINT UNSIGNED NOT NULL", "UNSIGNED BIGINT", scanTypeUint64, false, 0, 0, [3]string{"0", "65535", "42"}, [3]any{uint64(0), uint64(65535), uint64(42)}},
+		{"mediumuint", "MEDIUMINT UNSIGNED NOT NULL", "UNSIGNED MEDIUMINT", scanTypeUint32, false, 0, 0, [3]string{"0", "16777215", "42"}, [3]any{uint32(0), uint32(16777215), uint32(42)}},
+		{"uint13", "INT(13) UNSIGNED NOT NULL", "UNSIGNED INT", scanTypeUint32, false, 0, 0, [3]string{"0", "1337", "42"}, [3]any{uint32(0), uint32(1337), uint32(42)}},
+		{"float", "FLOAT NOT NULL", "FLOAT", scanTypeFloat32, false, math.MaxInt64, math.MaxInt64, [3]string{"0", "42", "13.37"}, [3]any{float32(0), float32(42), float32(13.37)}},
+		{"floatnull", "FLOAT", "FLOAT", scanTypeNullFloat, true, math.MaxInt64, math.MaxInt64, [3]string{"0", "NULL", "13.37"}, [3]any{nf0, nfNULL, nf1337}},
+		{"float74null", "FLOAT(7,4)", "FLOAT", scanTypeNullFloat, true, math.MaxInt64, 4, [3]string{"0", "NULL", "13.37"}, [3]any{nf0, nfNULL, nf1337}},
+		{"double", "DOUBLE NOT NULL", "DOUBLE", scanTypeFloat64, false, math.MaxInt64, math.MaxInt64, [3]string{"0", "42", "13.37"}, [3]any{float64(0), float64(42), float64(13.37)}},
+		{"doublenull", "DOUBLE", "DOUBLE", scanTypeNullFloat, true, math.MaxInt64, math.MaxInt64, [3]string{"0", "NULL", "13.37"}, [3]any{nf0, nfNULL, nf1337}},
+		{"decimal1", "DECIMAL(10,6) NOT NULL", "DECIMAL", scanTypeString, false, 10, 6, [3]string{"0", "13.37", "1234.123456"}, [3]any{"0.000000", "13.370000", "1234.123456"}},
+		{"decimal1null", "DECIMAL(10,6)", "DECIMAL", scanTypeNullString, true, 10, 6, [3]string{"0", "NULL", "1234.123456"}, [3]any{ns("0.000000"), nsNULL, ns("1234.123456")}},
+		{"decimal2", "DECIMAL(8,4) NOT NULL", "DECIMAL", scanTypeString, false, 8, 4, [3]string{"0", "13.37", "1234.123456"}, [3]any{"0.0000", "13.3700", "1234.1235"}},
+		{"decimal2null", "DECIMAL(8,4)", "DECIMAL", scanTypeNullString, true, 8, 4, [3]string{"0", "NULL", "1234.123456"}, [3]any{ns("0.0000"), nsNULL, ns("1234.1235")}},
+		{"decimal3", "DECIMAL(5,0) NOT NULL", "DECIMAL", scanTypeString, false, 5, 0, [3]string{"0", "13.37", "-12345.123456"}, [3]any{"0", "13", "-12345"}},
+		{"decimal3null", "DECIMAL(5,0)", "DECIMAL", scanTypeNullString, true, 5, 0, [3]string{"0", "NULL", "-12345.123456"}, [3]any{ns0, nsNULL, ns("-12345")}},
+		{"char25null", "CHAR(25)", "CHAR", scanTypeNullString, true, 0, 0, [3]string{"0", "NULL", "'Test'"}, [3]any{ns0, nsNULL, nsTest}},
+		{"varchar42", "VARCHAR(42) NOT NULL", "VARCHAR", scanTypeString, false, 0, 0, [3]string{"0", "'Test'", "42"}, [3]any{"0", "Test", "42"}},
+		{"binary4null", "BINARY(4)", "BINARY", scanTypeBytes, true, 0, 0, [3]string{"0", "NULL", "'Test'"}, [3]any{b0pad4, bNULL, bTest}},
+		{"varbinary42", "VARBINARY(42) NOT NULL", "VARBINARY", scanTypeBytes, false, 0, 0, [3]string{"0", "'Test'", "42"}, [3]any{b0, bTest, b42}},
+		{"tinyblobnull", "TINYBLOB", "BLOB", scanTypeBytes, true, 0, 0, [3]string{"0", "NULL", "'Test'"}, [3]any{b0, bNULL, bTest}},
+		{"tinytextnull", "TINYTEXT", "TEXT", scanTypeNullString, true, 0, 0, [3]string{"0", "NULL", "'Test'"}, [3]any{ns0, nsNULL, nsTest}},
+		{"blobnull", "BLOB", "BLOB", scanTypeBytes, true, 0, 0, [3]string{"0", "NULL", "'Test'"}, [3]any{b0, bNULL, bTest}},
+		{"textnull", "TEXT", "TEXT", scanTypeNullString, true, 0, 0, [3]string{"0", "NULL", "'Test'"}, [3]any{ns0, nsNULL, nsTest}},
+		{"mediumblob", "MEDIUMBLOB NOT NULL", "BLOB", scanTypeBytes, false, 0, 0, [3]string{"0", "'Test'", "42"}, [3]any{b0, bTest, b42}},
+		{"mediumtext", "MEDIUMTEXT NOT NULL", "TEXT", scanTypeString, false, 0, 0, [3]string{"0", "'Test'", "42"}, [3]any{"0", "Test", "42"}},
+		{"longblob", "LONGBLOB NOT NULL", "BLOB", scanTypeBytes, false, 0, 0, [3]string{"0", "'Test'", "42"}, [3]any{b0, bTest, b42}},
+		{"longtext", "LONGTEXT NOT NULL", "TEXT", scanTypeString, false, 0, 0, [3]string{"0", "'Test'", "42"}, [3]any{"0", "Test", "42"}},
+		{"datetime", "DATETIME", "DATETIME", scanTypeNullTime, true, 0, 0, [3]string{"'2006-01-02 15:04:05'", "'2006-01-02 15:04:05.1'", "'2006-01-02 15:04:05.111111'"}, [3]any{nt0, nt0, nt0}},
+		{"datetime2", "DATETIME(2)", "DATETIME", scanTypeNullTime, true, 2, 2, [3]string{"'2006-01-02 15:04:05'", "'2006-01-02 15:04:05.1'", "'2006-01-02 15:04:05.111111'"}, [3]any{nt0, nt1, nt2}},
+		{"datetime6", "DATETIME(6)", "DATETIME", scanTypeNullTime, true, 6, 6, [3]string{"'2006-01-02 15:04:05'", "'2006-01-02 15:04:05.1'", "'2006-01-02 15:04:05.111111'"}, [3]any{nt0, nt1, nt6}},
+		{"date", "DATE", "DATE", scanTypeNullTime, true, 0, 0, [3]string{"'2006-01-02'", "NULL", "'2006-03-04'"}, [3]any{nd1, ndNULL, nd2}},
+		{"year", "YEAR NOT NULL", "YEAR", scanTypeUint16, false, 0, 0, [3]string{"2006", "2000", "1994"}, [3]any{uint16(2006), uint16(2000), uint16(1994)}},
+		{"enum", "ENUM('', 'v1', 'v2')", "ENUM", scanTypeNullString, true, 0, 0, [3]string{"''", "'v1'", "'v2'"}, [3]any{ns(""), ns("v1"), ns("v2")}},
+		{"set", "set('', 'v1', 'v2')", "SET", scanTypeNullString, true, 0, 0, [3]string{"''", "'v1'", "'v1,v2'"}, [3]any{ns(""), ns("v1"), ns("v1,v2")}},
 	}
 
 	schema := ""
@@ -2945,8 +3212,11 @@ func TestRowsColumnTypes(t *testing.T) {
 				continue
 			}
 		}
-
-		values := make([]interface{}, len(tt))
+		// Avoid panic caused by nil scantype.
+		if t.Failed() {
+			return
+		}
+		values := make([]any, len(tt))
 		for i := range values {
 			values[i] = reflect.New(types[i]).Interface()
 		}
@@ -2956,14 +3226,10 @@ func TestRowsColumnTypes(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to scan values in %v", err)
 			}
-			for j := range values {
-				value := reflect.ValueOf(values[j]).Elem().Interface()
+			for j, value := range values {
+				value := reflect.ValueOf(value).Elem().Interface()
 				if !reflect.DeepEqual(value, columns[j].valuesOut[i]) {
-					if columns[j].scanType == scanTypeRawBytes {
-						t.Errorf("row %d, column %d: %v != %v", i, j, string(value.(sql.RawBytes)), string(columns[j].valuesOut[i].(sql.RawBytes)))
-					} else {
-						t.Errorf("row %d, column %d: %v != %v", i, j, value, columns[j].valuesOut[i])
-					}
+					t.Errorf("row %d, column %d: %v != %v", i, j, value, columns[j].valuesOut[i])
 				}
 			}
 			i++
@@ -2979,9 +3245,9 @@ func TestRowsColumnTypes(t *testing.T) {
 }
 
 func TestValuerWithValueReceiverGivenNilValue(t *testing.T) {
-	runTests(t, dsn, func(dbt *DBTest) {
-		dbt.mustExec("CREATE TABLE test (value VARCHAR(255))")
-		dbt.db.Exec("INSERT INTO test VALUES (?)", (*testValuer)(nil))
+	runTestsParallel(t, dsn, func(dbt *DBTest, tbl string) {
+		dbt.mustExec("CREATE TABLE " + tbl + " (value VARCHAR(255))")
+		dbt.db.Exec("INSERT INTO "+tbl+" VALUES (?)", (*testValuer)(nil))
 		// This test will panic on the INSERT if ConvertValue() does not check for typed nil before calling Value()
 	})
 }
@@ -3015,27 +3281,28 @@ func TestRawBytesAreNotModified(t *testing.T) {
 
 				rows, err := dbt.db.QueryContext(ctx, `SELECT id, value FROM test`)
 				if err != nil {
-					t.Fatal(err)
+					dbt.Fatal(err)
 				}
+				defer rows.Close()
 
 				var b int
 				var raw sql.RawBytes
-				for rows.Next() {
-					if err := rows.Scan(&b, &raw); err != nil {
-						t.Fatal(err)
-					}
-
-					before := string(raw)
-					// Ensure cancelling the query does not corrupt the contents of `raw`
-					cancel()
-					time.Sleep(time.Microsecond * 100)
-					after := string(raw)
-
-					if before != after {
-						t.Fatalf("the backing storage for sql.RawBytes has been modified (i=%v)", i)
-					}
+				if !rows.Next() {
+					dbt.Fatal("expected at least one row")
 				}
-				rows.Close()
+				if err := rows.Scan(&b, &raw); err != nil {
+					dbt.Fatal(err)
+				}
+
+				before := string(raw)
+				// Ensure cancelling the query does not corrupt the contents of `raw`
+				cancel()
+				time.Sleep(time.Microsecond * 100)
+				after := string(raw)
+
+				if before != after {
+					dbt.Fatalf("the backing storage for sql.RawBytes has been modified (i=%v)", i)
+				}
 			}()
 		}
 	})
@@ -3058,7 +3325,7 @@ func TestConnectorObeysDialTimeouts(t *testing.T) {
 		return d.DialContext(ctx, prot, addr)
 	})
 
-	db, err := sql.Open("mysql", fmt.Sprintf("%s:%s@dialctxtest(%s)/%s?timeout=30s", user, pass, addr, dbname))
+	db, err := sql.Open(driverNameTest, fmt.Sprintf("%s:%s@dialctxtest(%s)/%s?timeout=30s", user, pass, addr, dbname))
 	if err != nil {
 		t.Fatalf("error connecting: %s", err.Error())
 	}
@@ -3208,4 +3475,138 @@ func TestConnectorTimeoutsWatchCancel(t *testing.T) {
 	if !created.closed {
 		t.Errorf("connection not closed")
 	}
+}
+
+func TestConnectionAttributes(t *testing.T) {
+	if !available {
+		t.Skipf("MySQL server not running on %s", netAddr)
+	}
+
+	defaultAttrs := []string{
+		connAttrClientName,
+		connAttrOS,
+		connAttrPlatform,
+		connAttrPid,
+		connAttrServerHost,
+	}
+	host, _, _ := net.SplitHostPort(addr)
+	defaultAttrValues := []string{
+		connAttrClientNameValue,
+		connAttrOSValue,
+		connAttrPlatformValue,
+		strconv.Itoa(os.Getpid()),
+		host,
+	}
+
+	customAttrs := []string{"attr1", "fo/o"}
+	customAttrValues := []string{"value1", "bo/o"}
+
+	customAttrStrs := make([]string, len(customAttrs))
+	for i := range customAttrs {
+		customAttrStrs[i] = fmt.Sprintf("%s:%s", customAttrs[i], customAttrValues[i])
+	}
+	dsn += "&connectionAttributes=" + url.QueryEscape(strings.Join(customAttrStrs, ","))
+
+	var db *sql.DB
+	if _, err := ParseDSN(dsn); err != errInvalidDSNUnsafeCollation {
+		db, err = sql.Open(driverNameTest, dsn)
+		if err != nil {
+			t.Fatalf("error connecting: %s", err.Error())
+		}
+		defer db.Close()
+	}
+
+	dbt := &DBTest{t, db}
+
+	queryString := "SELECT ATTR_NAME, ATTR_VALUE FROM performance_schema.session_account_connect_attrs WHERE PROCESSLIST_ID = CONNECTION_ID()"
+	rows := dbt.mustQuery(queryString)
+	defer rows.Close()
+
+	rowsMap := make(map[string]string)
+	for rows.Next() {
+		var attrName, attrValue string
+		rows.Scan(&attrName, &attrValue)
+		rowsMap[attrName] = attrValue
+	}
+
+	connAttrs := append(append([]string{}, defaultAttrs...), customAttrs...)
+	expectedAttrValues := append(append([]string{}, defaultAttrValues...), customAttrValues...)
+	for i := range connAttrs {
+		if gotValue := rowsMap[connAttrs[i]]; gotValue != expectedAttrValues[i] {
+			dbt.Errorf("expected %q, got %q", expectedAttrValues[i], gotValue)
+		}
+	}
+}
+
+func TestErrorInMultiResult(t *testing.T) {
+	// https://github.com/go-sql-driver/mysql/issues/1361
+	var db *sql.DB
+	if _, err := ParseDSN(dsn); err != errInvalidDSNUnsafeCollation {
+		db, err = sql.Open("mysql", dsn)
+		if err != nil {
+			t.Fatalf("error connecting: %s", err.Error())
+		}
+		defer db.Close()
+	}
+
+	dbt := &DBTest{t, db}
+	query := `
+CREATE PROCEDURE test_proc1()
+BEGIN
+	SELECT 1,2;
+	SELECT 3,4;
+	SIGNAL SQLSTATE '10000' SET MESSAGE_TEXT = "some error",  MYSQL_ERRNO = 10000;
+END;
+`
+	runCallCommand(dbt, query, "test_proc1")
+}
+
+func runCallCommand(dbt *DBTest, query, name string) {
+	dbt.mustExec(fmt.Sprintf("DROP PROCEDURE IF EXISTS %s", name))
+	dbt.mustExec(query)
+	defer dbt.mustExec("DROP PROCEDURE " + name)
+	rows, err := dbt.db.Query(fmt.Sprintf("CALL %s", name))
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+	}
+	for rows.NextResultSet() {
+		for rows.Next() {
+		}
+	}
+}
+
+func TestIssue1567(t *testing.T) {
+	// enable TLS.
+	runTests(t, dsn+"&tls=skip-verify", func(dbt *DBTest) {
+		// disable connection pooling.
+		// data race happens when new connection is created.
+		dbt.db.SetMaxIdleConns(0)
+
+		// estimate round trip time.
+		start := time.Now()
+		if err := dbt.db.PingContext(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		rtt := time.Since(start)
+		if rtt <= 0 {
+			// In some environments, rtt may become 0, so set it to at least 1ms.
+			rtt = time.Millisecond
+		}
+
+		count := 1000
+		if testing.Short() {
+			count = 10
+		}
+
+		for i := 0; i < count; i++ {
+			timeout := time.Duration(mrand.Int63n(int64(rtt)))
+			ctx, cancel := context.WithTimeout(context.Background(), timeout)
+			dbt.db.PingContext(ctx)
+			cancel()
+		}
+	})
 }

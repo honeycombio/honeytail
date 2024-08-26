@@ -1,5 +1,22 @@
 # Honeytail Changelog
 
+## 1.10.0
+
+### ⚠️ Breaking Changes ⚠️
+
+Minimum Go version required is 1.19
+
+### Maintenance
+
+- maint(deps): bump the minor-patch group across 1 directory with 2 updates (#349) | @(49699333+dependabot[bot]@users.noreply.github.com)
+- maint: bump dependencies (#348) | @TylerHelmuth
+- docs: update vulnerability reporting process (#346) | @robbkidd
+- maint: add labels to release.yml for auto-generated grouping (#342) | @JamieDanielson
+- maint(deps): bump the minor-patch group with 4 updates (#341) | @(49699333+dependabot[bot]@users.noreply.github.com)
+- maint: group dependencies (#340) | @codeboten
+- maint(deps): bump github.com/klauspost/compress from 1.17.4 to 1.17.5 (#335) | @(49699333+dependabot[bot]@users.noreply.github.com)
+- maint(deps): bump github.com/honeycombio/dynsampler-go from 0.5.1 to 0.6.0 (#334) | @(49699333+dependabot[bot]@users.noreply.github.com)
+
 ## 1.9.0
 
 ### Enhancements

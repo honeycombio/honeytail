@@ -11,12 +11,12 @@ require (
 	github.com/honeycombio/urlshaper v0.0.0-20170302202025-2baba9ae5b5f
 	github.com/jeromer/syslogparser v1.1.0
 	github.com/jessevdk/go-flags v1.6.1
-	github.com/klauspost/compress v1.17.9
+	github.com/klauspost/compress v1.17.11
 	github.com/kr/logfmt v0.0.0-20140226030751-b84e30acd515
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.9.0
 	github.com/tenebris-tech/tail v1.0.5
-	golang.org/x/sys v0.24.0
+	golang.org/x/sys v0.26.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 

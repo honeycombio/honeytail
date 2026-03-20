@@ -1,27 +1,29 @@
 module github.com/honeycombio/honeytail
 
-go 1.21
+go 1.24.0
+
+toolchain go1.24.5
 
 require (
-	github.com/go-sql-driver/mysql v1.8.1
-	github.com/honeycombio/dynsampler-go v0.6.0
+	github.com/go-sql-driver/mysql v1.9.3
+	github.com/honeycombio/dynsampler-go v0.6.4
 	github.com/honeycombio/gonx v1.3.1-0.20171118020637-f9b2468e9ef8
-	github.com/honeycombio/libhoney-go v1.24.0
+	github.com/honeycombio/libhoney-go v1.26.0
 	github.com/honeycombio/mysqltools v0.0.1
-	github.com/honeycombio/urlshaper v0.0.0-20170302202025-2baba9ae5b5f
+	github.com/honeycombio/urlshaper v0.0.0-20240715213722-6ba2583df080
 	github.com/jeromer/syslogparser v1.1.0
 	github.com/jessevdk/go-flags v1.6.1
-	github.com/klauspost/compress v1.17.11
-	github.com/kr/logfmt v0.0.0-20140226030751-b84e30acd515
+	github.com/klauspost/compress v1.18.5
+	github.com/kr/logfmt v0.0.0-20210122060352-19f9bcb100e6
 	github.com/sirupsen/logrus v1.9.3
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.1
 	github.com/tenebris-tech/tail v1.0.5
-	golang.org/x/sys v0.27.0
+	golang.org/x/sys v0.33.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
-	filippo.io/edwards25519 v1.1.0 // indirect
+	filippo.io/edwards25519 v1.2.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/facebookgo/clock v0.0.0-20150410010913-600d898af40a // indirect
 	github.com/facebookgo/limitgroup v0.0.0-20150612190941-6abd8d71ec01 // indirect

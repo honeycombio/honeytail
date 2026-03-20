@@ -2,6 +2,9 @@ MAKEFLAGS += --warn-undefined-variables
 MAKEFLAGS += --no-builtin-rules
 MAKEFLAGS += --no-builtin-variables
 
+.PHONY: test
+test:
+	go test --timeout 10s -v ./...
 
 .PHONY: install-tools
 install-tools:

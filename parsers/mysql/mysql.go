@@ -141,6 +141,9 @@ type Parser struct {
 	// set SampleRate to cause the MySQL parser to drop events after before
 	// they're parsed to save CPU
 	SampleRate int
+	// Rand is an optional random number generator for sampling. If nil, the
+	// global math/rand source is used.
+	Rand *rand.Rand
 
 	conf       Options
 	wg         sync.WaitGroup
@@ -311,6 +314,13 @@ func isMySQLHeaderLine(line string) bool {
 		(first == 'T' && reMySQLColumnHeaders.MatchString(line))
 }
 
+func (p *Parser) randIntn(n int) int {
+	if p.Rand == nil {
+		return rand.Intn(n)
+	}
+	return p.Rand.Intn(n)
+}
+
 func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, prefixRegex *parsers.ExtRegexp) {
 	// start up a goroutine to handle grouped sets of lines
 	rawEvents := make(chan []string)
@@ -341,7 +351,7 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 				// we've started a new event. Send the previous one.
 				foundStatement = false
 				// if sampling is disabled or sampler says keep, pass along this group.
-				if p.SampleRate <= 1 || rand.Intn(p.SampleRate) == 0 {
+				if p.SampleRate <= 1 || p.randIntn(p.SampleRate) == 0 {
 					rawEvents <- groupedLines
 				}
 				groupedLines = make([]string, 0, 5)
@@ -352,7 +362,7 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 	// send the last event, if there was one collected
 	if foundStatement {
 		// if sampling is disabled or sampler says keep, pass along this group.
-		if p.SampleRate <= 1 || rand.Intn(p.SampleRate) == 0 {
+		if p.SampleRate <= 1 || p.randIntn(p.SampleRate) == 0 {
 			rawEvents <- groupedLines
 		}
 	}

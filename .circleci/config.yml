@@ -19,21 +19,21 @@ platform_matrix: &platform_matrix
 jobs:
   test:
     docker:
-      - image: cimg/go:1.20
+      - image: cimg/go:1.24
     steps:
       - checkout
       - run: go test --timeout 10s -v ./...
 
   verify-licenses:
     docker:
-      - image: cimg/go:1.20
+      - image: cimg/go:1.24
     steps:
       - checkout
       - run: make verify-licenses
 
   go-build:
     docker:
-      - image: cimg/go:1.20
+      - image: cimg/go:1.24
     parameters:
       os:
         description: Target operating system
@@ -60,7 +60,7 @@ jobs:
 
   build_packages:
     docker:
-      - image: cimg/go:1.20
+      - image: cimg/go:1.24
     steps:
       - attach_workspace:
           at: ~/

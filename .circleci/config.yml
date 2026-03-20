@@ -47,12 +47,13 @@ jobs:
         default: "amd64"
     steps:
       - checkout
-      - run: |
-          GOOS=<< parameters.os >> \
-          GOARCH=<< parameters.arch >> \
-          go build -ldflags "-X main.BuildID=${CIRCLE_TAG}" \
-          -o ~/artifacts/honeytail-<< parameters.os >>-<< parameters.arch >> \
-          .
+      - run:
+          command: make build
+          environment:
+            GOOS: << parameters.os >>
+            GOARCH: << parameters.arch >>
+            VERSION: ${CIRCLE_TAG}
+            ARTIFACTS: ~/artifacts
       - persist_to_workspace:
           root: ~/
           paths:

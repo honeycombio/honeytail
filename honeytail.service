@@ -12,4 +12,4 @@ RestartSec=5
 StartLimitInterval=0
 
 [Install]
-Alias=honeytail honeytail.service
+WantedBy=multi-user.target

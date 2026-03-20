@@ -61,14 +61,13 @@ jobs:
 
   build_packages:
     docker:
-      - image: cimg/go:1.24
+      - image: cimg/ruby:4.0.2
     steps:
       - attach_workspace:
           at: ~/
       - checkout
-      - run: sudo apt-get -qq update
-      - run: sudo apt-get install -y build-essential rpm ruby ruby-dev
-      - run: sudo gem install fpm
+      - run: sudo apt-get -qq update && sudo apt-get install -y rpm
+      - run: gem install fpm
       - run: ~/artifacts/honeytail-linux-amd64 --write_default_config > ./honeytail.conf
       - run: ./build-pkg.sh -m amd64 -v "${CIRCLE_TAG}" -t deb && mv *.deb ~/artifacts
       - run: ./build-pkg.sh -m arm64 -v "${CIRCLE_TAG}" -t deb && mv *.deb ~/artifacts

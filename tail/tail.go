@@ -66,8 +66,9 @@ type State struct {
 }
 
 // GetSampledEntries wraps GetEntries and returns a list of channels that
-// provide sampled entries
-func GetSampledEntries(ctx context.Context, conf Config, sampleRate uint) ([]chan string, error) {
+// provide sampled entries. If rng is non-nil it will be used for sampling
+// decisions; otherwise the global math/rand source is used.
+func GetSampledEntries(ctx context.Context, conf Config, sampleRate uint, rng *rand.Rand) ([]chan string, error) {
 	unsampledLinesChans, err := GetEntries(ctx, conf)
 	if err != nil {
 		return nil, err
@@ -83,7 +84,7 @@ func GetSampledEntries(ctx context.Context, conf Config, sampleRate uint) ([]cha
 		go func(pLines chan string) {
 			defer close(sampledLines)
 			for line := range pLines {
-				if shouldDrop(sampleRate) {
+				if shouldDrop(sampleRate, rng) {
 					logrus.WithFields(logrus.Fields{
 						"line":       line,
 						"samplerate": sampleRate,
@@ -102,8 +103,11 @@ func GetSampledEntries(ctx context.Context, conf Config, sampleRate uint) ([]cha
 // false if it should be kept
 // if sampleRate is 5,
 // on average one out of every 5 calls should return false
-func shouldDrop(rate uint) bool {
-	return rand.Intn(int(rate)) != 0
+func shouldDrop(rate uint, rng *rand.Rand) bool {
+	if rng == nil {
+		return rand.Intn(int(rate)) != 0
+	}
+	return rng.Intn(int(rate)) != 0
 }
 
 // GetEntries sets up a list of channels that get one line at a time from each

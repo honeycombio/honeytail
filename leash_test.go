@@ -642,7 +642,7 @@ func (r *responder) serveResponse(w http.ResponseWriter, req *http.Request) {
 	}
 	r.reqBody = string(body)
 	w.WriteHeader(r.responseCode)
-	fmt.Fprintf(w, r.responseBody)
+	fmt.Fprint(w, r.responseBody)
 }
 func (r *responder) reset() {
 	r.reqCounter = 0

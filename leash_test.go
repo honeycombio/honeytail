@@ -87,7 +87,7 @@ func TestBasicSend(t *testing.T) {
 	defer fh.Close()
 	fmt.Fprintf(fh, `{"format":"json"}`)
 	opts.Reqs.LogFiles = []string{logFileName}
-	run(context.Background(), opts)
+	run(context.Background(), opts, nil)
 	assert.Equal(t, ts.rsp.reqCounter, 1)
 	assert.Equal(t, ts.rsp.evtCounter, 1)
 	assert.Contains(t, ts.rsp.reqBody, `{"format":"json"}`)
@@ -117,7 +117,7 @@ func TestMultipleFiles(t *testing.T) {
 	defer fh2.Close()
 	fmt.Fprintf(fh2, `{"key2":"val2"}`)
 	opts.Reqs.LogFiles = []string{logFile1, logFile2}
-	run(context.Background(), opts)
+	run(context.Background(), opts, nil)
 	assert.Equal(t, ts.rsp.reqCounter, 1)
 	assert.Equal(t, ts.rsp.evtCounter, 2)
 	assert.Contains(t, ts.rsp.reqBody, `{"key1":"val1"}`)
@@ -174,7 +174,7 @@ SELECT
                   id, team_id, name, description, slug, limit_kb, created_at, updated_at
                 FROM datasets WHERE team_id=17 AND slug='api-prod';`)
 	opts.Reqs.LogFiles = []string{logFile1, logFile2}
-	run(context.Background(), opts)
+	run(context.Background(), opts, nil)
 	assert.Equal(t, ts.rsp.reqCounter, 1)
 	assert.Equal(t, ts.rsp.evtCounter, 4)
 	assert.Contains(t, ts.rsp.reqBody, `"query":"SELECT * FROM orders`)
@@ -196,21 +196,21 @@ func TestSetVersion(t *testing.T) {
 	defer fh.Close()
 	fmt.Fprintf(fh, `{"format":"json"}`)
 	opts.Reqs.LogFiles = []string{logFileName}
-	run(context.Background(), opts)
+	run(context.Background(), opts, nil)
 	userAgent := ts.rsp.req.Header.Get("User-Agent")
 	assert.Contains(t, userAgent, "libhoney-go")
 	setVersionUserAgent(false, "fancyParser")
-	run(context.Background(), opts)
+	run(context.Background(), opts, nil)
 	userAgent = ts.rsp.req.Header.Get("User-Agent")
 	assert.Contains(t, userAgent, "libhoney-go")
 	assert.Contains(t, userAgent, "fancyParser")
 	BuildID = "test"
 	setVersionUserAgent(false, "fancyParser")
-	run(context.Background(), opts)
+	run(context.Background(), opts, nil)
 	userAgent = ts.rsp.req.Header.Get("User-Agent")
 	assert.Contains(t, userAgent, " honeytail/test")
 	setVersionUserAgent(true, "fancyParser")
-	run(context.Background(), opts)
+	run(context.Background(), opts, nil)
 	userAgent = ts.rsp.req.Header.Get("User-Agent")
 	assert.Contains(t, userAgent, " honeytail/test")
 	assert.Contains(t, userAgent, "fancyParser backfill")
@@ -240,7 +240,7 @@ func TestAugmentField(t *testing.T) {
 }`)
 	opts.Reqs.LogFiles = []string{logFileName}
 	opts.DAMapFile = damapFileName
-	run(context.Background(), opts)
+	run(context.Background(), opts, nil)
 	assert.Equal(t, ts.rsp.reqCounter, 1, "failed count")
 	// json should be identified as structured
 	assert.Contains(t, ts.rsp.reqBody, `{"format":"json","structured":true}`, "faild content")
@@ -260,15 +260,15 @@ func TestDropField(t *testing.T) {
 	defer fh.Close()
 	fmt.Fprintf(fh, `{"dropme":"chew","format":"json","reallygone":"notyet"}`)
 	opts.Reqs.LogFiles = []string{logFileName}
-	run(context.Background(), opts)
+	run(context.Background(), opts, nil)
 	assert.Equal(t, ts.rsp.reqCounter, 1)
 	assert.Contains(t, ts.rsp.reqBody, `{"dropme":"chew","format":"json","reallygone":"notyet"}`)
 	opts.DropFields = []string{"dropme"}
-	run(context.Background(), opts)
+	run(context.Background(), opts, nil)
 	assert.Equal(t, ts.rsp.reqCounter, 2)
 	assert.Contains(t, ts.rsp.reqBody, `{"format":"json","reallygone":"notyet"}`)
 	opts.DropFields = []string{"dropme", "reallygone"}
-	run(context.Background(), opts)
+	run(context.Background(), opts, nil)
 	assert.Equal(t, ts.rsp.reqCounter, 3)
 	assert.Contains(t, ts.rsp.reqBody, `{"format":"json"}`)
 }
@@ -284,7 +284,7 @@ func TestScrubField(t *testing.T) {
 	fmt.Fprintf(fh, `{"format":"json","name":"hidden"}`)
 	opts.Reqs.LogFiles = []string{logFileName}
 	opts.ScrubFields = []string{"name"}
-	run(context.Background(), opts)
+	run(context.Background(), opts, nil)
 	assert.Equal(t, ts.rsp.reqCounter, 1)
 	assert.Contains(t, ts.rsp.reqBody, `{"format":"json","name":"e564b4081d7a9ea4b00dada53bdae70c99b87b6fce869f0c3dd4d2bfa1e53e1c"}`)
 }
@@ -300,10 +300,10 @@ func TestAddField(t *testing.T) {
 	fmt.Fprintf(logfh, `{"format":"json"}`)
 	opts.Reqs.LogFiles = []string{logFileName}
 	opts.AddFields = []string{`newfield=newval`}
-	run(context.Background(), opts)
+	run(context.Background(), opts, nil)
 	assert.Contains(t, ts.rsp.reqBody, `{"format":"json","newfield":"newval"}`)
 	opts.AddFields = []string{"newfield=newval", "second=new"}
-	run(context.Background(), opts)
+	run(context.Background(), opts, nil)
 	assert.Contains(t, ts.rsp.reqBody, `{"format":"json","newfield":"newval","second":"new"}`)
 }
 
@@ -320,7 +320,7 @@ func TestLinePrefix(t *testing.T) {
 	defer logfh.Close()
 	fmt.Fprintf(logfh, `Nov 13 10:19:31 app23 process.port[pid]: {"format":"json"}`)
 	opts.Reqs.LogFiles = []string{logFileName}
-	run(context.Background(), opts)
+	run(context.Background(), opts, nil)
 	assert.Contains(t, ts.rsp.reqBody, `{"format":"json","hostname":"app23","server_timestamp":"Nov 13 10:19:31"}`)
 }
 
@@ -443,7 +443,6 @@ func TestSampleRate(t *testing.T) {
 	ts := &testSetup{}
 	ts.start(t, &opts)
 	defer ts.close()
-	rand.Seed(1)
 	sampleLogFile := ts.tmpdir + "/sample.log"
 	logfh, _ := os.Create(sampleLogFile)
 	defer logfh.Close()
@@ -453,7 +452,7 @@ func TestSampleRate(t *testing.T) {
 	opts.Reqs.LogFiles = []string{sampleLogFile}
 	opts.TailSample = false
 
-	run(context.Background(), opts)
+	run(context.Background(), opts, nil)
 	// with no sampling, 50 lines -> 50 events
 	assert.Equal(t, ts.rsp.evtCounter, 50)
 	assert.Contains(t, ts.rsp.reqBody, `{"format":"json49"}`)
@@ -461,9 +460,9 @@ func TestSampleRate(t *testing.T) {
 
 	opts.SampleRate = 3
 	opts.TailSample = true
-	run(context.Background(), opts)
-	// setting a sample rate of 3 gets 17 requests.
-	// tail does the sampling
+	rng := rand.New(rand.NewSource(1))
+	run(context.Background(), opts, rng)
+	// tail does the sampling with a deterministic RNG (seed 1, rate 3 → 17 of 50)
 	assert.Equal(t, ts.rsp.evtCounter, 17)
 	assert.Contains(t, ts.rsp.reqBody, `{"format":"json49"},"samplerate":3,`)
 }
@@ -488,7 +487,7 @@ func TestReadFromOffset(t *testing.T) {
 	osf, _ := os.Create(offsetStateFile)
 	defer osf.Close()
 	fmt.Fprintf(osf, `{"INode":%d,"Offset":38}`, logStat.Ino)
-	run(context.Background(), opts)
+	run(context.Background(), opts, nil)
 	assert.Equal(t, ts.rsp.reqCounter, 1)
 	assert.Equal(t, ts.rsp.evtCounter, 8)
 }
@@ -520,7 +519,7 @@ func TestLogRotation(t *testing.T) {
 				ctx, cancel := context.WithCancel(context.Background())
 				wg.Add(1)
 				go func() {
-					run(ctx, opts)
+					run(ctx, opts, nil)
 					wg.Done()
 				}()
 
@@ -642,7 +641,7 @@ func (r *responder) serveResponse(w http.ResponseWriter, req *http.Request) {
 	}
 	r.reqBody = string(body)
 	w.WriteHeader(r.responseCode)
-	fmt.Fprintf(w, r.responseBody)
+	fmt.Fprint(w, r.responseBody)
 }
 func (r *responder) reset() {
 	r.reqCounter = 0

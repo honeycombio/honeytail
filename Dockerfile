@@ -1,35 +1,26 @@
-# This builds the binary inside an Alpine Linux container, which is small
-FROM alpine:3.16
+# Build stage
+FROM golang:1.24-alpine AS builder
 
-# Set us up so we can build the binary
-ENV GOROOT /usr/lib/go
-ENV GOPATH /gopath
-ENV GOBIN /gopath/bin
-ENV PATH $PATH:$GOROOT/bin:$GOPATH/bin
+RUN apk add --no-cache git
 
-WORKDIR /gopath/src/github.com/honeycombio/honeytail
-COPY . /gopath/src/github.com/honeycombio/honeytail/
+WORKDIR /src
+COPY . .
 
-# Does the package, build, and cleanup as one step to keep size small
-RUN apk add --update \
-        coreutils \
-        go \
-        git \
-        openssl \
-        ca-certificates \
-        musl-dev \
-    && ver=$(git rev-parse --short HEAD) \
-    && git clean -f \
-    && rm -rf .git \
-    && go install -ldflags="-X main.BuildID=${ver}" github.com/honeycombio/honeytail \
-    && apk del git go \
-    && rm -rf /var/cache/apk/*
+RUN ver=$(git describe --tags --match='v[0-9]*' --always) \
+    && go build -ldflags="-X main.BuildID=${ver}" -o /honeytail .
 
-ENV HONEYCOMB_WRITE_KEY NULL
-ENV NGINX_LOG_FORMAT_NAME combined
-ENV NGINX_CONF /etc/nginx.conf
-ENV HONEYCOMB_SAMPLE_RATE 1
-ENV NGINX_ACCESS_LOG_FILENAME access.log
+# Runtime stage
+FROM alpine:3.21
+
+RUN apk add --no-cache ca-certificates
+
+COPY --from=builder /honeytail /usr/local/bin/honeytail
+
+ENV HONEYCOMB_WRITE_KEY=NULL
+ENV NGINX_LOG_FORMAT_NAME=combined
+ENV NGINX_CONF=/etc/nginx.conf
+ENV HONEYCOMB_SAMPLE_RATE=1
+ENV NGINX_ACCESS_LOG_FILENAME=access.log
 
 CMD [ "/bin/sh", "-c", "honeytail \
             --parser nginx \

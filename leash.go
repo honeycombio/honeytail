@@ -54,7 +54,7 @@ result in events being dropped.
 var previouslyRateLimited = false
 
 // actually go and be leashy
-func run(ctx context.Context, options GlobalOptions) {
+func run(ctx context.Context, options GlobalOptions, rng *rand.Rand) {
 	logrus.Info("Starting honeytail")
 
 	stats := newResponseStats()
@@ -112,7 +112,7 @@ func run(ctx context.Context, options GlobalOptions) {
 		Options:     options.Tail,
 	}
 	if options.TailSample {
-		linesChans, err = tail.GetSampledEntries(ctx, tc, options.SampleRate)
+		linesChans, err = tail.GetSampledEntries(ctx, tc, options.SampleRate, rng)
 	} else {
 		linesChans, err = tail.GetEntries(ctx, tc)
 	}

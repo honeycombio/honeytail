@@ -227,7 +227,7 @@ See https://honeycomb.io/docs/connect/agent/ for more detailed usage instruction
 
 	logrus.Debug("parsed arguments: ", structToString(options))
 
-	run(context.Background(), options)
+	run(context.Background(), options, nil)
 }
 
 // convert options struct to a comma separated list of key=value pairs (for debugging)

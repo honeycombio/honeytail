@@ -147,12 +147,11 @@ func runTests(t *testing.T, dsn string, tests ...func(dbt *DBTest)) {
 
 	db, err := sql.Open(driverNameTest, dsn)
 	if err != nil {
-		t.Fatalf("error connecting: %s", err.Error())
+		t.Fatalf("connecting %q: %s", dsn, err)
 	}
 	defer db.Close()
-
-	cleanup := func() {
-		db.Exec("DROP TABLE IF EXISTS test")
+	if err = db.Ping(); err != nil {
+		t.Fatalf("connecting %q: %s", dsn, err)
 	}
 
 	dsn2 := dsn + "&interpolateParams=true"
@@ -160,25 +159,46 @@ func runTests(t *testing.T, dsn string, tests ...func(dbt *DBTest)) {
 	if _, err := ParseDSN(dsn2); err != errInvalidDSNUnsafeCollation {
 		db2, err = sql.Open(driverNameTest, dsn2)
 		if err != nil {
-			t.Fatalf("error connecting: %s", err.Error())
+			t.Fatalf("connecting %q: %s", dsn2, err)
 		}
 		defer db2.Close()
 	}
+
+	dsn3 := dsn + "&compress=true"
+	var db3 *sql.DB
+	db3, err = sql.Open(driverNameTest, dsn3)
+	if err != nil {
+		t.Fatalf("connecting %q: %s", dsn3, err)
+	}
+	defer db3.Close()
+
+	cleanupSql := "DROP TABLE IF EXISTS test"
 
 	for _, test := range tests {
 		test := test
 		t.Run("default", func(t *testing.T) {
 			dbt := &DBTest{t, db}
-			t.Cleanup(cleanup)
+			t.Cleanup(func() {
+				db.Exec(cleanupSql)
+			})
 			test(dbt)
 		})
 		if db2 != nil {
 			t.Run("interpolateParams", func(t *testing.T) {
 				dbt2 := &DBTest{t, db2}
-				t.Cleanup(cleanup)
+				t.Cleanup(func() {
+					db2.Exec(cleanupSql)
+				})
 				test(dbt2)
 			})
 		}
+		t.Run("compress", func(t *testing.T) {
+			dbt3 := &DBTest{t, db3}
+			t.Cleanup(func() {
+				db3.Exec(cleanupSql)
+			})
+			test(dbt3)
+		})
 	}
 }
 
@@ -958,12 +978,16 @@ func TestDateTime(t *testing.T) {
 			var err error
 			rows, err = dbt.db.Query(`SELECT cast("00:00:00.1" as TIME(1)) = "00:00:00.1"`)
 			if err == nil {
-				rows.Scan(&microsecsSupported)
+				if rows.Next() {
+					rows.Scan(&microsecsSupported)
+				}
 				rows.Close()
 			}
 			rows, err = dbt.db.Query(`SELECT cast("0000-00-00" as DATE) = "0000-00-00"`)
 			if err == nil {
-				rows.Scan(&zeroDateSupported)
+				if rows.Next() {
+					rows.Scan(&zeroDateSupported)
+				}
 				rows.Close()
 			}
 			for _, setups := range testcases {
@@ -1265,8 +1289,7 @@ func TestLongData(t *testing.T) {
 		var rows *sql.Rows
 
 		// Long text data
-		const nonDataQueryLen = 28 // length query w/o value
-		inS := in[:maxAllowedPacketSize-nonDataQueryLen]
+		inS := in[:maxAllowedPacketSize-100]
 		dbt.mustExec("INSERT INTO test VALUES('" + inS + "')")
 		rows = dbt.mustQuery("SELECT value FROM test")
 		defer rows.Close()
@@ -1586,10 +1609,12 @@ func TestCollation(t *testing.T) {
 		t.Skipf("MySQL server not running on %s", netAddr)
 	}
 
-	defaultCollation := "utf8mb4_general_ci"
+	// MariaDB may override collation specified by handshake with `character_set_collations` variable.
+	// https://mariadb.com/kb/en/setting-character-sets-and-collations/#changing-default-collation
+	// https://mariadb.com/kb/en/server-system-variables/#character_set_collations
+	// utf8mb4_general_ci, utf8mb3_general_ci will be overridden by default MariaDB.
+	// Collations other than charasets default are not overridden. So utf8mb4_unicode_ci is safe.
 	testCollations := []string{
-		"",               // do not set
-		defaultCollation, // driver default
 		"latin1_general_ci",
 		"binary",
 		"utf8mb4_unicode_ci",
@@ -1597,24 +1622,19 @@ func TestCollation(t *testing.T) {
 	}
 
 	for _, collation := range testCollations {
-		var expected, tdsn string
-		if collation != "" {
-			tdsn = dsn + "&collation=" + collation
-			expected = collation
-		} else {
-			tdsn = dsn
-			expected = defaultCollation
-		}
+		t.Run(collation, func(t *testing.T) {
+			tdsn := dsn + "&collation=" + collation
+			expected := collation
 
-		runTests(t, tdsn, func(dbt *DBTest) {
-			var got string
-			if err := dbt.db.QueryRow("SELECT @@collation_connection").Scan(&got); err != nil {
-				dbt.Fatal(err)
-			}
-
-			if got != expected {
-				dbt.Fatalf("expected connection collation %s but got %s", expected, got)
-			}
+			runTests(t, tdsn, func(dbt *DBTest) {
+				var got string
+				if err := dbt.db.QueryRow("SELECT @@collation_connection").Scan(&got); err != nil {
+					dbt.Fatal(err)
+				}
+				if got != expected {
+					dbt.Fatalf("expected connection collation %s but got %s", expected, got)
+				}
+			})
 		})
 	}
 }
@@ -1662,7 +1682,7 @@ func TestRawBytesResultExceedsBuffer(t *testing.T) {
 }
 
 func TestTimezoneConversion(t *testing.T) {
-	zones := []string{"UTC", "US/Central", "US/Pacific", "Local"}
+	zones := []string{"UTC", "America/New_York", "Asia/Hong_Kong", "Local"}
 
 	// Regression test for timezone handling
 	tzTest := func(dbt *DBTest) {
@@ -1670,8 +1690,8 @@ func TestTimezoneConversion(t *testing.T) {
 		dbt.mustExec("CREATE TABLE test (ts TIMESTAMP)")
 
 		// Insert local time into database (should be converted)
-		usCentral, _ := time.LoadLocation("US/Central")
-		reftime := time.Date(2014, 05, 30, 18, 03, 17, 0, time.UTC).In(usCentral)
+		newYorkTz, _ := time.LoadLocation("America/New_York")
+		reftime := time.Date(2014, 05, 30, 18, 03, 17, 0, time.UTC).In(newYorkTz)
 		dbt.mustExec("INSERT INTO test VALUE (?)", reftime)
 
 		// Retrieve time from DB
@@ -1690,7 +1710,7 @@ func TestTimezoneConversion(t *testing.T) {
 		// Check that dates match
 		if reftime.Unix() != dbTime.Unix() {
 			dbt.Errorf("times do not match.\n")
-			dbt.Errorf(" Now(%v)=%v\n", usCentral, reftime)
+			dbt.Errorf(" Now(%v)=%v\n", newYorkTz, reftime)
 			dbt.Errorf(" Now(UTC)=%v\n", dbTime)
 		}
 	}
@@ -3518,6 +3538,15 @@ func TestConnectionAttributes(t *testing.T) {
 
 	dbt := &DBTest{t, db}
 
+	var varName string
+	var varValue string
+	err := dbt.db.QueryRow("SHOW VARIABLES LIKE 'performance_schema'").Scan(&varName, &varValue)
+	if err != nil {
+		t.Fatalf("error: %s", err.Error())
+	}
+	if varValue != "ON" {
+		t.Skipf("Performance schema is not enabled. skipping")
+	}
 	queryString := "SELECT ATTR_NAME, ATTR_VALUE FROM performance_schema.session_account_connect_attrs WHERE PROCESSLIST_ID = CONNECTION_ID()"
 	rows := dbt.mustQuery(queryString)
 	defer rows.Close()
@@ -3539,6 +3568,9 @@ func TestConnectionAttributes(t *testing.T) {
 }
 
 func TestErrorInMultiResult(t *testing.T) {
+	if !available {
+		t.Skipf("MySQL server not running on %s", netAddr)
+	}
 	// https://github.com/go-sql-driver/mysql/issues/1361
 	var db *sql.DB
 	if _, err := ParseDSN(dsn); err != errInvalidDSNUnsafeCollation {
@@ -3582,6 +3614,12 @@ func runCallCommand(dbt *DBTest, query, name string) {
 func TestIssue1567(t *testing.T) {
 	// enable TLS.
 	runTests(t, dsn+"&tls=skip-verify", func(dbt *DBTest) {
+		var max int
+		err := dbt.db.QueryRow("SELECT @@max_connections").Scan(&max)
+		if err != nil {
+			dbt.Fatalf("%s", err.Error())
+		}
+
 		// disable connection pooling.
 		// data race happens when new connection is created.
 		dbt.db.SetMaxIdleConns(0)
@@ -3600,6 +3638,9 @@ func TestIssue1567(t *testing.T) {
 		count := 1000
 		if testing.Short() {
 			count = 10
+		}
+		if count > max {
+			count = max
 		}
 
 		for i := 0; i < count; i++ {

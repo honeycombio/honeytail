@@ -10,11 +10,34 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/sirupsen/logrus"
 )
+
+// lockedSource wraps a rand.Source to make it safe for concurrent use.
+type lockedSource struct {
+	mu  sync.Mutex
+	src rand.Source
+}
+
+func newLockedSource(seed int64) *lockedSource {
+	return &lockedSource{src: rand.NewSource(seed)}
+}
+
+func (l *lockedSource) Int63() int64 {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.src.Int63()
+}
+
+func (l *lockedSource) Seed(seed int64) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.src.Seed(seed)
+}
 
 var tailOpts = TailOptions{
 	ReadFrom: "start",
@@ -64,7 +87,7 @@ func TestGetSampledEntries(t *testing.T) {
 	ts := &testSetup{}
 	ts.start(t)
 	defer ts.stop()
-	rand.Seed(3)
+	rng := rand.New(newLockedSource(3))
 
 	conf := Config{
 		Paths:   make([]string, 3),
@@ -84,17 +107,16 @@ func TestGetSampledEntries(t *testing.T) {
 		ts.writeFile(t, filename, strings.Join(jsonLines[i], "\n"))
 	}
 
-	chanArr, err := GetSampledEntries(ts.ctx, conf, 2)
+	chanArr, err := GetSampledEntries(ts.ctx, conf, 2, rng)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// can't check each line because the parallel goroutines screw with the random
-	// dropping lines, so you can't know which channel will drop which messages.
-	// But the overall count of messages is predictable.
+	// The deterministic RNG is shared across goroutines (one per file), so the
+	// per-channel distribution depends on scheduling, but the total is fixed.
 	var lineCounter int
 
 	for _, ch := range chanArr {
-		for _ = range ch {
+		for range ch {
 			lineCounter++
 		}
 	}

@@ -876,8 +876,8 @@ func TestProcessLines(t *testing.T) {
 			t.Errorf("unexpected: %d additional events were extracted", len(send))
 		}
 	}
-	// test sampling
-	rand.Seed(3)
+	// test sampling with a deterministic RNG
+	rng := rand.New(rand.NewSource(3))
 	var numEvents int
 	for _, tt := range tsts {
 		p := &Parser{
@@ -885,6 +885,7 @@ func TestProcessLines(t *testing.T) {
 				NumParsers: 5,
 			},
 			SampleRate: 3,
+			Rand:       rng,
 			// normalizer: &normalizer.Parser{},
 		}
 		lines := make(chan string, 10)
@@ -904,6 +905,6 @@ func TestProcessLines(t *testing.T) {
 		}
 	}
 	if numEvents != 5 {
-		t.Errorf("With sampling enabled, only expected 5 events, got %d", numEvents)
+		t.Errorf("With sampling enabled, expected 5 events, got %d", numEvents)
 	}
 }

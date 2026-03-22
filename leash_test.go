@@ -464,6 +464,7 @@ func TestSampleRate(t *testing.T) {
 	run(context.Background(), opts, rng)
 	// tail does the sampling with a deterministic RNG (seed 1, rate 3 → 17 of 50)
 	assert.Equal(t, ts.rsp.evtCounter, 17)
+	assert.Contains(t, ts.rsp.reqBody, `{"format":"json49"},"samplerate":3,`)
 }
 
 func TestReadFromOffset(t *testing.T) {

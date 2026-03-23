@@ -1,5 +1,20 @@
 # Honeytail Changelog
 
+## 1.11.0
+
+### ⚠️ Breaking Changes ⚠️
+
+Minimum Go version required is 1.24
+
+### Fixes
+
+- Fix honeytail.service file so that honeytail can be enabled in systemd (#360) | @jerm
+
+### Maintenance
+
+- chore: update to go 1.24, followup tidiness (#361) | @robbkidd
+- maint(deps): bump the minor-patch group across 1 directory with 4 updates (#353) | @(49699333+dependabot[bot]@users.noreply.github.com)
+
 ## 1.10.0
 
 ### ⚠️ Breaking Changes ⚠️

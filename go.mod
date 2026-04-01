@@ -1,8 +1,6 @@
 module github.com/honeycombio/honeytail
 
-go 1.24.0
-
-toolchain go1.24.5
+go 1.25.0
 
 require (
 	github.com/go-sql-driver/mysql v1.9.3
@@ -15,10 +13,10 @@ require (
 	github.com/jessevdk/go-flags v1.6.1
 	github.com/klauspost/compress v1.18.5
 	github.com/kr/logfmt v0.0.0-20210122060352-19f9bcb100e6
-	github.com/sirupsen/logrus v1.9.3
+	github.com/sirupsen/logrus v1.9.4
 	github.com/stretchr/testify v1.11.1
 	github.com/tenebris-tech/tail v1.0.5
-	golang.org/x/sys v0.33.0
+	golang.org/x/sys v0.42.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 

@@ -1,5 +1,16 @@
 # Honeytail Changelog
 
+## 1.12.0
+
+### ⚠️ Breaking Changes ⚠️
+
+Minimum Go version required is 1.27.3
+
+### Maintenance
+
+- chore: update to go 1.27.3 (#366) | @lizthegrey
+- maint(deps): bump the minor-patch group across 1 directory with 6 updates (#368) | @(49699333+dependabot[bot]@users.noreply.github.com)
+
 ## 1.11.0
 
 ### ⚠️ Breaking Changes ⚠️

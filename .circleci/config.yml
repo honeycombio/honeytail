@@ -19,21 +19,21 @@ platform_matrix: &platform_matrix
 jobs:
   test:
     docker:
-      - image: cimg/go:1.27
+      - image: cimg/go:1.27.3
     steps:
       - checkout
       - run: make test
 
   verify-licenses:
     docker:
-      - image: cimg/go:1.27
+      - image: cimg/go:1.27.3
     steps:
       - checkout
       - run: make verify-licenses
 
   go-build:
     docker:
-      - image: cimg/go:1.27
+      - image: cimg/go:1.27.3
     parameters:
       os:
         description: Target operating system

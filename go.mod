@@ -1,8 +1,6 @@
 module github.com/honeycombio/honeytail
 
-go 1.24.0
-
-toolchain go1.24.5
+go 1.27.3
 
 require (
 	github.com/go-sql-driver/mysql v1.9.3

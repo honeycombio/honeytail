@@ -24,16 +24,19 @@ test:
 
 .PHONY: install-tools
 install-tools:
-	go install github.com/google/go-licenses/v2@v2.0.0-alpha.1
+	go install github.com/google/go-licenses/v2@v2.0.1
 
+# go-licenses v2.0.1 also saves the main module's own LICENSE and NOTICE. Ignore
+# our own module so LICENSES stays limited to third-party code, matching what
+# v2.0.0-alpha.1 produced before it stopped building on Go 1.27.
 .PHONY: update-licenses
 update-licenses: install-tools
 	rm -rf LICENSES
-	go-licenses save --save_path LICENSES .
+	go-licenses save --ignore github.com/honeycombio/honeytail --save_path LICENSES .
 
 .PHONY: verify-licenses
 verify-licenses: install-tools
-	go-licenses save --save_path temp .; \
+	go-licenses save --ignore github.com/honeycombio/honeytail --save_path temp .; \
     chmod +r temp; \
     if diff temp LICENSES; then \
       echo "Passed"; \

@@ -9,6 +9,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/honeycombio/honeytail/event"
+	"github.com/honeycombio/honeytail/httime"
 	"github.com/honeycombio/honeytail/parsers"
 
 	"github.com/jeromer/syslogparser"
@@ -88,7 +89,10 @@ func NewSyslogLineParser(mode string, processList string) (*SyslogLineParser, er
 func (p *SyslogLineParser) ParseLine(line string) (map[string]interface{}, error) {
 	var parser syslogparser.LogParser
 	if p.mode == "rfc3164" {
-		parser = rfc3164.NewParser([]byte(line))
+		rfc3164Parser := rfc3164.NewParser([]byte(line))
+		// rfc3164 timestamps have no zone, so honor --localtime and --timezone
+		rfc3164Parser.WithLocation(httime.Location)
+		parser = rfc3164Parser
 	} else if p.mode == "rfc5424" {
 		parser = rfc5424.NewParser([]byte(line))
 	}

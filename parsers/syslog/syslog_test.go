@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/honeycombio/honeytail/event"
+	"github.com/honeycombio/honeytail/httime"
 	"github.com/honeycombio/honeytail/parsers"
 )
 
@@ -193,4 +194,27 @@ func TestProcessLines(t *testing.T) {
 				pair.line, pair.ev, resp)
 		}
 	}
+}
+
+// rfc3164 timestamps carry no zone, so they should be read in the zone given
+// by --timezone or --localtime rather than always as UTC.
+func TestParseLineRFC3164Location(t *testing.T) {
+	chicago, err := time.LoadLocation("America/Chicago")
+	assert.NoError(t, err)
+
+	origLocation := httime.Location
+	defer func() { httime.Location = origLocation }()
+	httime.Location = chicago
+
+	p := &Parser{}
+	err = p.Init(&Options{Mode: "rfc3164"})
+	assert.NoError(t, err)
+
+	resp, err := p.lineParser.ParseLine("<34>Dec 16 15:14:12 mymachine su: 'su root' failed")
+	assert.NoError(t, err)
+
+	expected := time.Date(time.Now().Year(), 12, 16, 15, 14, 12, 0, chicago)
+	ts, ok := resp["timestamp"].(time.Time)
+	assert.True(t, ok, "timestamp missing from parsed line")
+	assert.True(t, expected.Equal(ts), "expected %v, got %v", expected, ts)
 }

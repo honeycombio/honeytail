@@ -23,6 +23,17 @@ var tlms = []testLineMap{
 			"mybool":  true,
 		},
 	},
+	{ // zero, one and single letters are not booleans
+		input: `retries=0 count=1 grade=F answer=t on=True off=FALSE`,
+		expected: map[string]interface{}{
+			"retries": 0,
+			"count":   1,
+			"grade":   "F",
+			"answer":  "t",
+			"on":      true,
+			"off":     false,
+		},
+	},
 	{ // missing keyval pairs
 		input: `foo bar 123 baz`,
 		expected: map[string]interface{}{

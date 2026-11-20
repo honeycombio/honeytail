@@ -53,8 +53,15 @@ func (j *KeyValLineParser) ParseLine(line string) (map[string]interface{}, error
 	f := func(key, val []byte) error {
 		keyStr := string(key)
 		valStr := string(val)
-		if b, err := strconv.ParseBool(valStr); err == nil {
-			parsed[keyStr] = b
+		// strconv.ParseBool also accepts 1, 0, t, T, f and F, which would turn
+		// numbers and single letters into booleans, so only take the spelled
+		// out forms here.
+		switch valStr {
+		case "true", "True", "TRUE":
+			parsed[keyStr] = true
+			return nil
+		case "false", "False", "FALSE":
+			parsed[keyStr] = false
 			return nil
 		}
 		if i, err := strconv.Atoi(valStr); err == nil {
